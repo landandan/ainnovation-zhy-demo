@@ -3,11 +3,9 @@
  * 用于前端开发调试，无需配置后端即可测试完整交互流程
  */
 
-import type { AgentType } from "@/app/page"
+/* ───── Mock 回答库（按智能体 id 分类） ───── */
 
-/* ───── Mock 回答库（按智能体分类） ───── */
-
-const MOCK_RESPONSES: Record<AgentType, string[]> = {
+const MOCK_RESPONSES: Record<string, string[]> = {
   knowledge: [
     `📚 **海油知识库检索结果**
 
@@ -253,11 +251,11 @@ const MOCK_RESPONSES: Record<AgentType, string[]> = {
  * 生成一个 ReadableStream，模拟 Dify SSE 流式响应
  */
 export function createMockStream(
-  agentType: AgentType,
+  agentId: string,
   userText: string,
   conversationId?: string | null,
 ): ReadableStream<Uint8Array> {
-  const responses = MOCK_RESPONSES[agentType] || MOCK_RESPONSES.knowledge
+  const responses = MOCK_RESPONSES[agentId] || MOCK_RESPONSES.knowledge || ["Mock response"]
 
   // 根据用户输入选择不同的回答
   const idx =
@@ -311,8 +309,8 @@ export function createMockStream(
         if (cancelled) return
 
         // 📤 逐字发送 message 事件
-        let chunkSize = 3 // 每次发送 3 个字符
-        let messageId = `mock-msg-${Date.now()}`
+        const chunkSize = 3 // 每次发送 3 个字符
+        const messageId = `mock-msg-${Date.now()}`
 
         while (currentIndex < chars.length) {
           const chunk = chars.slice(currentIndex, currentIndex + chunkSize).join("")
@@ -363,7 +361,7 @@ export function createMockStream(
  * 快速阻塞式 Mock 回答（非流式，用于快速测试）
  */
 export function createMockBlockingResponse(
-  agentType: AgentType,
+  agentId: string,
   userText: string,
   conversationId?: string | null,
 ): {
@@ -371,7 +369,7 @@ export function createMockBlockingResponse(
   conversation_id: string
   message_id: string
 } {
-  const responses = MOCK_RESPONSES[agentType] || MOCK_RESPONSES.knowledge
+  const responses = MOCK_RESPONSES[agentId] || MOCK_RESPONSES.knowledge || ["Mock response"]
   const idx =
     userText.length > 10
       ? (userText.charCodeAt(0) + userText.charCodeAt(userText.length - 1)) % responses.length

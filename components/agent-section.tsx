@@ -1,52 +1,29 @@
 "use client"
 
-import type { AgentType } from "@/app/page"
+import type { AgentDef } from "@/lib/settings-store"
 
 interface AgentSectionProps {
-  currentAgent: AgentType
-  onSelectAgent: (agent: AgentType) => void
+  agentDefs: AgentDef[]
+  currentAgentId: string
+  onSelectAgent: (agentId: string) => void
 }
 
-interface AgentCard {
-  id: AgentType
-  label: string
-  icon: string
-  desc: string
-  gradient: string
-}
+export function AgentSection({ agentDefs, currentAgentId, onSelectAgent }: AgentSectionProps) {
+  if (agentDefs.length === 0) {
+    return (
+      <div
+        className="flex-shrink-0 border-b px-5 py-4 text-center text-sm"
+        style={{
+          background: "var(--primary)",
+          borderColor: "var(--border)",
+          color: "var(--text-muted)",
+        }}
+      >
+        暂无应用，请在设置中添加
+      </div>
+    )
+  }
 
-const agents: AgentCard[] = [
-  {
-    id: "knowledge",
-    label: "海油知识库",
-    icon: "📚",
-    desc: "标准法规 · 安全规程",
-    gradient: "var(--gradient-1)",
-  },
-  {
-    id: "inspection",
-    label: "无纸化巡检",
-    icon: "📸",
-    desc: "AI视觉 · 隐患识别",
-    gradient: "var(--gradient-2)",
-  },
-  {
-    id: "repair",
-    label: "维修知识库",
-    icon: "🔧",
-    desc: "设备诊断 · 随身师傅",
-    gradient: "var(--gradient-3)",
-  },
-  {
-    id: "report",
-    label: "日报填报",
-    icon: "📊",
-    desc: "数据校验 · 自动填报",
-    gradient: "var(--gradient-4)",
-  },
-]
-
-export function AgentSection({ currentAgent, onSelectAgent }: AgentSectionProps) {
   return (
     <div
       className="flex-shrink-0 border-b px-5 py-3"
@@ -57,8 +34,8 @@ export function AgentSection({ currentAgent, onSelectAgent }: AgentSectionProps)
     >
       {/* 桌面标签 */}
       <div className="hidden sm:flex gap-2 overflow-x-auto pb-0.5">
-        {agents.map((agent) => {
-          const isActive = currentAgent === agent.id
+        {agentDefs.map((agent) => {
+          const isActive = currentAgentId === agent.id
           return (
             <button
               key={agent.id}
@@ -121,10 +98,10 @@ export function AgentSection({ currentAgent, onSelectAgent }: AgentSectionProps)
             color: "var(--foreground)",
             borderColor: "var(--border)",
           }}
-          value={currentAgent}
-          onChange={(e) => onSelectAgent(e.target.value as AgentType)}
+          value={currentAgentId}
+          onChange={(e) => onSelectAgent(e.target.value)}
         >
-          {agents.map((agent) => (
+          {agentDefs.map((agent) => (
             <option key={agent.id} value={agent.id}>
               {agent.icon} {agent.label}
             </option>

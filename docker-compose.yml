@@ -1,0 +1,10 @@
+version: '3.8'
+
+services:
+  react-mvp:
+    build: .
+    ports:
+      - "9527:80" # 宿主机的 8080 映射到容器的 80
+    extra_hosts:
+      - "host.docker.internal:host-gateway" # 兼容 Linux 环境的关键配置
+    restart: unless-stopped

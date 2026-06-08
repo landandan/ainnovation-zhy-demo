@@ -1,13 +1,13 @@
 "use client"
 
-import type { AgentType, ChatHistoryItem } from "@/app/page"
+import type { ChatHistoryItem } from "@/app/page"
 
 interface SidebarProps {
   open: boolean
   onClose: () => void
   onNewChat: () => void
   chatHistory: ChatHistoryItem[]
-  agentNames: Record<AgentType, string>
+  agentNames: Record<string, string>
   onSelectHistory: (id: string) => void
   onDeleteHistory: (id: string) => void
   onOpenSettings: () => void

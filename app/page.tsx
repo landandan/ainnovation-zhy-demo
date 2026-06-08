@@ -1,14 +1,14 @@
 "use client"
 
 import { useState, useRef, useEffect, useCallback } from "react"
+import { useRouter } from "next/navigation"
 import { Sidebar } from "@/components/sidebar"
 import { Header } from "@/components/header"
 import { AgentSection } from "@/components/agent-section"
 import { ChatArea } from "@/components/chat-area"
 import { InputArea } from "@/components/input-area"
 import { Toast } from "@/components/toast"
-import { useToast, type ToastType } from "@/components/toast"
-import { SettingsPanel } from "@/components/settings-panel"
+import { useToast } from "@/components/toast"
 import {
   loadConversations,
   addConversation,
@@ -18,17 +18,18 @@ import {
   loadActiveConversationId,
   saveActiveConversationId,
   generateConversationId,
+  loadSettings,
+  loadTheme,
+  saveTheme,
+  DEFAULT_AGENT_DEFS,
 } from "@/lib/settings-store"
-import type { ConversationMeta } from "@/lib/settings-store"
+import type { AgentDef } from "@/lib/settings-store"
 import {
   callDifyChatStream,
   getDifyConfig,
-  AGENT_INPUTS,
+  getAgentInputs,
 } from "@/lib/dify-api"
 import { createMockStream } from "@/lib/mock-api"
-import type { DifySettings } from "@/lib/settings-store"
-
-export type AgentType = "knowledge" | "inspection" | "repair" | "report"
 
 export interface Message {
   role: "user" | "ai"
@@ -42,7 +43,7 @@ export interface Message {
 export interface ChatHistoryItem {
   id: string
   title: string
-  agent: AgentType
+  agent: string
   preview: string
   time: string
   active: boolean
@@ -75,19 +76,31 @@ export const THEMES = [
 export type ThemeId = (typeof THEMES)[number]["id"]
 
 export default function Page() {
-  /* ───── 主题状态 ───── */
+  /* ───── 主题状态（SSR 一致默认值，客户端从 localStorage 恢复） ───── */
   const [theme, setTheme] = useState<ThemeId>("ocean-trench")
+  const [themeLoaded, setThemeLoaded] = useState(false)
+
+  // 客户端挂载后从 localStorage 恢复主题，避免 hydration mismatch
+  useEffect(() => {
+    const saved = loadTheme("ocean-trench") as ThemeId
+    setTheme(saved)
+    document.documentElement.dataset.theme = saved
+    setThemeLoaded(true)
+  }, [])
+
+  const router = useRouter()
 
   /* ───── 布局状态 ───── */
   const [sidebarOpen, setSidebarOpen] = useState(false)
 
-  /* ───── 设置面板状态 ───── */
-  const [settingsOpen, setSettingsOpen] = useState(false)
   const [difyConfigured, setDifyConfigured] = useState(false)
-  const [useMock, setUseMock] = useState(true) // 默认启用 Mock 模式
+  const [useMock, setUseMock] = useState(true)
+
+  /* ───── 动态应用列表 ───── */
+  const [agentDefs, setAgentDefs] = useState<AgentDef[]>(DEFAULT_AGENT_DEFS)
 
   /* ───── 业务状态 ───── */
-  const [currentAgent, setCurrentAgent] = useState<AgentType>("knowledge")
+  const [currentAgentId, setCurrentAgentId] = useState<string>("knowledge")
   const [messages, setMessages] = useState<Message[]>([])
   const [uploadedImages, setUploadedImages] = useState<string[]>([])
   const [uploadedFiles, setUploadedFiles] = useState<{ name: string; size: number }[]>([])
@@ -97,25 +110,29 @@ export default function Page() {
 
   /* ───── 对话持久化状态 ───── */
   const [activeConversationId, setActiveConversationId] = useState<string | null>(null)
-  // Dify conversation_id（用于多轮对话），可能不同于本地 id
   const difyConversationIdRef = useRef<string | null>(null)
 
   /* ───── Toast hook ───── */
   const { toasts, dismissToast, success, error, warning, info } = useToast()
 
-  const agentNames: Record<AgentType, string> = {
-    knowledge: "海油知识库",
-    inspection: "AI智能无纸化巡检",
-    repair: "AI维修知识库+随身老师傅",
-    report: "日报智能填报",
-  }
+  /** 当前应用名称（用于 toast 等展示） */
+  const currentAgentLabel =
+    agentDefs.find((d) => d.id === currentAgentId)?.label ?? "未知应用"
 
-  /* ───── 初始化：检查配置 & 加载活跃对话 ───── */
+  /* ───── 初始化：检查配置 & 加载活跃对话 & 同步 agentDefs ───── */
   useEffect(() => {
-    // 检查是否已配置
+    // 从 localStorage 加载完整设置
     try {
+      const settings = loadSettings()
+      setAgentDefs(settings.agentDefs)
+      setUseMock(settings.useMock)
+
+      // 判断是否已配置
+      const agents = settings.agents || {}
+      const anyAgentConfigured =
+        Object.values(agents).some((a) => !!(a as { apiKey?: string })?.apiKey)
       const s = getDifyConfig()
-      setDifyConfigured(!!s.apiKey)
+      setDifyConfigured(!!s.apiKey || anyAgentConfigured)
     } catch {
       setDifyConfigured(false)
     }
@@ -137,7 +154,7 @@ export default function Page() {
     return conversations.map((c) => ({
       id: c.id,
       title: c.title,
-      agent: c.agentType as AgentType,
+      agent: c.agentType,
       preview: c.preview,
       time: c.time,
       active: c.id === activeConversationId,
@@ -145,7 +162,6 @@ export default function Page() {
   }, [activeConversationId])
 
   const [chatHistory, setChatHistory] = useState<ChatHistoryItem[]>([])
-  // 同步 chatHistory
   useEffect(() => {
     setChatHistory(buildChatHistory())
   }, [buildChatHistory, activeConversationId, messages])
@@ -155,26 +171,23 @@ export default function Page() {
     (msgs: Message[]) => {
       if (!activeConversationId || msgs.length === 0) return
 
-      // 保存消息
       saveConversationMessages(activeConversationId, msgs)
 
-      // 更新对话元数据
       const lastUserMsg = msgs.filter((m) => m.role === "user").pop()
       const preview = lastUserMsg ? lastUserMsg.text.slice(0, 40) : "新对话"
 
       addConversation({
         id: activeConversationId,
         title: preview.slice(0, 20) || "无标题",
-        agentType: currentAgent,
+        agentType: currentAgentId,
         preview,
         time: new Date().toLocaleTimeString("zh-CN", { hour: "2-digit", minute: "2-digit" }),
         updatedAt: Date.now(),
       })
     },
-    [activeConversationId, currentAgent],
+    [activeConversationId, currentAgentId],
   )
 
-  // 当 messages 变化时自动持久化
   useEffect(() => {
     const realMsgs = messages.filter((m) => !m.loading)
     if (realMsgs.length > 0) {
@@ -197,6 +210,7 @@ export default function Page() {
   const handleThemeChange = useCallback(
     (newTheme: ThemeId) => {
       setTheme(newTheme)
+      saveTheme(newTheme)
       const t = THEMES.find((t) => t.id === newTheme)
       success(`已切换至${t?.label ?? newTheme}主题`)
     },
@@ -215,10 +229,11 @@ export default function Page() {
   }, [messages, scrollToBottom])
 
   /* ───── 智能体切换 ───── */
-  const handleSelectAgent = (agent: AgentType) => {
-    setCurrentAgent(agent)
+  const handleSelectAgent = (agentId: string) => {
+    setCurrentAgentId(agentId)
     handleNewChat()
-    info(`已切换至${agentNames[agent]}，新会话已开启`)
+    const def = agentDefs.find((d) => d.id === agentId)
+    info(`已切换至${def?.label ?? agentId}，新会话已开启`)
   }
 
   const handleNewChat = () => {
@@ -232,18 +247,16 @@ export default function Page() {
   }
 
   const handleSelectHistory = (id: string) => {
-    // 保存当前对话
     if (activeConversationId && messages.length > 0) {
       const realMsgs = messages.filter((m) => !m.loading)
       saveConversationMessages(activeConversationId, realMsgs)
     }
 
-    // 加载选中对话
     const msgs = loadConversationMessages(id)
     setMessages(msgs)
     setActiveConversationId(id)
     saveActiveConversationId(id)
-    difyConversationIdRef.current = null // 切换对话时重置 Dify conversation_id
+    difyConversationIdRef.current = null
     setSidebarOpen(false)
     info("已切换到历史对话")
   }
@@ -259,16 +272,10 @@ export default function Page() {
     success("对话已删除")
   }
 
-  /* ───── 设置面板回调 ───── */
+  /* ───── 设置面板跳转 ───── */
   const handleOpenSettings = () => {
     setSidebarOpen(false)
-    setSettingsOpen(true)
-  }
-
-  const handleSettingsSaved = (settings: DifySettings) => {
-    setDifyConfigured(!!settings.apiKey)
-    setUseMock(settings.useMock ?? true)
-    success(`API 配置已保存（${settings.useMock ? "Mock 模式" : "真实 API"}）`)
+    router.push("/settings")
   }
 
   /* ───── 调用 Dify API 或 Mock（流式） ───── */
@@ -290,22 +297,20 @@ export default function Page() {
     setIsStreaming(true)
 
     try {
-      // ─ 分支：Mock 模式 vs 真实 API ─
       let response: Response
 
       if (useMock || !difyConfigured) {
-        // Mock 模式：创建模拟的 ReadableStream，包装为 Response 对象
-        const mockStream = createMockStream(currentAgent, userText, difyConversationIdRef.current)
+        const mockStream = createMockStream(currentAgentId, userText, difyConversationIdRef.current)
         response = new Response(mockStream, {
           headers: { "Content-Type": "text/event-stream" },
         })
       } else {
-        // 真实 Dify API
         response = await callDifyChatStream({
           query: userText,
           user: "admin",
           conversationId: difyConversationIdRef.current,
-          inputs: AGENT_INPUTS[currentAgent] || {},
+          inputs: getAgentInputs(currentAgentId, agentDefs),
+          agentId: currentAgentId,
         })
       }
 
@@ -318,7 +323,6 @@ export default function Page() {
       let newConversationId: string | null = null
       const aiTime = new Date().toLocaleTimeString("zh-CN", { hour: "2-digit", minute: "2-digit" })
 
-      // 创建一个占位 AI 消息
       let messageIndex = -1
       setMessages((prev) => {
         messageIndex = prev.length
@@ -338,7 +342,6 @@ export default function Page() {
           if (!trimmed || !trimmed.startsWith("data: ")) continue
 
           const jsonStr = trimmed.slice(6)
-
           if (jsonStr === "[DONE]") continue
 
           try {
@@ -367,7 +370,6 @@ export default function Page() {
                   newConversationId = event.conversation_id
                   difyConversationIdRef.current = newConversationId
                 }
-                // 确保 loading 关闭
                 setMessages((prev) => {
                   const updated = [...prev]
                   if (messageIndex >= 0 && updated[messageIndex]) {
@@ -384,18 +386,15 @@ export default function Page() {
               case "node_started":
               case "node_finished":
               case "workflow_finished":
-                // 忽略工作流事件（或可展示 workflow 运行状态）
                 break
             }
           } catch (parseError) {
-            // 跳过无法解析的行（可能是 chunked 的 SSE 不完整）
             if (parseError instanceof SyntaxError) continue
             throw parseError
           }
         }
       }
 
-      // 如果是首次对话且得到了 conversation_id，创建新的持久化对话
       if (newConversationId && !activeConversationId) {
         const newId = generateConversationId()
         setActiveConversationId(newId)
@@ -405,14 +404,13 @@ export default function Page() {
         addConversation({
           id: newId,
           title: userText.slice(0, 20) || "新对话",
-          agentType: currentAgent,
+          agentType: currentAgentId,
           preview,
           time: aiTime,
           updatedAt: Date.now(),
         })
       }
 
-      // 保存消息
       setMessages((prev) => {
         const realMsgs = prev.filter((m) => !m.loading)
         saveConversationMessages(activeConversationId || "", realMsgs)
@@ -424,7 +422,6 @@ export default function Page() {
       error(`API 调用失败: ${errMsg}`)
 
       setMessages((prev) => {
-        // 移除 loading 消息，如果有的话
         const filtered = prev.filter((m) => !m.loading)
         return [
           ...filtered,
@@ -462,14 +459,10 @@ export default function Page() {
       newMessages.push({ role: "user", text: "", file, time })
     })
 
-    // 清理上传文件
     setUploadedImages([])
     setUploadedFiles([])
 
-    // 更新消息列表（user 消息先上屏）
     setMessages(newMessages)
-
-    // 调用 Dify API（注：使用更新后的消息列表，不含 loading）
     callDifyAPI(text || "请分析我上传的文件", newMessages)
   }
 
@@ -496,6 +489,9 @@ export default function Page() {
       info("正在录音，再次点击结束")
     }
   }
+
+  /* ───── 构建 agentNames map（供 sidebar 等显示用） ───── */
+  const agentNames = Object.fromEntries(agentDefs.map((d) => [d.id, d.label]))
 
   /* ───── 渲染 ───── */
   return (
@@ -525,7 +521,8 @@ export default function Page() {
         />
 
         <AgentSection
-          currentAgent={currentAgent}
+          agentDefs={agentDefs}
+          currentAgentId={currentAgentId}
           onSelectAgent={handleSelectAgent}
         />
 
@@ -548,12 +545,6 @@ export default function Page() {
           disabled={isStreaming}
         />
       </main>
-
-      <SettingsPanel
-        open={settingsOpen}
-        onClose={() => setSettingsOpen(false)}
-        onSaved={handleSettingsSaved}
-      />
 
       <Toast toasts={toasts} onDismiss={dismissToast} />
     </div>
