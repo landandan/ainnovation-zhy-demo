@@ -290,9 +290,27 @@ export function createMockStream(
       }
 
       const run = async () => {
-        // ⏳ 模拟思考延迟
-        await sleep(thinkDelay)
-        if (cancelled) return
+        // ⏳ 模拟思考延迟 + agent_thought 事件流（需求1：thinking 过程展示）
+        const thinkSteps = [
+          "正在分析用户意图...",
+          "匹配到相关领域知识库：海洋石油安全规程、设备运维标准",
+          "检索文档片段中...",
+          "已定位到相关规程章节，正在组织回答结构",
+          "生成回答中...",
+        ]
+
+        for (let i = 0; i < thinkSteps.length; i++) {
+          const stepDelay = thinkDelay / thinkSteps.length
+          await sleep(stepDelay)
+          if (cancelled) return
+
+          sendSSE("agent_thought", {
+            id: `mock-thought-${i}`,
+            thought: thinkSteps[i],
+            position: i + 1,
+            tool: "",
+          })
+        }
 
         // 🚀 先发送 workflow_started 事件（模拟工作流启动）
         sendSSE("workflow_started", {

@@ -38,6 +38,10 @@ export interface Message {
   file?: { name: string; size: number }
   time: string
   loading?: boolean
+  /** thinking 思考链内容（DeepSeek/OpenAI 风格） */
+  thinking?: string
+  /** 首 token 到达前的 loading 阶段（独立于 message.loading） */
+  waiting?: boolean
 }
 
 export interface ChatHistoryItem {
@@ -189,7 +193,7 @@ export default function Page() {
   )
 
   useEffect(() => {
-    const realMsgs = messages.filter((m) => !m.loading)
+    const realMsgs = messages.filter((m) => !m.loading && !m.waiting)
     if (realMsgs.length > 0) {
       persistCurrentConversation(realMsgs)
     }
@@ -248,7 +252,7 @@ export default function Page() {
 
   const handleSelectHistory = (id: string) => {
     if (activeConversationId && messages.length > 0) {
-      const realMsgs = messages.filter((m) => !m.loading)
+      const realMsgs = messages.filter((m) => !m.loading && !m.waiting)
       saveConversationMessages(activeConversationId, realMsgs)
     }
 
@@ -320,14 +324,13 @@ export default function Page() {
       const decoder = new TextDecoder()
       let buffer = ""
       let fullAnswer = ""
+      let fullThinking = ""
+      let firstTokenArrived = false
       let newConversationId: string | null = null
       const aiTime = new Date().toLocaleTimeString("zh-CN", { hour: "2-digit", minute: "2-digit" })
 
-      let messageIndex = -1
-      setMessages((prev) => {
-        messageIndex = prev.length
-        return [...prev, { role: "ai", text: "", time: aiTime, loading: true }]
-      })
+      // messageIndex 指向 handleSendMessage 中已插入的 waiting 占位消息
+      const messageIndex = allMessages.length - 1
 
       while (true) {
         const { done, value } = await reader.read()
@@ -348,8 +351,30 @@ export default function Page() {
             const event = JSON.parse(jsonStr)
 
             switch (event.event) {
+              case "agent_thought":
+                // 需求1：累积 thinking 过程内容（DeepSeek/OpenAI 风格）
+                if (event.thought) {
+                  fullThinking += event.thought
+                  setMessages((prev) => {
+                    const updated = [...prev]
+                    if (messageIndex >= 0 && updated[messageIndex]) {
+                      updated[messageIndex] = {
+                        ...updated[messageIndex],
+                        thinking: fullThinking,
+                        waiting: false,
+                      }
+                    }
+                    return updated
+                  })
+                }
+                break
+
               case "message":
                 if (event.answer) {
+                  // 首 token：清除 waiting 状态，正式切换为流式输出
+                  if (!firstTokenArrived) {
+                    firstTokenArrived = true
+                  }
                   fullAnswer += event.answer
                   setMessages((prev) => {
                     const updated = [...prev]
@@ -357,7 +382,9 @@ export default function Page() {
                       updated[messageIndex] = {
                         ...updated[messageIndex],
                         text: fullAnswer,
+                        waiting: false,
                         loading: false,
+                        time: aiTime,
                       }
                     }
                     return updated
@@ -373,7 +400,11 @@ export default function Page() {
                 setMessages((prev) => {
                   const updated = [...prev]
                   if (messageIndex >= 0 && updated[messageIndex]) {
-                    updated[messageIndex] = { ...updated[messageIndex], loading: false }
+                    updated[messageIndex] = {
+                      ...updated[messageIndex],
+                      waiting: false,
+                      loading: false,
+                    }
                   }
                   return updated
                 })
@@ -422,7 +453,7 @@ export default function Page() {
       error(`API 调用失败: ${errMsg}`)
 
       setMessages((prev) => {
-        const filtered = prev.filter((m) => !m.loading)
+        const filtered = prev.filter((m) => !m.loading && !m.waiting)
         return [
           ...filtered,
           {
@@ -433,6 +464,10 @@ export default function Page() {
         ]
       })
     } finally {
+      // 确保流结束后清除 waiting 状态（防止 skeleton 残留）
+      setMessages((prev) =>
+        prev.map((m) => (m.waiting ? { ...m, waiting: false } : m)),
+      )
       setIsStreaming(false)
     }
   }
@@ -461,6 +496,9 @@ export default function Page() {
 
     setUploadedImages([])
     setUploadedFiles([])
+
+    // 立即插入一个 waiting 占位消息（需求2：首 token 返回前的 loading）
+    newMessages.push({ role: "ai", text: "", time, waiting: true })
 
     setMessages(newMessages)
     callDifyAPI(text || "请分析我上传的文件", newMessages)
@@ -530,6 +568,7 @@ export default function Page() {
           ref={chatAreaRef}
           messages={messages}
           onUseSuggestion={(text) => handleSendMessage(text)}
+          isStreaming={isStreaming}
         />
 
         <InputArea

@@ -3,14 +3,16 @@
 import { forwardRef } from "react"
 import type { Message } from "@/app/page"
 import { MessageBubble } from "./message-bubble"
+import { ThinkingBlock } from "./thinking-block"
 
 interface ChatAreaProps {
   messages: Message[]
   onUseSuggestion: (text: string) => void
+  isStreaming?: boolean
 }
 
 export const ChatArea = forwardRef<HTMLDivElement, ChatAreaProps>(
-  function ChatArea({ messages, onUseSuggestion }, ref) {
+  function ChatArea({ messages, onUseSuggestion, isStreaming }, ref) {
     const suggestions = [
       { text: "帮我查询海上钻井平台的安全操作规程", label: "查询安全规程", icon: "📋" },
       { text: "分析离心泵振动数据", label: "振动数据分析", icon: "📈" },
@@ -110,8 +112,49 @@ export const ChatArea = forwardRef<HTMLDivElement, ChatAreaProps>(
         style={{ background: "var(--background)" }}
       >
         {messages.map((msg, idx) => {
-          // Loading message
-          if (msg.loading) {
+          // 首 token 等待阶段：脉冲骨架屏（需求2）
+          if (msg.waiting) {
+            return (
+              <div
+                key={idx}
+                className="flex gap-3 self-start"
+                style={{ maxWidth: "80%", animation: "messageIn 0.35s ease" }}
+              >
+                <div
+                  className="flex h-[36px] w-[36px] flex-shrink-0 items-center justify-center rounded-full text-[13px] font-bold text-white"
+                  style={{
+                    background: "var(--gradient-accent)",
+                    boxShadow: "var(--shadow-sm)",
+                  }}
+                >
+                  AI
+                </div>
+                <div className="flex flex-col gap-2 min-w-0" style={{ flex: 1 }}>
+                  {/* Thinking 思考链（如果有的话，可折叠展开） */}
+                  {msg.thinking && (
+                    <ThinkingBlock text={msg.thinking} />
+                  )}
+                  {/* 脉冲骨架屏 */}
+                  <div
+                    className="rounded-2xl px-5 py-4 waiting-skeleton"
+                    style={{
+                      background: "var(--card)",
+                      border: "1px solid var(--border)",
+                      borderBottomLeftRadius: "8px",
+                      boxShadow: "var(--shadow-sm)",
+                    }}
+                  >
+                    <div className="skeleton-line skeleton-line-1" />
+                    <div className="skeleton-line skeleton-line-2" />
+                    <div className="skeleton-line skeleton-line-3" />
+                  </div>
+                </div>
+              </div>
+            )
+          }
+
+          // 历史遗留 loading 消息（兼容处理）
+          if (msg.loading && !msg.text) {
             return (
               <div
                 key={idx}
@@ -171,6 +214,11 @@ export const ChatArea = forwardRef<HTMLDivElement, ChatAreaProps>(
               </div>
 
               <div className="flex flex-col gap-1.5 min-w-0">
+                {/* Thinking 思考链（消息已完成时，折叠在气泡上方） */}
+                {msg.thinking && !msg.waiting && !msg.loading && (
+                  <ThinkingBlock text={msg.thinking} isComplete={!isStreaming} />
+                )}
+
                 {/* Image attachment */}
                 {msg.image && (
                   <img

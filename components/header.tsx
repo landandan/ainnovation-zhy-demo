@@ -39,6 +39,30 @@ export function Header({ onMenuToggle, currentTheme, onThemeChange }: HeaderProp
   const darkThemes = THEMES.filter((t) => t.dark)
   const lightThemes = THEMES.filter((t) => !t.dark)
 
+  // 每套主题的强调色映射（用于按钮预览色）
+  const THEME_CHIP_COLORS: Record<string, { accent: string; fg: string }> = {
+    "ocean-trench":     { accent: "#00D4FF", fg: "#060E1E" },
+    "industrial-rig":   { accent: "#FF6B2B", fg: "#0D0906" },
+    "hse-alert":        { accent: "#FFD600", fg: "#080808" },
+    "cyber-matrix":     { accent: "#00FF5F", fg: "#011210" },
+    "quantum-purple":   { accent: "#C580FF", fg: "#0A0028" },
+    "carbon-fiber":     { accent: "#B8B8B0", fg: "#0B0B0B" },
+    "abyssal-blue":     { accent: "#3888E0", fg: "#E0EDFF" },
+    "neon-synthwave":   { accent: "#00F5A0", fg: "#1A0030" },
+    "radar-sweep":      { accent: "#60E8A0", fg: "#0E1A28" },
+    "midnight-sand":    { accent: "#E8A860", fg: "#1C0E08" },
+    "arctic-ice":       { accent: "#0066CC", fg: "#FFFFFF" },
+    "pearl-clean":      { accent: "#4A3A90", fg: "#FFFFFF" },
+    "control-room":     { accent: "#012A5E", fg: "#FFFFFF" },
+    "safety-first":     { accent: "#ED6200", fg: "#FFFFFF" },
+    "eco-pipeline":     { accent: "#1D6B2A", fg: "#FFFFFF" },
+    "dawn-horizon":     { accent: "#E07030", fg: "#FFFFFF" },
+    "corporate-tech":   { accent: "#022850", fg: "#FFFFFF" },
+    "data-analytics":   { accent: "#1A5888", fg: "#FFFFFF" },
+    "desert-oil":       { accent: "#C85A2A", fg: "#FFFFFF" },
+    "eink-display":     { accent: "#1A1A1A", fg: "#FFFFFF" },
+  }
+
   return (
     <header
       className="header flex items-center gap-3 px-5 py-3 flex-shrink-0 border-b"
@@ -155,7 +179,9 @@ export function Header({ onMenuToggle, currentTheme, onThemeChange }: HeaderProp
               🌙 暗色主题
             </div>
             <div className="theme-grid">
-              {darkThemes.map((t) => (
+              {darkThemes.map((t) => {
+                const chipColor = THEME_CHIP_COLORS[t.id] || { accent: "var(--accent)", fg: "var(--accent-foreground)" }
+                return (
                 <button
                   key={t.id}
                   onClick={() => {
@@ -166,26 +192,30 @@ export function Header({ onMenuToggle, currentTheme, onThemeChange }: HeaderProp
                   style={
                     t.id === currentTheme
                       ? {
-                          background: "var(--accent)",
-                          color: "var(--accent-foreground)",
+                          background: chipColor.accent,
+                          color: chipColor.fg,
+                          borderColor: chipColor.accent + "80",
                         }
                       : {
-                          background: "var(--secondary)",
+                          background: chipColor.accent + "1A",
                           color: "var(--text-secondary)",
+                          borderColor: chipColor.accent + "40",
                         }
                   }
                 >
                   {t.label}
                   {t.id === currentTheme && <span className="theme-chip-check">✓</span>}
                 </button>
-              ))}
+              )})}
             </div>
 
             <div className="theme-category-label" style={{ color: "var(--text-muted)" }}>
               ☀️ 浅色主题
             </div>
             <div className="theme-grid">
-              {lightThemes.map((t) => (
+              {lightThemes.map((t) => {
+                const chipColor = THEME_CHIP_COLORS[t.id] || { accent: "var(--accent)", fg: "var(--accent-foreground)" }
+                return (
                 <button
                   key={t.id}
                   onClick={() => {
@@ -196,19 +226,21 @@ export function Header({ onMenuToggle, currentTheme, onThemeChange }: HeaderProp
                   style={
                     t.id === currentTheme
                       ? {
-                          background: "var(--accent)",
-                          color: "var(--accent-foreground)",
+                          background: chipColor.accent,
+                          color: chipColor.fg,
+                          borderColor: chipColor.accent + "80",
                         }
                       : {
-                          background: "var(--secondary)",
+                          background: chipColor.accent + "1A",
                           color: "var(--text-secondary)",
+                          borderColor: chipColor.accent + "40",
                         }
                   }
                 >
                   {t.label}
                   {t.id === currentTheme && <span className="theme-chip-check">✓</span>}
                 </button>
-              ))}
+              )})}
             </div>
           </div>
         )}

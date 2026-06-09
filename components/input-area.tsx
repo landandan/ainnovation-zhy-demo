@@ -191,7 +191,7 @@ export function InputArea({
             className="min-h-[38px] max-h-[300px] flex-1 resize-none border-none bg-transparent py-2 text-sm leading-relaxed outline-none transition-height"
             style={{ color: "var(--foreground)", transition: "height 0.15s ease" }}
             rows={1}
-            placeholder="输入您的问题... (Shift + Enter 换行, Enter 发送)"
+            placeholder="输入您的问题..."
             value={text}
             onChange={(e) => {
               setText(e.target.value)

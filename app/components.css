@@ -290,6 +290,15 @@
   flex-shrink: 0;
 }
 
+.theme-chip-dot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  box-shadow: 0 0 4px currentColor;
+}
+
 .settings-overlay {
   position: fixed;
   inset: 0;
@@ -674,10 +683,12 @@
 .toast-container {
   position: fixed;
   top: 20px;
-  right: 20px;
+  left: 50%;
+  transform: translateX(-50%);
   z-index: 9999;
   display: flex;
-  flex-direction: column-reverse;
+  flex-direction: column;
+  align-items: center;
   gap: 8px;
   pointer-events: none;
 }
@@ -1014,9 +1025,12 @@
     height: 100vh;
     z-index: 100;
     transform: translateX(-100%);
+    box-shadow: none;
+  }
+  .sidebar.open {
+    transform: translateX(0);
     box-shadow: 12px 0 48px rgba(0, 0, 0, 0.3);
   }
-  .sidebar.open { transform: translateX(0); }
 }
 
 @media (min-width: 1025px) {
@@ -1027,8 +1041,111 @@
   .sidebar { width: 280px; min-width: 280px; }
   .toast-item { font-size: 12px; padding: 10px 16px; border-radius: 10px; }
   .theme-menu { min-width: 240px; max-width: 300px; }
+
+  /* 对话区缩小内边距 */
+  .chat-area {
+    padding: 12px 12px;
+  }
+
+  /* 消息气泡最大宽度自适应 */
+  .message {
+    max-width: 88%;
+  }
+
+  /* 输入框区域缩小内边距 */
+  .input-area {
+    padding: 10px 12px 14px;
+  }
+
+  /* 输入框按钮缩小 */
+  .input-wrapper {
+    padding: 6px 8px;
+    gap: 6px;
+    border-radius: 14px;
+  }
+
+  .input-btn {
+    width: 30px;
+    height: 30px;
+  }
+
+  .input-btn.send {
+    width: 32px;
+    height: 32px;
+  }
 }
 
 @media (max-width: 380px) {
   .sidebar { width: 260px; min-width: 260px; }
+}
+
+/* ═══════════════════════════════════════════════════════════
+   骨架屏 + Thinking 动画（需求 1 & 2）
+   ═══════════════════════════════════════════════════════════ */
+
+@keyframes skeletonShimmer {
+  0% {
+    background-position: -200% 0;
+    opacity: 0.4;
+  }
+  50% {
+    opacity: 0.7;
+  }
+  100% {
+    background-position: 200% 0;
+    opacity: 0.4;
+  }
+}
+
+@keyframes thinkingDotBounce {
+  0%, 100% {
+    opacity: 0.3;
+    transform: scale(0.8);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1.1);
+  }
+}
+
+.skeleton-line {
+  height: 12px;
+  border-radius: 6px;
+  margin-bottom: 10px;
+  background: linear-gradient(
+    90deg,
+    var(--skeleton-base, rgba(128, 128, 128, 0.1)) 25%,
+    var(--skeleton-shine, rgba(128, 128, 128, 0.2)) 50%,
+    var(--skeleton-base, rgba(128, 128, 128, 0.1)) 75%
+  );
+  background-size: 200% 100%;
+  animation: skeletonShimmer 2s ease-in-out infinite;
+}
+
+.skeleton-line:last-child {
+  margin-bottom: 0;
+}
+
+.skeleton-line-1 {
+  width: 90%;
+}
+
+.skeleton-line-2 {
+  width: 65%;
+  animation-delay: 0.15s;
+}
+
+.skeleton-line-3 {
+  width: 78%;
+  animation-delay: 0.3s;
+}
+
+/* Thinking 思考点动画（DeepSeek 风格） */
+.thinking-dot-icon {
+  display: inline-block;
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--accent);
+  animation: thinkingDotBounce 1.2s ease-in-out infinite;
 }
