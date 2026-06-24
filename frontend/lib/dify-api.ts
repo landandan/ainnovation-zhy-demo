@@ -1,14 +1,11 @@
 /**
  * Dify API 类型定义 & 后端代理调用
  *
- * ⚠️ 所有 Dify 调用现由 Flask 后端代理，API Key 不再暴露到浏览器。
- * 前端只需传入 agent_id，后端从数据库读取 Dify 配置并转发请求。
- *
- * Mock 模式下直接走 createMockStream，不依赖后端。
+ * ⚠️ 非 Mock 模式下所有 Dify 调用由 Flask 后端代理，API Key 不暴露到浏览器。
+ * Mock 模式下直连 Dify 标准 API（不依赖后端），API Key 从 localStorage 读取。
  */
 
-import { isMockMode } from "./mock-config"
-import { createMockStream } from "./mock-api"
+import { isMockMode, getMockDifyApiConfigForAgent } from "./mock-config"
 
 /* ───── 请求体（前端 → 后端代理） ───── */
 
@@ -29,6 +26,7 @@ export interface DifyChatProxyRequest {
 
 export interface DifyStreamEvent {
   event: "message" | "message_end" | "error" | "agent_thought" | "agent_message" | "workflow_started" | "workflow_finished" | "node_started" | "node_finished" | "tts_message" | "tts_message_end" | "message_file" | "message_replace"
+  task_id?: string
   message_id?: string
   conversation_id?: string
   answer?: string
@@ -96,7 +94,7 @@ export function getAgentInputs(agentId: string, agentDefs: MinimalAgentDef[]): R
   }
 }
 
-/* ───── 调用后端 Dify 代理（流式） ───── */
+/* ───── 调用 Dify Chat（流式 SSE） ───── */
 
 export async function callDifyChatStream(params: {
   query: string
@@ -117,19 +115,44 @@ export async function callDifyChatStream(params: {
     throw new Error("agent_id 未指定")
   }
 
-  // Mock 模式：直接返回 createMockStream 包装的 Response
+  // Mock 模式：直连 Dify chat-messages SSE 接口（不走后端代理）
   if (isMockMode()) {
-    const stream = createMockStream(agentId, query, conversationId)
-    return new Response(stream, {
-      status: 200,
+    const { dify_base_url, dify_api_key } = getMockDifyApiConfigForAgent(agentId)
+
+    const difyBody: Record<string, unknown> = {
+      inputs: inputs || {},
+      query,
+      response_mode: "streaming",
+      user,
+    }
+
+    if (conversationId) {
+      difyBody.conversation_id = conversationId
+    }
+
+    if (files && files.length > 0) {
+      difyBody.files = files
+    }
+
+    const response = await fetch(`${dify_base_url}/chat-messages`, {
+      method: "POST",
       headers: {
-        "Content-Type": "text/event-stream",
-        "Cache-Control": "no-cache",
-        Connection: "keep-alive",
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${dify_api_key}`,
       },
+      body: JSON.stringify(difyBody),
+      signal,
     })
+
+    if (!response.ok) {
+      const errorText = await response.text()
+      throw new Error(`Dify API 错误 (${response.status}): ${errorText}`)
+    }
+
+    return response
   }
 
+  // 非 Mock 模式：走后端代理
   const body: DifyChatProxyRequest = {
     agent_id: agentId,
     query,
@@ -167,7 +190,7 @@ export async function callDifyChatStream(params: {
   return response
 }
 
-/* ───── 上传文件到 Dify（通过后端代理） ───── */
+/* ───── 上传文件到 Dify ───── */
 
 export async function uploadFileToDify(
   file: File,
@@ -178,15 +201,37 @@ export async function uploadFileToDify(
     throw new Error("agent_id 未指定")
   }
 
+  const formData = new FormData()
+  formData.append("file", file)
+  formData.append("user", user)
+
+  // Mock 模式：直连 Dify 文件上传接口（不走后端代理）
+  if (isMockMode()) {
+    const { dify_base_url, dify_api_key } = getMockDifyApiConfigForAgent(agentId)
+
+    const response = await fetch(`${dify_base_url}/files/upload`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${dify_api_key}`,
+      },
+      body: formData,
+    })
+
+    if (!response.ok) {
+      const errorText = await response.text()
+      throw new Error(`Dify 文件上传失败 (${response.status}): ${errorText}`)
+    }
+
+    return response.json()
+  }
+
+  // 非 Mock 模式：走后端代理
   const token = getToken()
   if (!token) {
     throw new Error("未登录，无法上传文件")
   }
 
-  const formData = new FormData()
-  formData.append("file", file)
   formData.append("agent_id", agentId)
-  formData.append("user", user)
 
   const response = await fetch("/api/dify/files/upload", {
     method: "POST",
@@ -204,7 +249,7 @@ export async function uploadFileToDify(
   return response.json()
 }
 
-/* ───── 批量上传文件到 Dify（通过后端代理） ───── */
+/* ───── 批量上传文件到 Dify ───── */
 
 export interface UploadedFileRef {
   file: File
@@ -234,6 +279,72 @@ export async function uploadFilesToDify(
   }
 
   return results
+}
+
+/* ───── 停止 Dify 任务 ───── */
+
+/**
+ * 通知 Dify 服务端停止指定 task 的生成。
+ *
+ * Dify 根据"应用类型"使用不同的停止端点：
+ * - Chatflow / Agent / Chatbot → `POST /chat-messages/{task_id}/stop`
+ * - Workflow                    → `POST /workflows/run/{task_id}/stop`
+ *
+ * 调用方需通过 SSE 事件类型判断应用类型并传入 `isWorkflow`：
+ * - 出现 `workflow_started` / `node_started` 等事件 → isWorkflow = true
+ * - 出现 `agent_thought` / `message` 等事件           → isWorkflow = false
+ *
+ * - Mock 模式：浏览器直连对应 Dify 端点
+ * - 非 Mock 模式：通过后端统一代理端点 `/api/dify/chat-messages/stop`，
+ *   后端根据 `is_workflow` 参数路由到正确的 Dify URL。
+ *
+ * 即使请求失败也不抛错（停止是 best-effort 操作）。
+ */
+export async function stopDifyTask(params: {
+  agentId: string
+  taskId: string
+  user: string
+  isWorkflow?: boolean
+}): Promise<void> {
+  const { agentId, taskId, user, isWorkflow = false } = params
+
+  try {
+    if (isMockMode()) {
+      const { dify_base_url, dify_api_key } = getMockDifyApiConfigForAgent(agentId)
+      const stopPath = isWorkflow
+        ? `/workflows/run/${taskId}/stop`
+        : `/chat-messages/${taskId}/stop`
+      await fetch(`${dify_base_url}${stopPath}`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${dify_api_key}`,
+        },
+        body: JSON.stringify({ user }),
+      })
+      return
+    }
+
+    // 非 Mock 模式：走后端代理（后端根据 is_workflow 路由）
+    const token = getToken()
+    if (!token) return
+
+    await fetch("/api/dify/chat-messages/stop", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({
+        agent_id: agentId,
+        task_id: taskId,
+        is_workflow: isWorkflow,
+      }),
+    })
+  } catch (err) {
+    // 停止是 best-effort，失败不抛错
+    console.warn("停止 Dify 任务失败:", err)
+  }
 }
 
 /* ───── 工具：从 localStorage 获取 token ───── */

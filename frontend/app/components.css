@@ -245,6 +245,51 @@
   animation: fadeSlideUp 0.2s ease;
 }
 
+/* 用户头像下拉菜单 */
+.user-menu {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 8px);
+  z-index: 50;
+  min-width: 220px;
+  padding: 8px;
+  border-radius: 14px;
+  animation: fadeSlideUp 0.2s ease;
+}
+
+.user-menu-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 8px 12px;
+}
+
+.user-menu-divider {
+  height: 1px;
+  margin: 0 4px 6px;
+  flex-shrink: 0;
+}
+
+.user-menu-logout-btn {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 10px 12px;
+  border-radius: 10px;
+  border: none;
+  background: transparent;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s;
+  outline: none;
+}
+
+.user-menu-logout-btn:hover {
+  background: var(--hover);
+}
+
 .theme-category-label {
   padding: 8px 12px 4px;
   font-size: 11px;

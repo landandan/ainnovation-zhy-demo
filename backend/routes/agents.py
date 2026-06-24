@@ -1,4 +1,5 @@
 """Agent 应用 CRUD API"""
+import requests
 from flask import Blueprint, request, jsonify, g
 from models import db
 from models.agent import AgentDef, DifyConfig
@@ -445,5 +446,89 @@ def delete_dify_config(config_id):
     db.session.delete(dc)
     db.session.commit()
     return jsonify({"message": "Dify 配置已删除"})
+
+
+@agents_bp.route("/agents/dify-configs/test-connection", methods=["POST"])
+@admin_required
+def test_dify_connection():
+    """
+    测试 Dify API 连通性
+    ---
+    tags:
+      - Dify Configs
+    summary: 校验 Dify API Key + Base URL 是否可用（仅管理员）
+    description: |
+      后端使用传入的 API Key / Base URL 直接请求 Dify 的
+      `/v1/parameters` 端点验证连通性，不读取数据库配置。
+    security:
+      - Bearer: []
+    parameters:
+      - name: body
+        in: body
+        required: true
+        schema:
+          type: object
+          required: [dify_api_key]
+          properties:
+            dify_api_key:
+              type: string
+              description: 待校验的 Dify API Key
+            dify_base_url:
+              type: string
+              description: Dify 服务地址（可选）
+    responses:
+      200:
+        description: 校验结果
+        schema:
+          type: object
+          properties:
+            ok: {type: boolean}
+            error: {type: string, description: 失败原因}
+    """
+    data = request.get_json(silent=True) or {}
+    api_key = (data.get("dify_api_key") or "").strip()
+    base_url = (data.get("dify_base_url") or "").strip()
+
+    if not api_key:
+        return jsonify({"ok": False, "error": "缺少 API Key"}), 200
+    if "****" in api_key:
+        return jsonify({"ok": False, "error": "请重新填写 API Key（当前为脱敏值）"}), 200
+
+    # 规范化 base_url，自动补全 /v1
+    if not base_url:
+        base_url = "https://api.dify.ai/v1"
+    else:
+        base_url = base_url.rstrip("/")
+        if not base_url.endswith("/v1"):
+            if "/v1" in base_url:
+                base_url = base_url[: base_url.index("/v1") + 3]
+            else:
+                base_url += "/v1"
+
+    test_url = f"{base_url}/parameters"
+    try:
+        resp = requests.get(
+            test_url,
+            headers={
+                "Authorization": f"Bearer {api_key}",
+                "Content-Type": "application/json",
+            },
+            timeout=15,
+        )
+        if resp.status_code == 200:
+            return jsonify({"ok": True})
+
+        # 解析 Dify 错误信息
+        try:
+            err_data = resp.json()
+            err_msg = err_data.get("message") or err_data.get("error") or f"HTTP {resp.status_code}"
+        except Exception:
+            err_msg = resp.text[:200] if resp.text else f"HTTP {resp.status_code}"
+        return jsonify({"ok": False, "error": err_msg}), 200
+
+    except requests.exceptions.Timeout:
+        return jsonify({"ok": False, "error": "请求 Dify 超时"}), 200
+    except requests.exceptions.RequestException as e:
+        return jsonify({"ok": False, "error": f"连接失败: {str(e)}"}), 200
 
 

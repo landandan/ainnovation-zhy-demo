@@ -85,11 +85,26 @@ async function request<T>(
     headers["Authorization"] = `Bearer ${token}`
   }
 
-  const res = await fetch(`/api${path}`, {
-    method,
-    headers,
-    body: body ? JSON.stringify(body) : undefined,
-  })
+  // 为每个 REST 请求添加 15 秒超时，防止后端不可达时无限挂起
+  const controller = new AbortController()
+  const timeoutId = setTimeout(() => controller.abort(), 15000)
+
+  let res: Response
+  try {
+    res = await fetch(`/api${path}`, {
+      method,
+      headers,
+      body: body ? JSON.stringify(body) : undefined,
+      signal: controller.signal,
+    })
+  } catch (err: unknown) {
+    clearTimeout(timeoutId)
+    if (err instanceof DOMException && err.name === "AbortError") {
+      throw new ApiError("请求超时（15秒），请检查网络或后端服务是否正常", 408)
+    }
+    throw new ApiError(err instanceof Error ? err.message : "网络请求失败", 0)
+  }
+  clearTimeout(timeoutId)
 
   if (!res.ok) {
     const errData = await res.json().catch(() => ({ error: res.statusText }))
@@ -456,4 +471,89 @@ export async function deleteDifyConfig(configId: number): Promise<{ message: str
     return deleteMockDifyConfig(configId)
   }
   return request<{ message: string }>("DELETE", `/agents/dify-configs/${configId}`)
+}
+
+/* ───── Dify 连通性校验 ───── */
+
+export interface TestConnectionResult {
+  ok: boolean
+  error?: string
+}
+
+/** 规范化 Dify Base URL，自动补全 /v1 */
+function normalizeDifyBaseUrl(baseUrl?: string): string {
+  let url = (baseUrl || "").trim()
+  if (!url) return "https://api.dify.ai/v1"
+  url = url.replace(/\/+$/, "")
+  if (!url.endsWith("/v1")) {
+    if (url.includes("/v1")) {
+      url = url.slice(0, url.indexOf("/v1") + 3)
+    } else {
+      url += "/v1"
+    }
+  }
+  return url
+}
+
+/**
+ * Mock 模式下直接从浏览器请求 Dify `/v1/parameters` 校验连通性
+ * 不经过后端，API Key 仅在本次校验中临时使用
+ */
+async function directTestDifyConnection(data: {
+  dify_api_key: string
+  dify_base_url?: string
+}): Promise<TestConnectionResult> {
+  const apiKey = data.dify_api_key.trim()
+  if (!apiKey) return { ok: false, error: "缺少 API Key" }
+  if (apiKey.includes("****")) return { ok: false, error: "请重新填写 API Key（当前为脱敏值）" }
+
+  const baseUrl = normalizeDifyBaseUrl(data.dify_base_url)
+  const testUrl = `${baseUrl}/parameters`
+
+  const controller = new AbortController()
+  const timer = setTimeout(() => controller.abort(), 15000)
+  try {
+    const resp = await fetch(testUrl, {
+      method: "GET",
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        "Content-Type": "application/json",
+      },
+      signal: controller.signal,
+    })
+    if (resp.ok) return { ok: true }
+
+    let errMsg = `HTTP ${resp.status}`
+    try {
+      const errData = await resp.json()
+      errMsg = errData.message || errData.error || errMsg
+    } catch {
+      const text = await resp.text().catch(() => "")
+      if (text) errMsg = text.slice(0, 200)
+    }
+    return { ok: false, error: errMsg }
+  } catch (err: unknown) {
+    if (err instanceof DOMException && err.name === "AbortError") {
+      return { ok: false, error: "请求 Dify 超时" }
+    }
+    const msg = err instanceof Error ? err.message : String(err)
+    return { ok: false, error: `连接失败: ${msg}` }
+  } finally {
+    clearTimeout(timer)
+  }
+}
+
+/**
+ * 测试 Dify API Key + Base URL 是否可用
+ * - Mock 模式：浏览器直连 Dify
+ * - 普通模式：通过后端代理校验
+ */
+export async function testDifyConnection(data: {
+  dify_api_key: string
+  dify_base_url?: string
+}): Promise<TestConnectionResult> {
+  if (isMockMode()) {
+    return directTestDifyConnection(data)
+  }
+  return request<TestConnectionResult>("POST", "/agents/dify-configs/test-connection", data)
 }

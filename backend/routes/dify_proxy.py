@@ -1,6 +1,7 @@
 """Dify API 代理端点 —— API Key 仅存在于服务端，永不暴露给浏览器"""
 import json
 import logging
+import uuid
 from flask import Blueprint, request, Response, g
 import requests
 
@@ -9,6 +10,10 @@ from utils.auth import login_required
 
 logger = logging.getLogger(__name__)
 dify_proxy_bp = Blueprint("dify_proxy", __name__)
+
+# 活跃上游流注册表：stream_id → requests.Response
+# 用于在客户端断开或请求停止时，主动关闭上游 Dify 连接
+_active_streams: dict[str, requests.Response] = {}
 
 
 def _get_agent_dify_config(agent_id_str: str):
@@ -23,6 +28,17 @@ def _get_agent_dify_config(agent_id_str: str):
         "api_key": config.dify_api_key,
         "base_url": config.dify_base_url or "",
     }, None
+
+
+def _normalize_base_url(base_url: str) -> str:
+    """规范化 Dify Base URL，自动补全 /v1"""
+    url = (base_url or "https://api.dify.ai/v1").rstrip("/")
+    if not url.endswith("/v1"):
+        if "/v1" in url:
+            url = url[: url.index("/v1") + 3]
+        else:
+            url += "/v1"
+    return url
 
 
 @dify_proxy_bp.route("/dify/chat-messages", methods=["POST"])
@@ -42,8 +58,6 @@ def proxy_chat_messages():
 
     返回: text/event-stream (SSE)
     """
-    import os
-
     data = request.get_json(silent=True) or {}
     agent_id_str = data.get("agent_id", "").strip()
     query = data.get("query", "").strip()
@@ -82,14 +96,7 @@ def proxy_chat_messages():
     if files:
         dify_body["files"] = files
 
-    base_url = (config["base_url"] or "https://api.dify.ai/v1").rstrip("/")
-    # 自动补全 /v1 路径：如果 base_url 不以 /v1 结尾，自动追加
-    if not base_url.endswith("/v1"):
-        if "/v1" in base_url:
-            # 例如 http://host/v1/xxx → 截断到 /v1
-            base_url = base_url[: base_url.index("/v1") + 3]
-        else:
-            base_url += "/v1"
+    base_url = _normalize_base_url(config["base_url"])
     api_url = f"{base_url}/chat-messages"
     logger.info(f"Dify 代理请求: {api_url}")
 
@@ -114,11 +121,23 @@ def proxy_chat_messages():
                 mimetype="text/event-stream",
             )
 
+        # 注册活跃流，用于停止时主动关闭
+        stream_id = str(uuid.uuid4())
+        _active_streams[stream_id] = resp
+
         # 逐行转发 SSE（flask 原生支持 yield）
         def generate():
-            for line in resp.iter_lines(decode_unicode=True):
-                if line:
-                    yield line + "\n"
+            try:
+                for line in resp.iter_lines(decode_unicode=True):
+                    if line:
+                        yield line + "\n"
+            except GeneratorExit:
+                # 客户端断开连接，主动关闭上游 Dify 流
+                logger.info(f"客户端断开，关闭上游 Dify 流 (stream_id={stream_id})")
+                resp.close()
+            finally:
+                # 清理注册表
+                _active_streams.pop(stream_id, None)
 
         return Response(
             generate(),
@@ -141,6 +160,70 @@ def proxy_chat_messages():
             "data: " + json.dumps({"event": "error", "message": f"Dify API 连接失败: {str(e)}"}) + "\n\n",
             mimetype="text/event-stream",
         )
+
+
+@dify_proxy_bp.route("/dify/chat-messages/stop", methods=["POST"])
+@login_required
+def proxy_stop_chat():
+    """
+    代理 Dify 停止生成 API
+
+    请求体 JSON:
+        {
+            "agent_id": "knowledge",
+            "task_id": "xxx",
+            "is_workflow": false   // 是否为 Workflow 应用
+        }
+
+    Dify 根据"应用类型"使用不同的停止端点：
+    - Chatflow / Agent / Chatbot → POST /chat-messages/{task_id}/stop
+    - Workflow                    → POST /workflows/run/{task_id}/stop
+
+    返回 JSON:
+        { "result": "success" }
+    """
+    data = request.get_json(silent=True) or {}
+    agent_id_str = data.get("agent_id", "").strip()
+    task_id = data.get("task_id", "").strip()
+    is_workflow = bool(data.get("is_workflow", False))
+
+    if not agent_id_str or not task_id:
+        return {"error": "缺少 agent_id 或 task_id 参数"}, 400
+
+    config, error = _get_agent_dify_config(agent_id_str)
+    if error:
+        return {"error": error}, 400
+
+    base_url = _normalize_base_url(config["base_url"])
+    # 根据 is_workflow 选择正确的 Dify 停止端点
+    if is_workflow:
+        stop_path = f"/workflows/run/{task_id}/stop"
+    else:
+        stop_path = f"/chat-messages/{task_id}/stop"
+    stop_url = f"{base_url}{stop_path}"
+    logger.info(f"Dify 停止请求 (is_workflow={is_workflow}): {stop_url}")
+
+    try:
+        resp = requests.post(
+            stop_url,
+            json={"user": str(g.current_user.id)},
+            headers={
+                "Content-Type": "application/json",
+                "Authorization": f"Bearer {config['api_key']}",
+            },
+            timeout=10,
+        )
+
+        if resp.status_code == 200:
+            return {"result": "success"}
+        else:
+            error_text = resp.text[:300] if resp.text else f"HTTP {resp.status_code}"
+            logger.error(f"Dify 停止 API 错误: {error_text}")
+            return {"error": f"Dify 停止失败: {error_text}"}, resp.status_code
+
+    except requests.exceptions.RequestException as e:
+        logger.error(f"Dify 停止 API 异常: {e}")
+        return {"error": f"Dify 停止失败: {str(e)}"}, 502
 
 
 @dify_proxy_bp.route("/dify/files/upload", methods=["POST"])
@@ -168,12 +251,7 @@ def proxy_file_upload():
     if not uploaded_file:
         return {"error": "缺少 file 参数"}, 400
 
-    base_url = (config["base_url"] or "https://api.dify.ai/v1").rstrip("/")
-    if not base_url.endswith("/v1"):
-        if "/v1" in base_url:
-            base_url = base_url[: base_url.index("/v1") + 3]
-        else:
-            base_url += "/v1"
+    base_url = _normalize_base_url(config["base_url"])
     api_url = f"{base_url}/files/upload"
 
     try:

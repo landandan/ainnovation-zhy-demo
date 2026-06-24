@@ -483,3 +483,39 @@ export function clearMockData(): void {
 export function mockDelay(ms = 150): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms))
 }
+
+/* ───── Mock 模式下获取 Dify API 配置（直连） ───── */
+
+/**
+ * Mock 模式下，根据 agent_id 字符串查找该 agent 的默认 Dify 配置。
+ * 用于文件上传等需要直连 Dify 的场景（不走后端代理）。
+ *
+ * @param agentIdStr agent_id 字符串（如 "knowledge"）
+ * @returns { dify_base_url, dify_api_key }
+ * @throws 若 agent 或配置不存在
+ */
+export function getMockDifyApiConfigForAgent(agentIdStr: string): {
+  dify_base_url: string
+  dify_api_key: string
+} {
+  if (typeof window === "undefined") {
+    throw new Error("Mock: 无法在服务端获取 Dify 配置")
+  }
+
+  const agents = readAgents()
+  const agent = agents.find((a) => a.agent_id === agentIdStr)
+  if (!agent) {
+    throw new Error(`Mock: 找不到 agent_id="${agentIdStr}" 的记录，请先在设置页配置`)
+  }
+
+  const configs = readDifyConfigs().filter((c) => c.agent_id === agent.id)
+  const defaultConfig = configs.find((c) => c.is_default) || configs[0]
+  if (!defaultConfig) {
+    throw new Error(`Mock: agent "${agentIdStr}" 未配置 Dify 连接，请先在设置页添加`)
+  }
+
+  return {
+    dify_base_url: defaultConfig.dify_base_url || "https://api.dify.ai/v1",
+    dify_api_key: defaultConfig.dify_api_key,
+  }
+}

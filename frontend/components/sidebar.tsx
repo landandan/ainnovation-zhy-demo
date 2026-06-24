@@ -229,7 +229,7 @@ export function Sidebar({
           </div>
           <button
             onClick={handleLogout}
-            className="flex h-[28px] w-[28px] items-center justify-center rounded-lg transition-all hover:bg-white/10 flex-shrink-0"
+            className="flex h-[28px] w-[28px] items-center justify-center rounded-lg transition-all hover:bg-white/10 flex-shrink-0 cursor-pointer"
             style={{ color: "var(--text-muted)" }}
             aria-label="登出"
             title="登出"

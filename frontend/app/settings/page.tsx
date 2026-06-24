@@ -12,6 +12,7 @@ import {
   createDifyConfig,
   updateDifyConfig,
   deleteDifyConfig,
+  testDifyConnection,
   type AgentDefApi,
   type DifyConfigApi,
   type CreateAgentRequest,
@@ -165,7 +166,7 @@ const DifyConfigDialog = memo(function DifyConfigDialog({
 }: {
   agentLabel: string
   existingConfig: DifyConfigApi | null
-  onSave: (data: { env_label?: string; dify_api_key: string; dify_base_url?: string; is_default?: boolean }) => void
+  onSave: (data: { env_label?: string; dify_api_key?: string; dify_base_url?: string; is_default?: boolean }) => void
   onCancel: () => void
 }) {
   const isEditing = existingConfig !== null
@@ -175,12 +176,60 @@ const DifyConfigDialog = memo(function DifyConfigDialog({
   const [baseUrl, setBaseUrl] = useState(existingConfig?.dify_base_url ?? "")
   const [showKey, setShowKey] = useState(false)
   const [error, setError] = useState("")
+  const [testing, setTesting] = useState(false)
+  const [testResult, setTestResult] = useState<{ ok: boolean; error?: string } | null>(null)
 
-  const handleSubmit = () => {
+  /** 测试连接：调用 testDifyConnection，成功显示绿色、失败显示红色 */
+  const handleTestConnection = async () => {
+    if (!apiKey.trim()) { setError("请输入 API Key"); return }
+    setError("")
+    setTesting(true)
+    setTestResult(null)
+    try {
+      const result = await testDifyConnection({
+        dify_api_key: apiKey.trim(),
+        dify_base_url: baseUrl.trim() || undefined,
+      })
+      setTestResult(result)
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "测试失败"
+      setTestResult({ ok: false, error: msg })
+    } finally {
+      setTesting(false)
+    }
+  }
+
+  /** 保存：填写了 API Key 时先校验连通性，失败则中止保存 */
+  const handleSubmit = async () => {
     if (!isEditing && !apiKey.trim()) { setError("请输入 API Key"); return }
+
+    // 仅在用户输入了 API Key 时校验连通性（编辑模式可只改 Base URL）
+    if (apiKey.trim()) {
+      setError("")
+      setTesting(true)
+      setTestResult(null)
+      let result: { ok: boolean; error?: string } | null = null
+      try {
+        result = await testDifyConnection({
+          dify_api_key: apiKey.trim(),
+          dify_base_url: baseUrl.trim() || undefined,
+        })
+      } catch (err: unknown) {
+        const msg = err instanceof Error ? err.message : "测试失败"
+        result = { ok: false, error: msg }
+      }
+      setTesting(false)
+      setTestResult(result)
+      if (!result.ok) {
+        setError(result.error || "连接校验失败，请检查 API Key 和 Base URL")
+        return
+      }
+    }
+
     onSave({
       env_label: envLabel.trim() || "默认",
-      dify_api_key: apiKey.trim(),
+      // 编辑模式下若未填写 API Key，则不传该字段，避免空值覆盖
+      ...(apiKey.trim() ? { dify_api_key: apiKey.trim() } : {}),
       dify_base_url: baseUrl.trim() || undefined,
       is_default: true,
     })
@@ -203,7 +252,7 @@ const DifyConfigDialog = memo(function DifyConfigDialog({
           </div>
           <div className="flex flex-col gap-1">
             <label className="text-[11px] font-semibold" style={{ color: "var(--text-muted)" }}>Dify Base URL</label>
-            <input type="text" value={baseUrl} onChange={(e) => setBaseUrl(e.target.value)}
+            <input type="text" value={baseUrl} onChange={(e) => { setBaseUrl(e.target.value); setTestResult(null) }}
               placeholder="https://api.dify.ai/v1"
               className="w-full rounded-lg border px-3 py-2 text-[13px] outline-none transition-all focus:border-[var(--accent)]"
               style={{ background: "var(--secondary)", color: "var(--foreground)", borderColor: "var(--border)" }} />
@@ -211,7 +260,7 @@ const DifyConfigDialog = memo(function DifyConfigDialog({
           <div className="flex flex-col gap-1">
             <label className="text-[12px] font-semibold" style={{ color: "var(--foreground)" }}>API Key *</label>
             <div className="relative">
-              <input type={showKey ? "text" : "password"} value={apiKey} onChange={(e) => { setApiKey(e.target.value); setError("") }}
+              <input type={showKey ? "text" : "password"} value={apiKey} onChange={(e) => { setApiKey(e.target.value); setError(""); setTestResult(null) }}
                 placeholder="app-xxxxxxxxxxxxxxxx"
                 className="w-full rounded-lg border px-3 py-2.5 pr-10 text-[13px] font-mono outline-none transition-all focus:border-[var(--accent)]"
                 style={{ background: "var(--secondary)", color: "var(--foreground)", borderColor: error ? "#EF4444" : apiKey ? "var(--success)" : "var(--border)" }} />
@@ -230,9 +279,44 @@ const DifyConfigDialog = memo(function DifyConfigDialog({
             {!apiKey && <p className="text-[10px]" style={{ color: "var(--text-muted)" }}>在 Dify 对应应用「API 访问」页面中获取</p>}
           </div>
         </div>
+
+        {/* 连通性校验状态：成功绿色 / 失败红色 */}
+        {testResult && (
+          <div
+            className="flex items-center gap-2 rounded-lg px-3 py-2 mt-3 text-[11px] font-medium"
+            style={{
+              background: testResult.ok ? "rgba(34,197,94,0.1)" : "rgba(239,68,68,0.1)",
+              border: `1px solid ${testResult.ok ? "rgba(34,197,94,0.3)" : "rgba(239,68,68,0.3)"}`,
+              color: testResult.ok ? "#22C55E" : "#EF4444",
+            }}
+          >
+            {testResult.ok ? (
+              <svg width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" className="flex-shrink-0"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" /><polyline points="22 4 12 14.01 9 11.01" /></svg>
+            ) : (
+              <svg width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" className="flex-shrink-0"><circle cx="12" cy="12" r="10" /><line x1="15" y1="9" x2="9" y2="15" /><line x1="9" y1="9" x2="15" y2="15" /></svg>
+            )}
+            <span>{testResult.ok ? "连接成功，服务可用" : `连接失败：${testResult.error}`}</span>
+          </div>
+        )}
+
         <div className="flex justify-end gap-2 mt-5">
           <button onClick={onCancel} className="rounded-xl px-4 py-2 text-[12px] font-medium transition-all hover:bg-white/10" style={{ color: "var(--text-secondary)" }}>取消</button>
-          <button onClick={handleSubmit} className="rounded-xl px-4 py-2 text-[12px] font-semibold text-white transition-all hover:-translate-y-0.5" style={{ background: "var(--accent)", boxShadow: "var(--shadow-sm)" }}>保存配置</button>
+          <button
+            onClick={handleTestConnection}
+            disabled={testing}
+            className="rounded-xl px-4 py-2 text-[12px] font-semibold transition-all hover:-translate-y-0.5 disabled:opacity-50 disabled:cursor-not-allowed"
+            style={{ background: "var(--secondary)", border: "1px solid var(--border)", color: "var(--foreground)" }}
+          >
+            {testing ? "校验中..." : "测试连接"}
+          </button>
+          <button
+            onClick={handleSubmit}
+            disabled={testing}
+            className="rounded-xl px-4 py-2 text-[12px] font-semibold text-white transition-all hover:-translate-y-0.5 disabled:opacity-50 disabled:cursor-not-allowed"
+            style={{ background: "var(--accent)", boxShadow: "var(--shadow-sm)" }}
+          >
+            {testing ? "校验中..." : "保存配置"}
+          </button>
         </div>
       </div>
     </>
@@ -399,7 +483,7 @@ export default function SettingsPage() {
     setConfigDialogOpen(true)
   }, [admin])
 
-  const handleConfigSave = useCallback(async (data: { env_label?: string; dify_api_key: string; dify_base_url?: string; is_default?: boolean }) => {
+  const handleConfigSave = useCallback(async (data: { env_label?: string; dify_api_key?: string; dify_base_url?: string; is_default?: boolean }) => {
     if (!configTargetAgent) return
     setSaving(true)
     try {

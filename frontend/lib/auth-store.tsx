@@ -12,7 +12,7 @@ import {
   type RegisterRequest,
   type UserInfo,
 } from "./api-client"
-import { isMockMode, getMockToken, getMockUser, clearMockData } from "./mock-config"
+import { isMockMode, getMockToken, getMockUser, clearMockData, disableMockMode } from "./mock-config"
 
 interface AuthContextType {
   user: UserInfo | null
@@ -86,8 +86,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [])
 
   const logout = useCallback(() => {
+    // 记录是否为 mock 模式（在清除前判断），用于决定跳转目标
+    const wasMockMode = isMockMode()
     removeToken()
     setUser(null)
+    // 关闭 mock 模式标志，避免页面刷新后 AuthProvider 自动重新注入 mock 用户
+    if (wasMockMode) {
+      disableMockMode()
+    }
+    // 退出后跳转登录页，mock 模式携带 ?mock=true 以便登录页重新开启 mock 模式
+    const target = wasMockMode ? "/login?mock=true" : "/login"
+    window.location.href = target
   }, [])
 
   return (

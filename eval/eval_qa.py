@@ -191,8 +191,8 @@ def main():
     
     # 3. 执行大模型打分 (并写入日志)
     # 为节省时间，建议初次调试使用 df_a.head(5) 测试前 5 条
-    run_phase2_llm_judge(df_a, "题库 A")
-    run_phase2_llm_judge(df_b, "题库 B")
+    # run_phase2_llm_judge(df_a, "题库 A")
+    # run_phase2_llm_judge(df_b, "题库 B")
 
 if __name__ == "__main__":
     main()

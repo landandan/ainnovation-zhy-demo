@@ -26,6 +26,7 @@ import {
   callDifyChatStream,
   getAgentInputs,
   uploadFilesToDify,
+  stopDifyTask,
 } from "@/lib/dify-api"
 import { getUserSettings, updateUserSettings, isAuthenticated } from "@/lib/api-client"
 
@@ -152,6 +153,10 @@ export default function Page() {
 
   /* ───── 流式请求中断 ───── */
   const abortControllerRef = useRef<AbortController | null>(null)
+  /** 当前 Dify 任务的 task_id（从 SSE 事件中捕获），用于停止生成 */
+  const currentTaskIdRef = useRef<string | null>(null)
+  /** 当前任务是否为 Workflow 类型（由 SSE 事件判定），用于选择正确的停止端点 */
+  const isWorkflowTaskRef = useRef<boolean>(false)
 
   /* ───── Toast hook ───── */
   const { toasts, dismissToast, success, error, warning, info } = useToast()
@@ -276,7 +281,11 @@ export default function Page() {
     difyConversationIdRef.current = null
     setSidebarOpen(false)
     setIsStreaming(false)
-    info("已开启新的对话")
+    // 清空临时上传的文件和图片
+    setUploadedImages([])
+    setUploadedFiles([])
+    setRawImageFiles([])
+    setRawDocFiles([])
   }
 
   const handleSelectHistory = async (id: number) => {
@@ -352,6 +361,9 @@ export default function Page() {
       let firstTokenArrived = false
       let newDifyConversationId: string | null = null
       const aiTime = new Date().toLocaleTimeString("zh-CN", { hour: "2-digit", minute: "2-digit" })
+      // 重置当前 task_id 和 workflow 标志（新一轮请求）
+      currentTaskIdRef.current = null
+      isWorkflowTaskRef.current = false
 
       const messageIndex = allMessages.length - 1
 
@@ -376,10 +388,32 @@ export default function Page() {
             const event = JSON.parse(jsonStr)
 
             switch (event.event) {
+              // Workflow 类型事件：出现即标记为 Workflow 应用
+              case "workflow_started":
+              case "node_started":
+                isWorkflowTaskRef.current = true
+                if (event.task_id && !currentTaskIdRef.current) {
+                  currentTaskIdRef.current = event.task_id
+                }
+                break
+
+              case "node_finished":
+              case "workflow_finished":
+                isWorkflowTaskRef.current = true
+                if (event.task_id && !currentTaskIdRef.current) {
+                  currentTaskIdRef.current = event.task_id
+                }
+                chunkHasUpdates = true
+                break
+
+              // Chatflow / Agent 类型事件
               case "agent_thought":
                 if (event.thought) {
                   fullThinking += event.thought
                   chunkHasUpdates = true
+                }
+                if (event.task_id && !currentTaskIdRef.current) {
+                  currentTaskIdRef.current = event.task_id
                 }
                 break
 
@@ -389,12 +423,18 @@ export default function Page() {
                   fullAnswer += event.answer
                   chunkHasUpdates = true
                 }
+                if (event.task_id && !currentTaskIdRef.current) {
+                  currentTaskIdRef.current = event.task_id
+                }
                 break
 
               case "message_end":
                 if (event.conversation_id) {
                   newDifyConversationId = event.conversation_id
                   difyConversationIdRef.current = newDifyConversationId
+                }
+                if (event.task_id && !currentTaskIdRef.current) {
+                  currentTaskIdRef.current = event.task_id
                 }
                 chunkHasUpdates = true
                 break
@@ -494,9 +534,20 @@ export default function Page() {
 
   /* ───── 停止流式生成 ───── */
   const handleStopStreaming = useCallback(() => {
+    // 1. 先中止前端流读取
     if (abortControllerRef.current) {
       abortControllerRef.current.abort()
       abortControllerRef.current = null
+    }
+    // 2. 通知 Dify 服务端停止任务（best-effort，不阻塞 UI）
+    const taskId = currentTaskIdRef.current
+    const agentId = currentAgentId
+    const username = user?.username || "anonymous"
+    const isWorkflow = isWorkflowTaskRef.current
+    if (taskId) {
+      currentTaskIdRef.current = null
+      isWorkflowTaskRef.current = false
+      stopDifyTask({ agentId, taskId, user: username, isWorkflow })
     }
     setMessages((prev) =>
       prev.map((m) =>
@@ -505,7 +556,7 @@ export default function Page() {
     )
     setIsStreaming(false)
     info("已停止生成")
-  }, [info])
+  }, [info, currentAgentId, user])
 
   /* ───── 发送消息（异步：先上传文件，再合并到 chat 请求） ───── */
   const handleSendMessage = async (text: string) => {
@@ -541,7 +592,6 @@ export default function Page() {
 
     if (allRawFiles.length > 0) {
       try {
-        info("正在上传附件...")
         const uploadedRefs = await uploadFilesToDify(
           allRawFiles,
           user?.username || "anonymous",
@@ -552,7 +602,6 @@ export default function Page() {
           transfer_method: "local_file",
           upload_file_id: ref.upload_file_id,
         }))
-        success("附件上传完成")
       } catch (uploadErr) {
         const errMsg = uploadErr instanceof Error ? uploadErr.message : "附件上传失败"
         error(`附件上传失败: ${errMsg}`)
@@ -571,7 +620,6 @@ export default function Page() {
   const handleFileUpload = (file: { name: string; size: number }, rawFile: File) => {
     setUploadedFiles((prev) => [...prev, file])
     setRawDocFiles((prev) => [...prev, rawFile])
-    info(`已添加附件：${file.name}`)
   }
 
   const handleRemoveImage = (idx: number) => {

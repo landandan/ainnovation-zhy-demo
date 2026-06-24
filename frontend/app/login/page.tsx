@@ -4,8 +4,7 @@ import { useState, useEffect } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import { useAuth } from "@/lib/auth-store"
 import { Button } from "@/components/ui/button"
-import { isMockMode, enableMockMode, getMockToken } from "@/lib/mock-config"
-import { setToken } from "@/lib/api-client"
+import { isMockMode, enableMockMode } from "@/lib/mock-config"
 
 export default function LoginPage() {
   const router = useRouter()
@@ -17,34 +16,23 @@ export default function LoginPage() {
   const [password, setPassword] = useState("")
   const [displayName, setDisplayName] = useState("")
   const [error, setError] = useState("")
-  const [mockInitializing, setMockInitializing] = useState(false)
 
-  // 检测 URL 参数 ?mock=true，自动开启 mock 模式并自动登录
+  // 检测 URL 参数 ?mock=true，开启 mock 模式并预填账号密码（不自动登录）
   useEffect(() => {
     const mockParam = searchParams.get("mock")
     if (mockParam === "true" && !isMockMode()) {
-      // 开启 mock 模式
       enableMockMode()
-      // 预填默认账号密码
       setUsername("admin")
       setPassword("admin123")
-      // 自动触发 mock 登录
-      setMockInitializing(true)
-      // 设置 mock token（auth-store 会检测 isMockMode 自动注入 user）
-      setToken(getMockToken())
-      // 短暂延迟确保 sessionStorage 写入完成
-      setTimeout(() => {
-        router.replace("/")
-      }, 100)
     } else if (isMockMode()) {
       // 已经在 mock 模式下，预填默认账号密码
       setUsername("admin")
       setPassword("admin123")
     }
-  }, [searchParams, router])
+  }, [searchParams])
 
   // 已登录则跳转到首页
-  if (user && !mockInitializing) {
+  if (user) {
     router.replace("/")
     return null
   }
@@ -221,7 +209,7 @@ export default function LoginPage() {
 
           <Button
             type="submit"
-            disabled={loading || mockInitializing}
+            disabled={loading}
             style={{
               width: "100%",
               marginTop: "0.5rem",
@@ -230,7 +218,7 @@ export default function LoginPage() {
               fontWeight: 600,
             }}
           >
-            {loading || mockInitializing ? "请稍候..." : isRegister ? "注册" : "登录"}
+            {loading ? "请稍候..." : isRegister ? "注册" : "登录"}
           </Button>
 
           <button

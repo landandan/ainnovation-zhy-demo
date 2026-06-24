@@ -5,6 +5,11 @@ __v0_jsx-dev-runtime.ts
 .snowflake/
 .v0-trash/
 .vercel/
+amp
+
+# Eval Script/ Local Document
+eval/
+enhancement-doc/
 
 # Environment variables
 .env*.local

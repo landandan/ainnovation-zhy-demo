@@ -190,6 +190,13 @@ export const ChatArea = forwardRef<HTMLDivElement, ChatAreaProps>(
                       boxShadow: "var(--shadow-sm)",
                     }}
                   >
+                    {/* 首 token 等待 loading 图标 */}
+                    <div className="flex items-center gap-2 mb-3">
+                      <span className="spinner" style={{ width: 14, height: 14, borderWidth: 2 }} />
+                      <span className="text-[11px]" style={{ color: "var(--text-muted)" }}>
+                        正在思考...
+                      </span>
+                    </div>
                     <div className="skeleton-line skeleton-line-1" />
                     <div className="skeleton-line skeleton-line-2" />
                     <div className="skeleton-line skeleton-line-3" />
@@ -229,6 +236,13 @@ export const ChatArea = forwardRef<HTMLDivElement, ChatAreaProps>(
                       boxShadow: "var(--shadow-sm)",
                     }}
                   >
+                    {/* 首 token 等待 loading 图标 */}
+                    <div className="flex items-center gap-2 mb-3">
+                      <span className="spinner" style={{ width: 14, height: 14, borderWidth: 2 }} />
+                      <span className="text-[11px]" style={{ color: "var(--text-muted)" }}>
+                        正在思考...
+                      </span>
+                    </div>
                     <div className="skeleton-line skeleton-line-1" />
                     <div className="skeleton-line skeleton-line-2" />
                     <div className="skeleton-line skeleton-line-3" />
