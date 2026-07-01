@@ -15,6 +15,7 @@ interface InputAreaProps {
   disabled?: boolean
   isStreaming?: boolean
   onStopStreaming?: () => void
+  agentLabel?: string
 }
 
 export function InputArea({
@@ -30,6 +31,7 @@ export function InputArea({
   disabled = false,
   isStreaming = false,
   onStopStreaming,
+  agentLabel = "深海智航",
 }: InputAreaProps) {
   const [text, setText] = useState("")
   const textareaRef = useRef<HTMLTextAreaElement>(null)
@@ -89,7 +91,7 @@ export function InputArea({
         borderColor: "var(--border)",
       }}
     >
-      <div className="mx-auto flex max-w-[800px] flex-col gap-3">
+      <div className="mx-auto flex max-w-[960px] flex-col gap-3">
         {/* Upload preview */}
         {(uploadedImages.length > 0 || uploadedFiles.length > 0) && (
           <div className="flex flex-wrap gap-2">
@@ -142,60 +144,18 @@ export function InputArea({
 
         {/* Input wrapper */}
         <div
-          className="flex items-end gap-2.5 rounded-2xl border px-3.5 py-2.5 transition-all focus-within:border-[var(--accent)] focus-within:shadow-[0_0_0_3px_var(--glow)]"
+          className="flex flex-col gap-2 rounded-2xl border px-4 py-3 transition-all focus-within:border-[var(--accent)] focus-within:shadow-[0_0_0_3px_var(--glow)]"
           style={{
             background: "var(--secondary)",
             borderColor: "transparent",
           }}
         >
-          <div className="flex flex-shrink-0 gap-1 pb-0.5">
-            <button
-              onClick={() => fileInputRef.current?.click()}
-              className="flex h-[38px] w-[38px] items-center justify-center rounded-[10px] transition-all hover:bg-white/10 hover:text-[var(--accent)]"
-              style={{ color: "var(--text-secondary)" }}
-              title="发送附件"
-            >
-              <svg width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-                <path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48" />
-              </svg>
-            </button>
-            <button
-              onClick={() => imageInputRef.current?.click()}
-              className="flex h-[38px] w-[38px] items-center justify-center rounded-[10px] transition-all hover:bg-white/10 hover:text-[var(--accent)]"
-              style={{ color: "var(--text-secondary)" }}
-              title="发送图片"
-            >
-              <svg width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-                <rect x="3" y="3" width="18" height="18" rx="2" />
-                <circle cx="8.5" cy="8.5" r="1.5" />
-                <path d="m21 15-5-5L5 21" />
-              </svg>
-            </button>
-            <button
-              onClick={onVoiceToggle}
-              className={`flex h-[38px] w-[38px] items-center justify-center rounded-[10px] transition-all hover:bg-white/10 ${
-                isRecording ? "text-[var(--accent)]" : ""
-              }`}
-              style={{
-                color: isRecording ? "var(--accent)" : "var(--text-secondary)",
-                animation: isRecording ? "recording 1.2s ease-in-out infinite" : undefined,
-              }}
-              title="语音输入"
-            >
-              <svg width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-                <rect x="9" y="2" width="6" height="12" rx="3" />
-                <path d="M5 10a7 7 0 0 0 14 0" />
-                <line x1="12" y1="19" x2="12" y2="22" />
-              </svg>
-            </button>
-          </div>
-
           <textarea
             ref={textareaRef}
             className="min-h-[38px] max-h-[300px] flex-1 resize-none border-none bg-transparent py-2 text-sm leading-relaxed outline-none transition-height"
             style={{ color: "var(--foreground)", transition: "height 0.15s ease" }}
             rows={1}
-            placeholder="输入您的问题..."
+            placeholder={`和${agentLabel}说点什么`}
             value={text}
             onChange={(e) => {
               setText(e.target.value)
@@ -204,39 +164,77 @@ export function InputArea({
             onKeyDown={handleKeydown}
           />
 
-          {isStreaming ? (
-            <button
-              onClick={onStopStreaming}
-              className="flex h-[38px] w-11 flex-shrink-0 items-center justify-center rounded-xl text-white transition-all hover:scale-110 hover:shadow-lg"
-              style={{
-                background: "#ef4444",
-                boxShadow: "0 0 16px rgba(239,68,68,0.5)",
-                animation: "pulse-stop 1.8s ease-in-out infinite",
-              }}
-              title="停止生成"
-            >
-              <svg width="16" height="16" fill="currentColor" viewBox="0 0 24 24">
-                <rect x="4" y="4" width="16" height="16" rx="2" />
-              </svg>
-            </button>
-          ) : (
-            <button
-              onClick={handleSend}
-              disabled={!hasContent}
-              className={`flex h-[38px] w-11 flex-shrink-0 items-center justify-center rounded-xl text-white transition-all ${
-                hasContent ? "hover:-translate-y-0.5 hover:shadow-[var(--shadow-md)]" : "opacity-50"
-              }`}
-              style={{
-                background: "var(--accent)",
-                boxShadow: hasContent ? "var(--shadow-sm)" : undefined,
-              }}
-            >
-              <svg width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24">
-                <line x1="22" y1="2" x2="11" y2="13" />
-                <polygon points="22 2 15 22 11 13 2 9 22 2" />
-              </svg>
-            </button>
-          )}
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <button
+                className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-sm transition-all hover:bg-white/5"
+                style={{ color: "var(--text-secondary)" }}
+              >
+                <svg width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                  <circle cx="12" cy="12" r="10" />
+                  <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3" />
+                  <line x1="12" y1="17" x2="12.01" y2="17" />
+                </svg>
+                <span>{agentLabel}</span>
+              </button>
+            </div>
+
+            <div className="flex items-center gap-1">
+              <button
+                className="flex h-9 w-9 items-center justify-center rounded-lg transition-all hover:bg-white/5"
+                style={{ color: "var(--text-secondary)" }}
+                title="设置"
+              >
+                <svg width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                  <path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z" />
+                  <circle cx="12" cy="12" r="3" />
+                </svg>
+              </button>
+              <button
+                onClick={() => fileInputRef.current?.click()}
+                className="flex h-9 w-9 items-center justify-center rounded-lg transition-all hover:bg-white/5"
+                style={{ color: "var(--text-secondary)" }}
+                title="添加附件"
+              >
+                <svg width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                  <line x1="12" y1="5" x2="12" y2="19" />
+                  <line x1="5" y1="12" x2="19" y2="12" />
+                </svg>
+              </button>
+              {isStreaming ? (
+                <button
+                  onClick={onStopStreaming}
+                  className="flex h-9 w-9 items-center justify-center rounded-full text-white transition-all hover:scale-110 hover:shadow-lg"
+                  style={{
+                    background: "#ef4444",
+                    boxShadow: "0 0 16px rgba(239,68,68,0.5)",
+                    animation: "pulse-stop 1.8s ease-in-out infinite",
+                  }}
+                  title="停止生成"
+                >
+                  <svg width="14" height="14" fill="currentColor" viewBox="0 0 24 24">
+                    <rect x="4" y="4" width="16" height="16" rx="2" />
+                  </svg>
+                </button>
+              ) : (
+                <button
+                  onClick={handleSend}
+                  disabled={!hasContent}
+                  className={`flex h-9 w-9 items-center justify-center rounded-full text-white transition-all ${
+                    hasContent ? "hover:scale-110 hover:shadow-md" : "opacity-50"
+                  }`}
+                  style={{
+                    background: "var(--accent)",
+                  }}
+                >
+                  <svg width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24">
+                    <line x1="12" y1="19" x2="12" y2="5" />
+                    <polyline points="5 12 12 5 19 12" />
+                  </svg>
+                </button>
+              )}
+            </div>
+          </div>
         </div>
 
         {/* Security hint */}

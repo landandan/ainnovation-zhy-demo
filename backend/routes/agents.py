@@ -152,7 +152,11 @@ def create_agent():
               example: "🤖"
             desc:
               type: string
-              description: 智能体描述
+              description: 智能体描述/欢迎语
+            quick_questions:
+              type: array
+              items: {type: string}
+              description: 快速提问列表
             gradient:
               type: string
               description: 渐变 CSS 变量
@@ -177,6 +181,7 @@ def create_agent():
       409:
         description: agent_id 已存在
     """
+    import json
     data = request.get_json(silent=True) or {}
     agent_id = data.get("agent_id", "").strip()
     label = data.get("label", "").strip()
@@ -187,11 +192,16 @@ def create_agent():
     if AgentDef.query.filter_by(agent_id=agent_id).first():
         return jsonify({"error": f"agent_id '{agent_id}' 已存在"}), 409
 
+    quick_questions = data.get("quick_questions", [])
+    if not isinstance(quick_questions, list):
+        quick_questions = []
+
     agent = AgentDef(
         agent_id=agent_id,
         label=label,
         icon=data.get("icon", "🤖"),
         desc=data.get("desc", ""),
+        quick_questions=json.dumps(quick_questions),
         gradient=data.get("gradient", "var(--gradient-1)"),
         sort_order=data.get("sort_order", 0),
         is_active=data.get("is_active", True),
@@ -239,6 +249,10 @@ def update_agent(agent_id):
             label: {type: string}
             icon: {type: string}
             desc: {type: string}
+            quick_questions:
+              type: array
+              items: {type: string}
+              description: 快速提问列表
             gradient: {type: string}
             sort_order: {type: integer}
             is_active: {type: boolean}
@@ -248,12 +262,45 @@ def update_agent(agent_id):
       404:
         description: 智能体不存在
     """
+    import json
     agent = AgentDef.query.get_or_404(agent_id)
     data = request.get_json(silent=True) or {}
 
     for field in ["label", "icon", "desc", "gradient", "sort_order", "is_active"]:
         if field in data:
             setattr(agent, field, data[field])
+
+    if "quick_questions" in data:
+        qq = data["quick_questions"]
+        if not isinstance(qq, list):
+            qq = []
+        agent.quick_questions = json.dumps(qq)
+
+    dify_config = data.get("dify_config")
+    if dify_config:
+        # 查找现有的默认配置
+        dc = DifyConfig.query.filter_by(agent_id=agent.id, is_default=True).first()
+        if dc:
+            # 更新现有配置
+            if "env_label" in dify_config:
+                dc.env_label = dify_config["env_label"]
+            if "dify_api_key" in dify_config:
+                api_key = dify_config["dify_api_key"]
+                # 防止前端传入脱敏值覆盖真实 API Key
+                if not (isinstance(api_key, str) and "****" in api_key):
+                    dc.dify_api_key = api_key
+            if "dify_base_url" in dify_config:
+                dc.dify_base_url = dify_config["dify_base_url"]
+        else:
+            # 创建新配置
+            dc = DifyConfig(
+                agent_id=agent.id,
+                env_label=dify_config.get("env_label", "default"),
+                dify_api_key=dify_config.get("dify_api_key", ""),
+                dify_base_url=dify_config.get("dify_base_url", ""),
+                is_default=True,
+            )
+            db.session.add(dc)
 
     db.session.commit()
     return jsonify({"agent": agent.to_dict()})
@@ -285,6 +332,52 @@ def delete_agent(agent_id):
     db.session.delete(agent)
     db.session.commit()
     return jsonify({"message": "应用已删除"})
+
+
+@agents_bp.route("/agents/reorder", methods=["PUT"])
+@admin_required
+def reorder_agents():
+    """
+    批量更新智能体排序
+    ---
+    tags:
+      - Agents
+    summary: 批量更新智能体排序（仅管理员）
+    security:
+      - Bearer: []
+    parameters:
+      - name: body
+        in: body
+        required: true
+        schema:
+          type: object
+          properties:
+            agent_ids:
+              type: array
+              items: {type: integer}
+              description: 按新顺序排列的智能体 ID 列表
+    responses:
+      200:
+        description: 排序更新成功
+      400:
+        description: 参数错误
+    """
+    data = request.get_json(silent=True) or {}
+    agent_ids = data.get("agent_ids", [])
+    
+    if not isinstance(agent_ids, list):
+        return jsonify({"error": "agent_ids 必须是一个列表"}), 400
+
+    try:
+        for index, agent_id in enumerate(agent_ids):
+            agent = AgentDef.query.get(agent_id)
+            if agent:
+                agent.sort_order = index
+        db.session.commit()
+        return jsonify({"message": "排序更新成功"})
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({"error": f"排序更新失败: {str(e)}"}), 500
 
 
 # ---------- Dify 配置子路由 ----------

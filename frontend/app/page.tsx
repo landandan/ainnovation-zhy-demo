@@ -1,10 +1,9 @@
 "use client"
 
-import { useState, useRef, useEffect, useCallback } from "react"
+import { useState, useRef, useEffect, useCallback, useMemo } from "react"
 import { useRouter } from "next/navigation"
 import { Sidebar } from "@/components/sidebar"
 import { Header } from "@/components/header"
-import { AgentSection } from "@/components/agent-section"
 import { ChatArea } from "@/components/chat-area"
 import { InputArea } from "@/components/input-area"
 import { Toast } from "@/components/toast"
@@ -14,6 +13,7 @@ import {
   getAgents,
   getConversations,
   createConversation,
+  updateConversation,
   deleteConversationApi,
   getMessages,
   addMessage,
@@ -30,14 +30,24 @@ import {
 } from "@/lib/dify-api"
 import { getUserSettings, updateUserSettings, isAuthenticated } from "@/lib/api-client"
 
+export interface MessageFileAttachment {
+  name: string
+  size?: number
+  original_url?: string
+  file_id?: string
+  mime_type?: string
+  type?: string
+}
+
 export interface Message {
   role: "user" | "ai"
   text: string
   images?: string[]
-  files?: { name: string; size: number }[]
+  files?: MessageFileAttachment[]
   time: string
   loading?: boolean
   thinking?: string
+  thinkingComplete?: boolean
   waiting?: boolean
 }
 
@@ -55,33 +65,17 @@ export interface AgentDef {
   label: string
   icon: string
   desc: string
+  quickQuestions: string[]
   gradient: string
   sortOrder: number
   isActive: boolean
 }
 
-/** 20 套主题列表 */
+/** 3 套主题列表 */
 export const THEMES = [
-  { id: "ocean-trench", label: "深海暗沟", dark: true, category: "暗色" },
-  { id: "industrial-rig", label: "工业钻台", dark: true, category: "暗色" },
-  { id: "hse-alert", label: "安全警示", dark: true, category: "暗色" },
-  { id: "cyber-matrix", label: "赛博矩阵", dark: true, category: "暗色" },
-  { id: "quantum-purple", label: "量子紫晶", dark: true, category: "暗色" },
-  { id: "carbon-fiber", label: "碳纤维", dark: true, category: "暗色" },
-  { id: "abyssal-blue", label: "深渊蓝", dark: true, category: "暗色" },
-  { id: "neon-synthwave", label: "霓虹合成波", dark: true, category: "暗色" },
-  { id: "radar-sweep", label: "雷达扫描", dark: true, category: "暗色" },
-  { id: "midnight-sand", label: "午夜沙漠", dark: true, category: "暗色" },
-  { id: "arctic-ice", label: "北极冰川", dark: false, category: "浅色" },
-  { id: "pearl-clean", label: "珍珠白", dark: false, category: "浅色" },
-  { id: "control-room", label: "控制室", dark: false, category: "浅色" },
-  { id: "safety-first", label: "安全优先", dark: false, category: "浅色" },
-  { id: "eco-pipeline", label: "生态管道", dark: false, category: "浅色" },
-  { id: "dawn-horizon", label: "黎明地平线", dark: false, category: "浅色" },
-  { id: "corporate-tech", label: "企业科技", dark: false, category: "浅色" },
-  { id: "data-analytics", label: "数据分析", dark: false, category: "浅色" },
-  { id: "desert-oil", label: "沙漠石油", dark: false, category: "浅色" },
-  { id: "eink-display", label: "电子墨水", dark: false, category: "浅色" },
+  { id: "", label: "Kimi 默认", dark: false, category: "浅色" },
+  { id: "deep-ocean", label: "深海蓝", dark: true, category: "暗色" },
+  { id: "aurora-blue", label: "极光蓝", dark: false, category: "浅色" },
 ] as const
 
 export type ThemeId = (typeof THEMES)[number]["id"]
@@ -96,14 +90,67 @@ function mapAgentDef(a: AgentDefApi): AgentDef {
     gradient: a.gradient,
     sortOrder: a.sort_order,
     isActive: a.is_active,
+    quickQuestions: a.quick_questions,
   }
 }
 
 /** 将后端 MessageApi 转为前端 Message */
+function fileNameFromUrl(url: string, fallback = "附件"): string {
+  try {
+    const parsed = new URL(url, "http://localhost")
+    const pathname = parsed.pathname || ""
+    const lastSegment = pathname.split("/").pop() || fallback
+    const decoded = decodeURIComponent(lastSegment)
+    return decoded || fallback
+  } catch {
+    return fallback
+  }
+}
+
+function normalizeMessageAttachments(rawAttachments: unknown[]): MessageFileAttachment[] {
+  if (!Array.isArray(rawAttachments)) return []
+
+  return rawAttachments.flatMap((item) => {
+    if (!item || typeof item !== "object") return []
+
+    const record = item as Record<string, unknown>
+    const originalUrl = typeof record.original_url === "string"
+      ? record.original_url.trim()
+      : typeof record.url === "string"
+        ? record.url.trim()
+        : ""
+    const fileId = typeof record.file_id === "string"
+      ? record.file_id.trim()
+      : typeof record.id === "string"
+        ? record.id.trim()
+        : ""
+    const rawName = typeof record.name === "string" ? record.name.trim() : ""
+    const name = rawName || (originalUrl ? fileNameFromUrl(originalUrl) : fileId || "附件")
+
+    return [{
+      name,
+      size: typeof record.size === "number" ? record.size : undefined,
+      original_url: originalUrl || undefined,
+      file_id: fileId || undefined,
+      mime_type: typeof record.mime_type === "string" ? record.mime_type : undefined,
+      type: typeof record.type === "string" ? record.type : undefined,
+    }]
+  })
+}
+
 function mapMessage(m: MessageApi): Message {
+  const content = m.content || "";
+  // 解析 <think> 标签
+  const thinkMatch = content.match(/<think>([\s\S]*?)<\/think>/);
+  const thinkingContent = thinkMatch ? thinkMatch[1] : null;
+  const mainText = content.replace(/<think>[\s\S]*?<\/think>/, '').trim();
+  
   return {
     role: m.role === "assistant" ? "ai" : m.role as "user" | "ai",
-    text: m.content,
+    text: mainText,
+    thinking: thinkingContent,
+    thinkingComplete: true, // 历史消息中的思考肯定是完成的
+    files: normalizeMessageAttachments(m.attachments),
     time: new Date(m.created_at).toLocaleTimeString("zh-CN", { hour: "2-digit", minute: "2-digit" }),
   }
 }
@@ -113,19 +160,30 @@ export default function Page() {
   const router = useRouter()
 
   /* ───── 主题状态 ───── */
-  const [theme, setTheme] = useState<ThemeId>("ocean-trench")
+  const [theme, setTheme] = useState<ThemeId>("")
   const [themeLoaded, setThemeLoaded] = useState(false)
 
   useEffect(() => {
-    const saved = loadTheme("ocean-trench") as ThemeId
+    const saved = loadTheme("") as ThemeId
     setTheme(saved)
-    document.documentElement.dataset.theme = saved
+    if (saved) {
+      document.documentElement.dataset.theme = saved
+    } else {
+      delete document.documentElement.dataset.theme
+    }
     setThemeLoaded(true)
   }, [])
 
   /* ───── 布局状态 ───── */
   const [sidebarOpen, setSidebarOpen] = useState(false)
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
+  const [sidebarHovered, setSidebarHovered] = useState(false)
 
+  const maybeCloseSidebar = useCallback(() => {
+    if (typeof window !== "undefined" && window.innerWidth < 1024) {
+      setSidebarOpen(false)
+    }
+  }, [])
 
   /* ───── 数据状态（从后端 API 加载） ───── */
   const [agentDefs, setAgentDefs] = useState<AgentDef[]>([])
@@ -136,7 +194,7 @@ export default function Page() {
   const agentIdToDbId = useRef<Map<string, number>>(new Map())
 
   /* ───── 业务状态 ───── */
-  const [currentAgentId, setCurrentAgentId] = useState<string>("knowledge")
+  const [currentAgentId, setCurrentAgentId] = useState<string>("")
   const [messages, setMessages] = useState<Message[]>([])
   const [uploadedImages, setUploadedImages] = useState<string[]>([])
   const [uploadedFiles, setUploadedFiles] = useState<{ name: string; size: number }[]>([])
@@ -161,8 +219,17 @@ export default function Page() {
   /* ───── Toast hook ───── */
   const { toasts, dismissToast, success, error, warning, info } = useToast()
 
+  const activeAgentDefs = useMemo(
+    () => agentDefs.filter((agent) => agent.isActive),
+    [agentDefs],
+  )
+
   const currentAgentLabel =
-    agentDefs.find((d) => d.id === currentAgentId)?.label ?? "未知应用"
+    activeAgentDefs.find((d) => d.id === currentAgentId)?.label ?? "未知应用"
+  const currentAgentDesc =
+    activeAgentDefs.find((d) => d.id === currentAgentId)?.desc ?? ""
+  const currentAgentQuickQuestions =
+    activeAgentDefs.find((d) => d.id === currentAgentId)?.quickQuestions ?? []
 
   /* ───── 初始化：从后端加载 agents 和 conversations ───── */
   useEffect(() => {
@@ -177,13 +244,20 @@ export default function Page() {
         ])
 
         if (agentsRes.agents?.length > 0) {
-          setAgentDefs(agentsRes.agents.map(mapAgentDef))
+          const mapped = agentsRes.agents.map(mapAgentDef)
+          setAgentDefs(mapped)
           // 建立 agent_id → db_id 映射
           const idMap = new Map<string, number>()
           for (const a of agentsRes.agents) {
             idMap.set(a.agent_id, a.id)
           }
           agentIdToDbId.current = idMap
+          const activeMapped = mapped.filter((a) => a.isActive)
+          // 首次进入时，如果未选择智能体，默认选择“深海智航”，否则选择第一个启用应用
+          if (!currentAgentId) {
+            const prefer = activeMapped.find((a) => a.label === "深海智航")?.id
+            setCurrentAgentId(prefer || activeMapped[0]?.id || "")
+          }
         }
 
         if (convsRes.conversations?.length > 0) {
@@ -198,6 +272,26 @@ export default function Page() {
 
     loadData()
   }, [user])
+
+  useEffect(() => {
+    if (loadingData || typeof window === "undefined") return
+    window.dispatchEvent(new Event("app-route-transition-complete"))
+  }, [loadingData])
+
+  useEffect(() => {
+    if (activeAgentDefs.length === 0) {
+      if (currentAgentId) {
+        setCurrentAgentId("")
+      }
+      return
+    }
+
+    const stillAvailable = activeAgentDefs.some((agent) => agent.id === currentAgentId)
+    if (stillAvailable) return
+
+    const prefer = activeAgentDefs.find((agent) => agent.label === "深海智航")?.id
+    setCurrentAgentId(prefer || activeAgentDefs[0].id)
+  }, [activeAgentDefs, currentAgentId])
 
   /* ───── 衍生：build chatHistory from conversations ───── */
   const buildChatHistory = useCallback((): ChatHistoryItem[] => {
@@ -221,9 +315,22 @@ export default function Page() {
 
   /* ───── 保存消息到后端 ───── */
   const persistMessage = useCallback(
-    async (convId: number, role: string, content: string) => {
+    async (
+      convId: number,
+      role: string,
+      content: string,
+      options?: {
+        attachments?: MessageFileAttachment[]
+        difyMessageId?: string
+      },
+    ) => {
       try {
-        await addMessage(convId, { role, content })
+        await addMessage(convId, {
+          role,
+          content,
+          attachments: options?.attachments?.length ? JSON.stringify(options.attachments) : undefined,
+          dify_message_id: options?.difyMessageId,
+        })
       } catch (err) {
         console.error("保存消息失败:", err)
       }
@@ -246,8 +353,6 @@ export default function Page() {
     (newTheme: ThemeId) => {
       setTheme(newTheme)
       saveTheme(newTheme)
-      const t = THEMES.find((t) => t.id === newTheme)
-      success(`已切换至${t?.label ?? newTheme}主题`)
       // 同步主题到后端 settings
       if (isAuthenticated()) {
         updateUserSettings({ theme: newTheme }).catch(() => {})
@@ -263,16 +368,26 @@ export default function Page() {
     }
   }, [])
 
+  const isAtBottom = useCallback(() => {
+    const el = chatAreaRef.current
+    if (!el) return true
+    return el.scrollHeight - el.scrollTop - el.clientHeight < 100
+  }, [])
+
   useEffect(() => {
-    scrollToBottom()
-  }, [messages, scrollToBottom])
+    if (isAtBottom()) {
+      scrollToBottom()
+    }
+  }, [messages, scrollToBottom, isAtBottom])
 
   /* ───── 智能体切换 ───── */
   const handleSelectAgent = (agentId: string) => {
+    if (isStreaming) {
+      handleStopStreaming()
+    }
     setCurrentAgentId(agentId)
     handleNewChat()
-    const def = agentDefs.find((d) => d.id === agentId)
-    info(`已切换至${def?.label ?? agentId}，新会话已开启`)
+    maybeCloseSidebar()
   }
 
   const handleNewChat = () => {
@@ -292,15 +407,20 @@ export default function Page() {
     try {
       // 从后端加载消息
       const msgsRes = await getMessages(id)
-      const mappedMsgs = msgsRes.messages.map(mapMessage)
+      
+      // 确保消息按正序排列（旧的在前，新的在后）
+      // 使用 id 进行排序最可靠，因为 id 是自增的，能准确反映插入顺序
+      const sortedMsgs = [...msgsRes.messages].sort((a, b) => a.id - b.id);
+
+      const mappedMsgs = sortedMsgs.map(mapMessage)
       setMessages(mappedMsgs)
       setActiveConversationId(id)
       // 切换到该对话所属的智能体
       const conv = conversations.find((c) => c.id === id)
       if (conv) setCurrentAgentId(conv.agent_id_str)
       difyConversationIdRef.current = null
-      setSidebarOpen(false)
-      info("已切换到历史对话")
+      maybeCloseSidebar()
+      // 静默切换，不显示提示
     } catch (err) {
       console.error("加载对话消息失败:", err)
       error("加载对话失败")
@@ -323,9 +443,44 @@ export default function Page() {
     }
   }
 
+  const handleBulkDeleteHistory = async (ids: number[]) => {
+    try {
+      // 依次删除每个会话
+      for (const id of ids) {
+        await deleteConversationApi(id)
+      }
+      // 从列表中移除所有删除的会话
+      setConversations((prev) => prev.filter((c) => !ids.includes(c.id)))
+      // 如果当前激活的会话在删除列表中，清空消息
+      if (activeConversationId && ids.includes(activeConversationId)) {
+        setMessages([])
+        setActiveConversationId(null)
+        difyConversationIdRef.current = null
+      }
+      // 只显示一个成功提示
+      success(`已删除 ${ids.length} 条对话`)
+    } catch (err) {
+      console.error("批量删除对话失败:", err)
+      error("批量删除失败")
+    }
+  }
+
+  const handleRenameHistory = async (id: number, newTitle: string) => {
+    try {
+      await updateConversation(id, { title: newTitle })
+      setConversations((prev) =>
+        prev.map((c) => (c.id === id ? { ...c, title: newTitle } : c))
+      )
+      success("重命名成功")
+    } catch (err) {
+      console.error("重命名对话失败:", err)
+      error("重命名失败")
+    }
+  }
+
   /* ───── 设置面板跳转 ───── */
   const handleOpenSettings = () => {
-    setSidebarOpen(false)
+    maybeCloseSidebar()
     router.push("/settings")
   }
 
@@ -334,6 +489,7 @@ export default function Page() {
     userText: string,
     allMessages: Message[],
     files?: Array<{ type: string; transfer_method: string; upload_file_id: string }>,
+    userAttachments?: MessageFileAttachment[],
   ) => {
     // 创建新的 AbortController 用于中断
     const controller = new AbortController()
@@ -359,7 +515,10 @@ export default function Page() {
       let fullAnswer = ""
       let fullThinking = ""
       let firstTokenArrived = false
+      let thinkingComplete = false // 标记思考是否完成
       let newDifyConversationId: string | null = null
+      let assistantDifyMessageId: string | undefined
+      const assistantAttachments: MessageFileAttachment[] = []
       const aiTime = new Date().toLocaleTimeString("zh-CN", { hour: "2-digit", minute: "2-digit" })
       // 重置当前 task_id 和 workflow 标志（新一轮请求）
       currentTaskIdRef.current = null
@@ -386,6 +545,9 @@ export default function Page() {
 
           try {
             const event = JSON.parse(jsonStr)
+            if (typeof event.message_id === "string" && event.message_id.trim()) {
+              assistantDifyMessageId = event.message_id.trim()
+            }
 
             switch (event.event) {
               // Workflow 类型事件：出现即标记为 Workflow 应用
@@ -408,8 +570,10 @@ export default function Page() {
 
               // Chatflow / Agent 类型事件
               case "agent_thought":
+                console.log("[DEBUG] 收到 agent_thought 事件:", event)
                 if (event.thought) {
                   fullThinking += event.thought
+                  console.log("[DEBUG] fullThinking 更新:", fullThinking)
                   chunkHasUpdates = true
                 }
                 if (event.task_id && !currentTaskIdRef.current) {
@@ -419,7 +583,10 @@ export default function Page() {
 
               case "message":
                 if (event.answer) {
-                  if (!firstTokenArrived) firstTokenArrived = true
+                  if (!firstTokenArrived) {
+                    firstTokenArrived = true
+                    thinkingComplete = true // 收到第一个消息事件，标记思考完成
+                  }
                   fullAnswer += event.answer
                   chunkHasUpdates = true
                 }
@@ -427,6 +594,25 @@ export default function Page() {
                   currentTaskIdRef.current = event.task_id
                 }
                 break
+
+              case "message_file": {
+                const fileId = typeof event.id === "string" ? event.id.trim() : ""
+                const originalUrl = typeof event.url === "string" ? event.url.trim() : ""
+                const duplicate = assistantAttachments.some((item) =>
+                  (fileId && item.file_id === fileId) ||
+                  (originalUrl && item.original_url === originalUrl),
+                )
+                if (!duplicate) {
+                  assistantAttachments.push({
+                    name: fileNameFromUrl(originalUrl, fileId || "附件"),
+                    file_id: fileId || undefined,
+                    original_url: originalUrl || undefined,
+                    type: typeof event.type === "string" ? event.type : undefined,
+                  })
+                  chunkHasUpdates = true
+                }
+                break
+              }
 
               case "message_end":
                 if (event.conversation_id) {
@@ -455,7 +641,9 @@ export default function Page() {
               updated[messageIndex] = {
                 ...updated[messageIndex],
                 text: fullAnswer,
+                files: assistantAttachments.length > 0 ? [...assistantAttachments] : updated[messageIndex].files,
                 thinking: fullThinking,
+                thinkingComplete: thinkingComplete,
                 waiting: false,
                 loading: false,
                 time: aiTime,
@@ -482,16 +670,26 @@ export default function Page() {
             setConversations((prev) => [newConv, ...prev])
 
             // 保存用户消息和 AI 回复到后端
-            await persistMessage(newConv.id, "user", userText)
-            await persistMessage(newConv.id, "assistant", fullAnswer)
+            await persistMessage(newConv.id, "user", userText, {
+              attachments: userAttachments,
+            })
+            await persistMessage(newConv.id, "assistant", fullAnswer, {
+              attachments: assistantAttachments,
+              difyMessageId: assistantDifyMessageId,
+            })
           }
         } catch (err) {
           console.error("创建后端对话失败:", err)
         }
       } else if (activeConversationId) {
         // 已有对话，追加消息
-        await persistMessage(activeConversationId, "user", userText)
-        await persistMessage(activeConversationId, "assistant", fullAnswer)
+        await persistMessage(activeConversationId, "user", userText, {
+          attachments: userAttachments,
+        })
+        await persistMessage(activeConversationId, "assistant", fullAnswer, {
+          attachments: assistantAttachments,
+          difyMessageId: assistantDifyMessageId,
+        })
       }
     } catch (err: unknown) {
       // 如果是用户主动取消（AbortError），静默处理，不显示错误
@@ -507,7 +705,7 @@ export default function Page() {
 
       const errMsg = err instanceof Error ? err.message : "未知错误"
       const time = new Date().toLocaleTimeString("zh-CN", { hour: "2-digit", minute: "2-digit" })
-      error(`API 调用失败: ${errMsg}`)
+      // 不显示 toast 错误提示，仅在聊天中委婉提示
 
       setMessages((prev) => {
         const filtered = prev.filter((m) => !m.loading && !m.waiting)
@@ -515,7 +713,7 @@ export default function Page() {
           ...filtered,
           {
             role: "ai",
-            text: `❌ 调用失败: ${errMsg}`,
+            text: "抱歉，我暂时无法回答这个问题。请稍后再试，或换个方式提问。",
             time,
           },
         ]
@@ -555,8 +753,8 @@ export default function Page() {
       ),
     )
     setIsStreaming(false)
-    info("已停止生成")
-  }, [info, currentAgentId, user])
+    // 静默处理，不显示提示
+  }, [currentAgentId, user])
 
   /* ───── 发送消息（异步：先上传文件，再合并到 chat 请求） ───── */
   const handleSendMessage = async (text: string) => {
@@ -579,12 +777,25 @@ export default function Page() {
 
     // 先收集所有原始 File 对象，然后清空 UI 状态
     const allRawFiles = [...rawImageFiles, ...rawDocFiles]
+    const userAttachments: MessageFileAttachment[] = allRawFiles.map((file) => ({
+      name: file.name,
+      size: file.size,
+      mime_type: file.type || undefined,
+      type: file.type.startsWith("image/") ? "image" : "document",
+    }))
     setUploadedImages([])
     setUploadedFiles([])
     setRawImageFiles([])
     setRawDocFiles([])
 
-    newMessages.push({ role: "ai", text: "", time, waiting: true })
+    newMessages.push({ 
+      role: "ai", 
+      text: "", 
+      time, 
+      waiting: true, 
+      thinking: "", 
+      thinkingComplete: false 
+    })
     setMessages(newMessages)
 
     // 如果有附件，先上传到 Dify 获取 upload_file_id，再合并到 chat 请求
@@ -609,7 +820,7 @@ export default function Page() {
       }
     }
 
-    callDifyAPI(text || "请分析我上传的文件", newMessages, difyFiles)
+    callDifyAPI(text || "请分析我上传的文件", newMessages, difyFiles, userAttachments)
   }
 
   const handleImageUpload = (dataUrl: string, rawFile: File) => {
@@ -639,7 +850,7 @@ export default function Page() {
     }
   }
 
-  const agentNames = Object.fromEntries(agentDefs.map((d) => [d.id, d.label]))
+  const agentNames = Object.fromEntries(activeAgentDefs.map((d) => [d.id, d.label]))
 
   /* ───── 加载中状态 ───── */
   if (loadingData) {
@@ -650,8 +861,8 @@ export default function Page() {
           display: "flex",
           alignItems: "center",
           justifyContent: "center",
-          background: "var(--bg-primary, #0a0e17)",
-          color: "var(--text-secondary, #9ca3af)",
+          background: "var(--background)",
+          color: "var(--text-secondary)",
         }}
       >
         正在加载...
@@ -661,39 +872,60 @@ export default function Page() {
 
   /* ───── 渲染 ───── */
   return (
-    <div className="app">
+    <div 
+      className="app" 
+      style={{
+        '--sidebar-width': sidebarCollapsed ? '72px' : '320px'
+      } as React.CSSProperties}
+    >
       <div
         className={`sidebar-overlay ${sidebarOpen ? "open" : ""}`}
         onClick={() => setSidebarOpen(false)}
       />
 
-      <Sidebar
-        open={sidebarOpen}
-        onClose={() => setSidebarOpen(false)}
-        onNewChat={handleNewChat}
-        chatHistory={chatHistory}
-        agentNames={agentNames}
-        onSelectHistory={handleSelectHistory}
-        onDeleteHistory={handleDeleteHistory}
-        onOpenSettings={handleOpenSettings}
-        activeConversationId={activeConversationId}
-        user={user}
-        onLogout={logout}
-      />
+      {/* 左侧热点区域 - 用于鼠标悬停展开 */}
+      {sidebarCollapsed && (
+        <div
+          className="sidebar-hotspot"
+          onMouseEnter={() => setSidebarHovered(true)}
+        />
+      )}
+      
+      <div
+        className={sidebarCollapsed ? "sidebar-wrapper" : ""}
+        onMouseLeave={() => {
+          if (sidebarCollapsed) {
+            setSidebarHovered(false)
+          }
+        }}
+      >
+        <Sidebar
+          open={sidebarOpen}
+          onClose={() => setSidebarOpen(false)}
+          onNewChat={handleNewChat}
+          chatHistory={chatHistory}
+          agentNames={agentNames}
+          onSelectHistory={handleSelectHistory}
+          onDeleteHistory={handleDeleteHistory}
+          onBulkDeleteHistory={handleBulkDeleteHistory}
+          onRenameHistory={handleRenameHistory}
+          onOpenSettings={handleOpenSettings}
+          activeConversationId={activeConversationId}
+          user={user}
+          onLogout={logout}
+          agentDefs={activeAgentDefs}
+          currentAgentId={currentAgentId}
+          onSelectAgent={handleSelectAgent}
+          collapsed={sidebarCollapsed && !sidebarHovered}
+          onToggleCollapse={() => setSidebarCollapsed(!sidebarCollapsed)}
+        />
+      </div>
 
       <main className="main">
         <Header
           onMenuToggle={() => setSidebarOpen(true)}
           currentTheme={theme}
           onThemeChange={handleThemeChange}
-          user={user}
-          onLogout={logout}
-        />
-
-        <AgentSection
-          agentDefs={agentDefs}
-          currentAgentId={currentAgentId}
-          onSelectAgent={handleSelectAgent}
         />
 
         <ChatArea
@@ -701,6 +933,10 @@ export default function Page() {
           messages={messages}
           onUseSuggestion={(text) => handleSendMessage(text)}
           isStreaming={isStreaming}
+          agentLabel={currentAgentLabel === "未知应用" ? "深海智航" : currentAgentLabel}
+          agentDesc={currentAgentDesc}
+          quickQuestions={currentAgentQuickQuestions}
+          currentAgentId={currentAgentId}
         />
 
         <InputArea
@@ -716,6 +952,7 @@ export default function Page() {
           disabled={isStreaming}
           isStreaming={isStreaming}
           onStopStreaming={handleStopStreaming}
+          agentLabel={currentAgentLabel === "未知应用" ? "深海智航" : currentAgentLabel}
         />
       </main>
 

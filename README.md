@@ -245,3 +245,7 @@ cp backend/.env.example backend/.env
 ## License
 
 内部项目 — 创新奇智
+
+
+cd d:\myProject\CNOOC-demo\frontend; npm run dev
+cd d:\myProject\CNOOC-demo\backend; python app.py

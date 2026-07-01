@@ -70,6 +70,9 @@ export class ApiError extends Error {
 /** 全局标志：防止多个并行请求同时触发 401 跳转 */
 let authRedirectInProgress = false
 
+// 在开发环境下，直接请求后端 5000 端口以绕过 Next.js 代理的缓冲问题
+const API_BASE_URL = process.env.NODE_ENV === 'development' ? 'http://localhost:5000/api' : '/api'
+
 async function request<T>(
   method: string,
   path: string,
@@ -91,7 +94,7 @@ async function request<T>(
 
   let res: Response
   try {
-    res = await fetch(`/api${path}`, {
+    res = await fetch(`${API_BASE_URL}${path}`, {
       method,
       headers,
       body: body ? JSON.stringify(body) : undefined,
@@ -192,6 +195,7 @@ export interface AgentDefApi {
   label: string
   icon: string
   desc: string
+  quick_questions: string[]
   gradient: string
   sort_order: number
   is_active: boolean
@@ -382,6 +386,7 @@ export interface CreateAgentRequest {
   label: string
   icon?: string
   desc?: string
+  quick_questions?: string[]
   gradient?: string
   sort_order?: number
   is_active?: boolean
@@ -396,9 +401,15 @@ export interface UpdateAgentRequest {
   label?: string
   icon?: string
   desc?: string
+  quick_questions?: string[]
   gradient?: string
   sort_order?: number
   is_active?: boolean
+  dify_config?: {
+    env_label?: string
+    dify_api_key?: string
+    dify_base_url?: string
+  }
 }
 
 export async function createAgent(data: CreateAgentRequest): Promise<{ agent: AgentDefApi }> {
@@ -423,6 +434,15 @@ export async function deleteAgent(agentId: number): Promise<{ message: string }>
     return deleteMockAgent(agentId)
   }
   return request<{ message: string }>("DELETE", `/agents/${agentId}`)
+}
+
+export async function reorderAgents(agentIds: number[]): Promise<{ message: string }> {
+  if (isMockMode()) {
+    await mockDelay()
+    // Mock 模式下暂不实现复杂的排序逻辑，仅返回成功
+    return { message: "排序更新成功" }
+  }
+  return request<{ message: string }>("PUT", `/agents/reorder`, { agent_ids: agentIds })
 }
 
 /* ───── Dify Config CRUD（管理用） ───── */

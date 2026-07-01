@@ -32,8 +32,13 @@ export default function LoginPage() {
   }, [searchParams])
 
   // 已登录则跳转到首页
+  useEffect(() => {
+    if (user) {
+      router.replace("/")
+    }
+  }, [user, router])
+
   if (user) {
-    router.replace("/")
     return null
   }
 
@@ -68,7 +73,7 @@ export default function LoginPage() {
         display: "flex",
         alignItems: "center",
         justifyContent: "center",
-        background: "var(--bg-primary, #0a0e17)",
+        background: "var(--background, #F5F6F8)",
       }}
     >
       <div
@@ -76,9 +81,10 @@ export default function LoginPage() {
           width: "100%",
           maxWidth: 400,
           padding: "2rem",
-          background: "var(--bg-secondary, #111827)",
+          background: "var(--card, #FFFFFF)",
           borderRadius: 12,
-          border: "1px solid var(--border-color, #1f2937)",
+          border: "1px solid var(--border, #E2E4E9)",
+          boxShadow: "var(--shadow-lg, 0 4px 12px rgba(0, 0, 0, 0.08))",
         }}
       >
         {/* Mock 模式提示标识 */}
@@ -103,7 +109,7 @@ export default function LoginPage() {
           style={{
             fontSize: "1.5rem",
             fontWeight: 700,
-            color: "var(--text-primary, #f9fafb)",
+            color: "var(--foreground, #1A1D23)",
             textAlign: "center",
             marginBottom: "1.5rem",
           }}
@@ -117,7 +123,7 @@ export default function LoginPage() {
               style={{
                 display: "block",
                 fontSize: "0.875rem",
-                color: "var(--text-secondary, #9ca3af)",
+                color: "var(--text-secondary, #3D4450)",
                 marginBottom: "0.25rem",
               }}
             >
@@ -133,9 +139,9 @@ export default function LoginPage() {
                 width: "100%",
                 padding: "0.625rem 0.75rem",
                 borderRadius: 8,
-                border: "1px solid var(--border-color, #1f2937)",
-                background: "var(--bg-tertiary, #1a1f2e)",
-                color: "var(--text-primary, #f9fafb)",
+                border: "1px solid var(--border, #E2E4E9)",
+                background: "var(--input, #FFFFFF)",
+                color: "var(--foreground, #1A1D23)",
                 fontSize: "0.875rem",
                 outline: "none",
               }}
@@ -148,7 +154,7 @@ export default function LoginPage() {
                 style={{
                   display: "block",
                   fontSize: "0.875rem",
-                  color: "var(--text-secondary, #9ca3af)",
+                  color: "var(--text-secondary, #3D4450)",
                   marginBottom: "0.25rem",
                 }}
               >
@@ -163,9 +169,9 @@ export default function LoginPage() {
                   width: "100%",
                   padding: "0.625rem 0.75rem",
                   borderRadius: 8,
-                  border: "1px solid var(--border-color, #1f2937)",
-                  background: "var(--bg-tertiary, #1a1f2e)",
-                  color: "var(--text-primary, #f9fafb)",
+                  border: "1px solid var(--border, #E2E4E9)",
+                  background: "var(--input, #FFFFFF)",
+                  color: "var(--foreground, #1A1D23)",
                   fontSize: "0.875rem",
                   outline: "none",
                 }}
@@ -178,7 +184,7 @@ export default function LoginPage() {
               style={{
                 display: "block",
                 fontSize: "0.875rem",
-                color: "var(--text-secondary, #9ca3af)",
+                color: "var(--text-secondary, #3D4450)",
                 marginBottom: "0.25rem",
               }}
             >
@@ -194,9 +200,9 @@ export default function LoginPage() {
                 width: "100%",
                 padding: "0.625rem 0.75rem",
                 borderRadius: 8,
-                border: "1px solid var(--border-color, #1f2937)",
-                background: "var(--bg-tertiary, #1a1f2e)",
-                color: "var(--text-primary, #f9fafb)",
+                border: "1px solid var(--border, #E2E4E9)",
+                background: "var(--input, #FFFFFF)",
+                color: "var(--foreground, #1A1D23)",
                 fontSize: "0.875rem",
                 outline: "none",
               }}
@@ -230,7 +236,7 @@ export default function LoginPage() {
             style={{
               background: "none",
               border: "none",
-              color: "var(--accent, #3b82f6)",
+              color: "var(--accent, #2563EB)",
               fontSize: "0.8125rem",
               cursor: "pointer",
               textAlign: "center",

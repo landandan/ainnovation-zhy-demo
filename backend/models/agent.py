@@ -12,6 +12,7 @@ class AgentDef(db.Model):
     label = db.Column(db.String(120), nullable=False)                 # 显示名称
     icon = db.Column(db.String(10), default="🤖")                     # emoji 图标
     desc = db.Column(db.String(256), default="")                      # 描述文案
+    quick_questions = db.Column(db.Text, default="[]")                # 快速提问列表 JSON
     gradient = db.Column(db.String(80), default="var(--gradient-1)")  # CSS 渐变变量
     sort_order = db.Column(db.Integer, default=0)
     is_active = db.Column(db.Boolean, default=True)
@@ -22,12 +23,14 @@ class AgentDef(db.Model):
                                    cascade="all, delete-orphan")
 
     def to_dict(self):
+        import json
         return {
             "id": self.id,
             "agent_id": self.agent_id,
             "label": self.label,
             "icon": self.icon,
             "desc": self.desc,
+            "quick_questions": json.loads(self.quick_questions) if self.quick_questions else [],
             "gradient": self.gradient,
             "sort_order": self.sort_order,
             "is_active": self.is_active,

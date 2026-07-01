@@ -13,6 +13,8 @@ def init_db(app):
 
     db.create_all()
 
+    _migrate_db()
+
     # 种子数据：首次无数据时创建默认角色和 Admin 用户
     if not Role.query.first():
         admin_role = Role(name="admin", description="系统管理员，可见全部应用")
@@ -36,6 +38,19 @@ def init_db(app):
 
     # 种子数据：初始化默认 Agent
     _seed_default_agents()
+
+
+def _migrate_db():
+    """数据库迁移：添加新增的列"""
+    try:
+        result = db.engine.execute(db.text("PRAGMA table_info(agent_defs)"))
+        columns = [row[1] for row in result.fetchall()]
+        
+        if "quick_questions" not in columns:
+            db.engine.execute(db.text("ALTER TABLE agent_defs ADD COLUMN quick_questions TEXT DEFAULT '[]'"))
+            db.session.commit()
+    except Exception:
+        pass
 
 
 def _seed_default_agents():

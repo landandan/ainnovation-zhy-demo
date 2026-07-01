@@ -5,7 +5,8 @@
  * Mock 模式下直连 Dify 标准 API（不依赖后端），API Key 从 localStorage 读取。
  */
 
-import { isMockMode, getMockDifyApiConfigForAgent } from "./mock-config"
+import { isMockMode, getMockDifyApiConfigForAgent, generateMockStream } from "./mock-config"
+import { getMockResponse } from "./mock-api"
 
 /* ───── 请求体（前端 → 后端代理） ───── */
 
@@ -27,6 +28,7 @@ export interface DifyChatProxyRequest {
 export interface DifyStreamEvent {
   event: "message" | "message_end" | "error" | "agent_thought" | "agent_message" | "workflow_started" | "workflow_finished" | "node_started" | "node_finished" | "tts_message" | "tts_message_end" | "message_file" | "message_replace"
   task_id?: string
+  id?: string
   message_id?: string
   conversation_id?: string
   answer?: string
@@ -35,6 +37,9 @@ export interface DifyStreamEvent {
   status?: number
   code?: string
   thought?: string
+  type?: string
+  belongs_to?: string
+  url?: string
   metadata?: {
     usage?: {
       prompt_tokens: number
@@ -111,6 +116,20 @@ export async function callDifyChatStream(params: {
 }): Promise<Response> {
   const { query, user, conversationId, inputs, agentId, signal, files } = params
 
+  // --- Help 智能体：直接返回 Mock 数据，完全绕过 Dify ---
+  if (agentId === "help") {
+    console.log("[DEBUG] Help 智能体被调用，查询:", query)
+    const mockText = getMockResponse(agentId, query)
+    console.log("[DEBUG] getMockResponse 返回:", mockText.slice(0, 200), "...")
+    return new Response(generateMockStream(mockText, signal), {
+      headers: {
+        "Content-Type": "text/event-stream",
+        "Cache-Control": "no-cache",
+        "Connection": "keep-alive",
+      }
+    })
+  }
+
   if (!agentId) {
     throw new Error("agent_id 未指定")
   }
@@ -172,11 +191,16 @@ export async function callDifyChatStream(params: {
     throw new Error("未登录，无法调用 AI")
   }
 
-  const response = await fetch("/api/dify/chat-messages", {
+  // 在开发环境下，直接请求后端 5000 端口以绕过 Next.js 代理的缓冲问题
+  const API_BASE_URL = process.env.NODE_ENV === 'development' ? 'http://localhost:5000/api' : '/api'
+
+  const response = await fetch(`${API_BASE_URL}/dify/chat-messages`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
       Authorization: `Bearer ${token}`,
+      "Cache-Control": "no-cache",
+      "Connection": "keep-alive",
     },
     body: JSON.stringify(body),
     signal,
@@ -233,7 +257,9 @@ export async function uploadFileToDify(
 
   formData.append("agent_id", agentId)
 
-  const response = await fetch("/api/dify/files/upload", {
+  const API_BASE_URL = process.env.NODE_ENV === 'development' ? 'http://localhost:5000/api' : '/api'
+
+  const response = await fetch(`${API_BASE_URL}/dify/files/upload`, {
     method: "POST",
     headers: {
       Authorization: `Bearer ${token}`,
@@ -329,7 +355,9 @@ export async function stopDifyTask(params: {
     const token = getToken()
     if (!token) return
 
-    await fetch("/api/dify/chat-messages/stop", {
+    const API_BASE_URL = process.env.NODE_ENV === 'development' ? 'http://localhost:5000/api' : '/api'
+
+    await fetch(`${API_BASE_URL}/dify/chat-messages/stop`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",

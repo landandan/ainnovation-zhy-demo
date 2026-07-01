@@ -55,10 +55,10 @@ function ToastSingle({
   }, [exiting, onDismiss, toast.id])
 
   useEffect(() => {
-    // Auto dismiss after 4 seconds
+    // Auto dismiss faster to keep feedback lightweight
     timerRef.current = setTimeout(() => {
       handleDismiss()
-    }, 4000)
+    }, 2200)
 
     return () => {
       if (timerRef.current) clearTimeout(timerRef.current)

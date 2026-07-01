@@ -2,6 +2,7 @@
 import json
 import logging
 import uuid
+from urllib.parse import parse_qs, urljoin, urlparse
 from flask import Blueprint, request, Response, g
 import requests
 
@@ -39,6 +40,107 @@ def _normalize_base_url(base_url: str) -> str:
         else:
             url += "/v1"
     return url
+
+
+def _resolve_dify_file_url(base_url: str, file_url: str) -> str:
+    """将 Dify 返回的相对 /files/... 链接补全为可访问的上游地址"""
+    raw_url = (file_url or "").strip()
+    if not raw_url:
+        return ""
+    if raw_url.startswith(("http://", "https://")):
+        return raw_url
+
+    normalized_base_url = _normalize_base_url(base_url)
+    upstream_origin = normalized_base_url.rsplit("/v1", 1)[0] + "/"
+    return urljoin(upstream_origin, raw_url.lstrip("/"))
+
+
+def _is_signed_dify_file_url(file_url: str) -> bool:
+    """判断是否为 Dify 生成的临时签名文件链接"""
+    parsed = urlparse(file_url or "")
+    query = parse_qs(parsed.query)
+    return all(key in query for key in ("timestamp", "nonce", "sign"))
+
+
+def _build_dify_file_preview_api_url(base_url: str, file_id: str) -> str:
+    """构造 Dify Service API 文件预览端点"""
+    normalized_base_url = _normalize_base_url(base_url)
+    return f"{normalized_base_url}/files/{file_id}/preview"
+
+
+def _extract_signed_url_from_preview_response(resp: requests.Response, base_url: str) -> str:
+    """从 Dify 预览接口响应中提取签名下载地址"""
+    location = resp.headers.get("Location", "").strip()
+    if resp.is_redirect and location:
+        return _resolve_dify_file_url(base_url, location)
+
+    content_type = (resp.headers.get("Content-Type") or "").lower()
+    if "application/json" not in content_type:
+        return ""
+
+    try:
+        data = resp.json()
+    except ValueError:
+        return ""
+
+    candidates = [
+        data.get("url"),
+        data.get("signed_url"),
+        data.get("preview_url"),
+        data.get("download_url"),
+    ]
+
+    nested_data = data.get("data") if isinstance(data.get("data"), dict) else {}
+    candidates.extend([
+        nested_data.get("url"),
+        nested_data.get("signed_url"),
+        nested_data.get("preview_url"),
+        nested_data.get("download_url"),
+    ])
+
+    for candidate in candidates:
+        if isinstance(candidate, str) and candidate.strip():
+            return _resolve_dify_file_url(base_url, candidate)
+
+    return ""
+
+
+def _friendly_dify_file_error(status_code: int) -> str:
+    """将 Dify 文件访问错误翻译为前端友好提示"""
+    if status_code == 403:
+        return "附件下载链接已失效或当前应用无权访问该文件，请重新生成后再试"
+    if status_code == 404:
+        return "附件不存在或已被删除"
+    if status_code == 401:
+        return "Dify 文件鉴权失败，请检查当前应用配置"
+    return ""
+
+
+def _proxy_streaming_file_response(resp: requests.Response) -> Response:
+    """将上游文件响应以流式方式透传给前端"""
+    response_headers = {
+        "Cache-Control": "private, max-age=60",
+        "X-Accel-Buffering": "no",
+    }
+    content_type = resp.headers.get("Content-Type")
+    content_length = resp.headers.get("Content-Length")
+    content_disposition = resp.headers.get("Content-Disposition")
+    if content_type:
+        response_headers["Content-Type"] = content_type
+    if content_length:
+        response_headers["Content-Length"] = content_length
+    if content_disposition:
+        response_headers["Content-Disposition"] = content_disposition
+
+    def generate():
+        try:
+            for chunk in resp.iter_content(chunk_size=8192):
+                if chunk:
+                    yield chunk
+        finally:
+            resp.close()
+
+    return Response(generate(), status=resp.status_code, headers=response_headers)
 
 
 @dify_proxy_bp.route("/dify/chat-messages", methods=["POST"])
@@ -275,3 +377,183 @@ def proxy_file_upload():
     except requests.exceptions.RequestException as e:
         logger.error(f"Dify 文件上传异常: {e}")
         return {"error": f"Dify 文件上传失败: {str(e)}"}, 502
+
+
+@dify_proxy_bp.route("/dify/files/fetch", methods=["GET"])
+@login_required
+def proxy_file_fetch():
+    """
+    代理 Dify 文件读取接口，解决相对 /files/... 地址与私有鉴权下载问题
+
+    Query:
+        agent_id: 智能体标识
+        url: Dify 返回的文件地址（支持相对 /files/... 或绝对 URL）
+    """
+    agent_id_str = request.args.get("agent_id", "").strip()
+    file_url = request.args.get("url", "").strip()
+
+    if not agent_id_str:
+        return {"error": "缺少 agent_id 参数"}, 400
+    if not file_url:
+        return {"error": "缺少 url 参数"}, 400
+
+    config, error = _get_agent_dify_config(agent_id_str)
+    if error:
+        return {"error": error}, 400
+
+    upstream_url = _resolve_dify_file_url(config["base_url"], file_url)
+    if not upstream_url:
+        return {"error": "无效的文件地址"}, 400
+
+    try:
+        # Dify 的 /files/... 签名 URL 已自带授权参数。
+        # 某些部署在额外附带 app API Key 时会返回 403，因此优先匿名访问；
+        # 若不是签名链接，再回退到 Bearer 方式兼容其他文件源。
+        request_attempts = [{"headers": {}}]
+        if not _is_signed_dify_file_url(upstream_url):
+            request_attempts.append({
+                "headers": {
+                    "Authorization": f"Bearer {config['api_key']}",
+                }
+            })
+
+        resp = None
+        last_status_code = None
+        last_error_text = ""
+        for attempt in request_attempts:
+            resp = requests.get(
+                upstream_url,
+                headers=attempt["headers"],
+                stream=True,
+                timeout=120,
+            )
+            if resp.status_code == 200:
+                break
+
+            last_status_code = resp.status_code
+            last_error_text = resp.text[:300] if resp.text else f"HTTP {resp.status_code}"
+            resp.close()
+            resp = None
+
+        if not resp:
+            error_text = last_error_text or f"HTTP {last_status_code or 502}"
+            logger.error(f"Dify 文件读取失败: url={upstream_url}, error={error_text}")
+            return {"error": f"Dify 文件读取失败: {error_text}"}, last_status_code or 502
+
+        response_headers = {
+            "Cache-Control": "private, max-age=60",
+        }
+        content_type = resp.headers.get("Content-Type")
+        content_length = resp.headers.get("Content-Length")
+        content_disposition = resp.headers.get("Content-Disposition")
+        if content_type:
+            response_headers["Content-Type"] = content_type
+        if content_length:
+            response_headers["Content-Length"] = content_length
+        if content_disposition:
+            response_headers["Content-Disposition"] = content_disposition
+
+        def generate():
+            try:
+                for chunk in resp.iter_content(chunk_size=8192):
+                    if chunk:
+                        yield chunk
+            finally:
+                resp.close()
+
+        return Response(generate(), headers=response_headers)
+    except requests.exceptions.Timeout:
+        return {"error": "Dify 文件读取超时"}, 504
+    except requests.exceptions.RequestException as e:
+        logger.error(f"Dify 文件读取异常: {e}")
+        return {"error": f"Dify 文件读取失败: {str(e)}"}, 502
+
+
+@dify_proxy_bp.route("/dify/files/<file_id>/content", methods=["GET"])
+@login_required
+def proxy_file_content_by_id(file_id):
+    """
+    仅基于 file_id 代理 Dify 文件内容：
+    1. 先调用 Dify Service API 获取当前有效的文件访问入口
+    2. 再由服务端流式拉取并转发给前端
+
+    Query:
+        agent_id: 智能体标识
+        download: 是否按附件下载（1/true）
+    """
+    agent_id_str = request.args.get("agent_id", "").strip()
+    download = request.args.get("download", "").strip().lower() in ("1", "true", "yes")
+
+    if not agent_id_str:
+        return {"error": "缺少 agent_id 参数"}, 400
+    if not file_id:
+        return {"error": "缺少 file_id 参数"}, 400
+
+    config, error = _get_agent_dify_config(agent_id_str)
+    if error:
+        return {"error": error}, 400
+
+    preview_api_url = _build_dify_file_preview_api_url(config["base_url"], file_id)
+
+    try:
+        preview_resp = requests.get(
+            preview_api_url,
+            params={"as_attachment": "true" if download else "false"},
+            headers={
+                "Authorization": f"Bearer {config['api_key']}",
+            },
+            allow_redirects=False,
+            stream=True,
+            timeout=60,
+        )
+
+        if preview_resp.status_code in (301, 302, 303, 307, 308):
+            signed_url = _extract_signed_url_from_preview_response(preview_resp, config["base_url"])
+            preview_resp.close()
+            if not signed_url:
+                return {"error": "Dify 未返回可用的文件地址"}, 502
+
+            upstream_resp = requests.get(
+                signed_url,
+                stream=True,
+                timeout=120,
+            )
+            if upstream_resp.status_code != 200:
+                friendly_error = _friendly_dify_file_error(upstream_resp.status_code)
+                error_text = friendly_error or upstream_resp.text[:300] or f"HTTP {upstream_resp.status_code}"
+                logger.error(f"Dify 文件签名地址读取失败: file_id={file_id}, error={error_text}")
+                upstream_resp.close()
+                return {"error": error_text}, upstream_resp.status_code
+
+            return _proxy_streaming_file_response(upstream_resp)
+
+        if preview_resp.status_code == 200:
+            signed_url = _extract_signed_url_from_preview_response(preview_resp, config["base_url"])
+            if signed_url:
+                preview_resp.close()
+                upstream_resp = requests.get(
+                    signed_url,
+                    stream=True,
+                    timeout=120,
+                )
+                if upstream_resp.status_code != 200:
+                    friendly_error = _friendly_dify_file_error(upstream_resp.status_code)
+                    error_text = friendly_error or upstream_resp.text[:300] or f"HTTP {upstream_resp.status_code}"
+                    logger.error(f"Dify 文件签名地址读取失败: file_id={file_id}, error={error_text}")
+                    upstream_resp.close()
+                    return {"error": error_text}, upstream_resp.status_code
+
+                return _proxy_streaming_file_response(upstream_resp)
+
+            return _proxy_streaming_file_response(preview_resp)
+
+        friendly_error = _friendly_dify_file_error(preview_resp.status_code)
+        error_text = friendly_error or preview_resp.text[:300] or f"HTTP {preview_resp.status_code}"
+        logger.error(f"Dify 文件入口获取失败: file_id={file_id}, error={error_text}")
+        preview_resp.close()
+        return {"error": error_text}, preview_resp.status_code
+    except requests.exceptions.Timeout:
+        return {"error": "Dify 文件读取超时，请稍后重试"}, 504
+    except requests.exceptions.RequestException as e:
+        logger.error(f"Dify 文件代理异常: {e}")
+        return {"error": f"Dify 文件读取失败: {str(e)}"}, 502

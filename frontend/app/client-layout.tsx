@@ -1,9 +1,11 @@
 "use client"
 
 import { usePathname, useRouter } from "next/navigation"
-import { useEffect } from "react"
+import { useEffect, useRef, useState } from "react"
 import { AuthProvider, useAuth } from "@/lib/auth-store"
 import { isMockMode } from "@/lib/mock-config"
+
+type TransitionPhase = "idle" | "cover" | "reveal"
 
 function AuthGuard({ children }: { children: React.ReactNode }) {
   const { user, initialized } = useAuth()
@@ -39,8 +41,8 @@ function AuthGuard({ children }: { children: React.ReactNode }) {
           display: "flex",
           alignItems: "center",
           justifyContent: "center",
-          background: "var(--bg-primary, #0a0e17)",
-          color: "var(--text-secondary, #9ca3af)",
+          background: "var(--background)",
+          color: "var(--text-secondary)",
         }}
       >
         加载中...
@@ -62,9 +64,80 @@ function AuthGuard({ children }: { children: React.ReactNode }) {
 }
 
 export function ClientLayout({ children }: { children: React.ReactNode }) {
+  const [transitionPhase, setTransitionPhase] = useState<TransitionPhase>("idle")
+  const cleanupTimerRef = useRef<number | null>(null)
+  const fallbackTimerRef = useRef<number | null>(null)
+  const pathname = usePathname()
+
+  useEffect(() => {
+    const clearTimers = () => {
+      if (cleanupTimerRef.current !== null) {
+        window.clearTimeout(cleanupTimerRef.current)
+        cleanupTimerRef.current = null
+      }
+      if (fallbackTimerRef.current !== null) {
+        window.clearTimeout(fallbackTimerRef.current)
+        fallbackTimerRef.current = null
+      }
+    }
+
+    const startTransition = () => {
+      clearTimers()
+      setTransitionPhase("cover")
+      fallbackTimerRef.current = window.setTimeout(() => {
+        setTransitionPhase("reveal")
+        cleanupTimerRef.current = window.setTimeout(() => {
+          setTransitionPhase("idle")
+        }, 360)
+      }, 1800)
+    }
+
+    const completeTransition = () => {
+      clearTimers()
+      setTransitionPhase((current) => {
+        if (current === "idle") return current
+        return "reveal"
+      })
+      cleanupTimerRef.current = window.setTimeout(() => {
+        setTransitionPhase("idle")
+      }, 360)
+    }
+
+    window.addEventListener("app-route-transition-start", startTransition)
+    window.addEventListener("app-route-transition-complete", completeTransition)
+
+    return () => {
+      window.removeEventListener("app-route-transition-start", startTransition)
+      window.removeEventListener("app-route-transition-complete", completeTransition)
+      clearTimers()
+    }
+  }, [])
+
+  useEffect(() => {
+    if (pathname !== "/" || transitionPhase !== "cover") return
+
+    if (fallbackTimerRef.current !== null) {
+      window.clearTimeout(fallbackTimerRef.current)
+    }
+    fallbackTimerRef.current = window.setTimeout(() => {
+      setTransitionPhase("reveal")
+      cleanupTimerRef.current = window.setTimeout(() => {
+        setTransitionPhase("idle")
+      }, 360)
+    }, 900)
+  }, [pathname, transitionPhase])
+
   return (
     <AuthProvider>
       <AuthGuard>{children}</AuthGuard>
+      {transitionPhase !== "idle" && (
+        <div
+          className={`page-transition-overlay ${transitionPhase === "cover" ? "page-transition-overlay-exit" : "page-transition-overlay-enter"}`}
+          aria-hidden="true"
+        >
+          <div className="page-transition-orb" />
+        </div>
+      )}
     </AuthProvider>
   )
 }

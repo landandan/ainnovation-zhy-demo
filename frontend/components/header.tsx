@@ -2,43 +2,16 @@
 
 import { useState, useRef, useEffect } from "react"
 import { THEMES, type ThemeId } from "@/app/page"
-import type { UserInfo } from "@/lib/api-client"
 
 interface HeaderProps {
   onMenuToggle: () => void
   currentTheme: ThemeId
   onThemeChange: (theme: ThemeId) => void
-  user: UserInfo | null
-  onLogout: () => void
 }
 
-export function Header({ onMenuToggle, currentTheme, onThemeChange, user, onLogout }: HeaderProps) {
-  const [themeMenuOpen, setThemeMenuOpen] = useState(false)
+export function Header({ onMenuToggle, currentTheme, onThemeChange }: HeaderProps) {
   const [searchOpen, setSearchOpen] = useState(false)
-  const [userMenuOpen, setUserMenuOpen] = useState(false)
-  const menuRef = useRef<HTMLDivElement>(null)
-  const userMenuRef = useRef<HTMLDivElement>(null)
   const searchInputRef = useRef<HTMLInputElement>(null)
-
-  const displayName = user?.display_name || user?.username || "用户"
-  const userInitial = displayName.charAt(0).toUpperCase()
-  const userRole = user?.roles?.[0] || "用户"
-
-  // 点击外部关闭菜单
-  useEffect(() => {
-    function handleClick(e: MouseEvent) {
-      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
-        setThemeMenuOpen(false)
-      }
-      if (userMenuRef.current && !userMenuRef.current.contains(e.target as Node)) {
-        setUserMenuOpen(false)
-      }
-    }
-    if (themeMenuOpen || userMenuOpen) {
-      document.addEventListener("mousedown", handleClick)
-      return () => document.removeEventListener("mousedown", handleClick)
-    }
-  }, [themeMenuOpen, userMenuOpen])
 
   // 聚焦搜索框
   useEffect(() => {
@@ -48,39 +21,20 @@ export function Header({ onMenuToggle, currentTheme, onThemeChange, user, onLogo
   }, [searchOpen])
 
   const currentThemeData = THEMES.find((t) => t.id === currentTheme)
-  const darkThemes = THEMES.filter((t) => t.dark)
-  const lightThemes = THEMES.filter((t) => !t.dark)
 
-  // 每套主题的强调色映射（用于按钮预览色）
-  const THEME_CHIP_COLORS: Record<string, { accent: string; fg: string }> = {
-    "ocean-trench":     { accent: "#00D4FF", fg: "#060E1E" },
-    "industrial-rig":   { accent: "#FF6B2B", fg: "#0D0906" },
-    "hse-alert":        { accent: "#FFD600", fg: "#080808" },
-    "cyber-matrix":     { accent: "#00FF5F", fg: "#011210" },
-    "quantum-purple":   { accent: "#C580FF", fg: "#0A0028" },
-    "carbon-fiber":     { accent: "#B8B8B0", fg: "#0B0B0B" },
-    "abyssal-blue":     { accent: "#3888E0", fg: "#E0EDFF" },
-    "neon-synthwave":   { accent: "#00F5A0", fg: "#1A0030" },
-    "radar-sweep":      { accent: "#60E8A0", fg: "#0E1A28" },
-    "midnight-sand":    { accent: "#E8A860", fg: "#1C0E08" },
-    "arctic-ice":       { accent: "#0066CC", fg: "#FFFFFF" },
-    "pearl-clean":      { accent: "#4A3A90", fg: "#FFFFFF" },
-    "control-room":     { accent: "#012A5E", fg: "#FFFFFF" },
-    "safety-first":     { accent: "#ED6200", fg: "#FFFFFF" },
-    "eco-pipeline":     { accent: "#1D6B2A", fg: "#FFFFFF" },
-    "dawn-horizon":     { accent: "#E07030", fg: "#FFFFFF" },
-    "corporate-tech":   { accent: "#022850", fg: "#FFFFFF" },
-    "data-analytics":   { accent: "#1A5888", fg: "#FFFFFF" },
-    "desert-oil":       { accent: "#C85A2A", fg: "#FFFFFF" },
-    "eink-display":     { accent: "#1A1A1A", fg: "#FFFFFF" },
+  // 直接点击循环切换：默认 → 深海 → 极光 → 默认
+  const THEME_CYCLE_ORDER: ThemeId[] = ["", "deep-ocean", "aurora-blue"]
+  const handleCycleTheme = () => {
+    const currentIndex = THEME_CYCLE_ORDER.indexOf(currentTheme)
+    const nextIndex = (currentIndex + 1) % THEME_CYCLE_ORDER.length
+    onThemeChange(THEME_CYCLE_ORDER[nextIndex])
   }
 
   return (
     <header
-      className="header flex items-center gap-3 px-5 py-3 flex-shrink-0 border-b"
+      className="header flex items-center gap-3 px-5 py-3 flex-shrink-0"
       style={{
-        background: "var(--primary)",
-        borderColor: "var(--border)",
+        background: "var(--background)",
       }}
     >
       {/* 汉堡菜单按钮 */}
@@ -96,27 +50,6 @@ export function Header({ onMenuToggle, currentTheme, onThemeChange, user, onLogo
           <line x1="3" y1="18" x2="21" y2="18" />
         </svg>
       </button>
-
-      {/* Logo */}
-      <div className="flex items-center gap-2.5 flex-shrink-0">
-        <div
-          className="flex h-[36px] w-[36px] items-center justify-center rounded-[10px] text-lg"
-          style={{
-            background: "var(--gradient-accent)",
-            boxShadow: "0 2px 12px rgba(0,0,0,0.2)",
-          }}
-        >
-          🌊
-        </div>
-        <div className="hidden sm:block">
-          <div className="text-[15px] font-bold leading-tight" style={{ color: "var(--foreground)" }}>
-            深海智航
-          </div>
-          <div className="text-[10px] leading-tight" style={{ color: "var(--text-muted)" }}>
-            CNOOC AI Platform
-          </div>
-        </div>
-      </div>
 
       {/* 中间占位 */}
       <div className="flex-1" />
@@ -151,172 +84,29 @@ export function Header({ onMenuToggle, currentTheme, onThemeChange, user, onLogo
         )}
       </div>
 
-      {/* 主题切换按钮 */}
-      <div className="relative" ref={menuRef}>
-        <button
-          onClick={() => setThemeMenuOpen(!themeMenuOpen)}
-          className="flex h-[38px] w-[38px] items-center justify-center rounded-xl transition-all hover:bg-white/10"
-          style={{ color: "var(--text-secondary)" }}
-          aria-label="切换主题"
-          title={`当前：${currentThemeData?.label ?? currentTheme}`}
-        >
-          <svg width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-            <circle cx="12" cy="12" r="5" />
-            <line x1="12" y1="1" x2="12" y2="3" />
-            <line x1="12" y1="21" x2="12" y2="23" />
-            <line x1="4.22" y1="4.22" x2="5.64" y2="5.64" />
-            <line x1="18.36" y1="18.36" x2="19.78" y2="19.78" />
-            <line x1="1" y1="12" x2="3" y2="12" />
-            <line x1="21" y1="12" x2="23" y2="12" />
-            <line x1="4.22" y1="19.78" x2="5.64" y2="18.36" />
-            <line x1="18.36" y1="5.64" x2="19.78" y2="4.22" />
-          </svg>
-          <span
-            className="absolute -top-0.5 -right-0.5 flex h-[7px] w-[7px] rounded-full ring-2 ring-[var(--primary)]"
-            style={{ background: currentThemeData?.dark ? "#1a1a2e" : "#f8f9fa" }}
-          />
-        </button>
-
-        {/* 主题下拉菜单 */}
-        {themeMenuOpen && (
-          <div
-            className="theme-menu"
-            style={{
-              background: "var(--card)",
-              border: "1px solid var(--border)",
-              boxShadow: "var(--shadow-lg)",
-            }}
-          >
-            <div className="theme-category-label" style={{ color: "var(--text-muted)" }}>
-              🌙 暗色主题
-            </div>
-            <div className="theme-grid">
-              {darkThemes.map((t) => {
-                const chipColor = THEME_CHIP_COLORS[t.id] || { accent: "var(--accent)", fg: "var(--accent-foreground)" }
-                return (
-                <button
-                  key={t.id}
-                  onClick={() => {
-                    onThemeChange(t.id)
-                    setThemeMenuOpen(false)
-                  }}
-                  className={`theme-chip ${t.id === currentTheme ? "active" : ""}`}
-                  style={
-                    t.id === currentTheme
-                      ? {
-                          background: chipColor.accent,
-                          color: chipColor.fg,
-                          borderColor: chipColor.accent + "80",
-                        }
-                      : {
-                          background: chipColor.accent + "1A",
-                          color: "var(--text-secondary)",
-                          borderColor: chipColor.accent + "40",
-                        }
-                  }
-                >
-                  {t.label}
-                  {t.id === currentTheme && <span className="theme-chip-check">✓</span>}
-                </button>
-              )})}
-            </div>
-
-            <div className="theme-category-label" style={{ color: "var(--text-muted)" }}>
-              ☀️ 浅色主题
-            </div>
-            <div className="theme-grid">
-              {lightThemes.map((t) => {
-                const chipColor = THEME_CHIP_COLORS[t.id] || { accent: "var(--accent)", fg: "var(--accent-foreground)" }
-                return (
-                <button
-                  key={t.id}
-                  onClick={() => {
-                    onThemeChange(t.id)
-                    setThemeMenuOpen(false)
-                  }}
-                  className={`theme-chip ${t.id === currentTheme ? "active" : ""}`}
-                  style={
-                    t.id === currentTheme
-                      ? {
-                          background: chipColor.accent,
-                          color: chipColor.fg,
-                          borderColor: chipColor.accent + "80",
-                        }
-                      : {
-                          background: chipColor.accent + "1A",
-                          color: "var(--text-secondary)",
-                          borderColor: chipColor.accent + "40",
-                        }
-                  }
-                >
-                  {t.label}
-                  {t.id === currentTheme && <span className="theme-chip-check">✓</span>}
-                </button>
-              )})}
-            </div>
-          </div>
-        )}
-      </div>
-
-      {/* 用户头像 + 下拉菜单 */}
-      <div className="relative" ref={userMenuRef}>
-        <button
-          onClick={() => setUserMenuOpen(!userMenuOpen)}
-          className="flex h-[38px] w-[38px] items-center justify-center rounded-full flex-shrink-0 text-sm font-bold text-white transition-all hover:ring-2 hover:ring-offset-1 hover:ring-offset-[var(--primary)]"
-          style={{
-            background: "var(--gradient-4)",
-            boxShadow: "0 2px 10px rgba(0,0,0,0.2)",
-          }}
-          aria-label="用户菜单"
-          title={displayName}
-        >
-          {userInitial}
-        </button>
-
-        {userMenuOpen && (
-          <div
-            className="user-menu"
-            style={{
-              background: "var(--card)",
-              border: "1px solid var(--border)",
-              boxShadow: "var(--shadow-lg)",
-            }}
-          >
-            <div className="user-menu-header">
-              <div
-                className="flex h-[40px] w-[40px] items-center justify-center rounded-full text-base font-bold text-white flex-shrink-0"
-                style={{ background: "var(--gradient-4)" }}
-              >
-                {userInitial}
-              </div>
-              <div className="min-w-0">
-                <div className="text-[14px] font-semibold truncate" style={{ color: "var(--foreground)" }}>
-                  {displayName}
-                </div>
-                <div className="text-[11px] truncate" style={{ color: "var(--text-muted)" }}>
-                  {user?.email || userRole}
-                </div>
-              </div>
-            </div>
-            <div className="user-menu-divider" style={{ background: "var(--border)" }} />
-            <button
-              onClick={() => {
-                onLogout()
-                setUserMenuOpen(false)
-              }}
-              className="user-menu-logout-btn"
-              style={{ color: "#ef4444" }}
-            >
-              <svg width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-                <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
-                <polyline points="16 17 21 12 16 7" />
-                <line x1="21" y1="12" x2="9" y2="12" />
-              </svg>
-              退出登录
-            </button>
-          </div>
-        )}
-      </div>
+      {/* 主题切换 - 直接点击循环 */}
+      <button
+        onClick={handleCycleTheme}
+        className="flex h-[38px] items-center justify-center rounded-xl px-3 gap-2 transition-all hover:bg-white/10"
+        style={{ color: "var(--text-secondary)" }}
+        aria-label="切换主题"
+        title={`当前：${currentThemeData?.label ?? "Kimi 默认"}（点击切换）`}
+      >
+        <svg width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+          <circle cx="12" cy="12" r="5" />
+          <line x1="12" y1="1" x2="12" y2="3" />
+          <line x1="12" y1="21" x2="12" y2="23" />
+          <line x1="4.22" y1="4.22" x2="5.64" y2="5.64" />
+          <line x1="18.36" y1="18.36" x2="19.78" y2="19.78" />
+          <line x1="1" y1="12" x2="3" y2="12" />
+          <line x1="21" y1="12" x2="23" y2="12" />
+          <line x1="4.22" y1="19.78" x2="5.64" y2="18.36" />
+          <line x1="18.36" y1="5.64" x2="19.78" y2="4.22" />
+        </svg>
+        <span className="text-[12px] font-medium hidden sm:inline">
+          {currentThemeData?.label === "Kimi 默认" ? "默认" : currentThemeData?.label?.replace("蓝", "") ?? "Kimi"}
+        </span>
+      </button>
     </header>
   )
 }

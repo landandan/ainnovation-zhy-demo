@@ -119,6 +119,7 @@ export function createMockAgent(data: CreateAgentRequest): { agent: AgentDefApi 
     label: data.label,
     icon: data.icon || "🤖",
     desc: data.desc || "",
+    quick_questions: data.quick_questions || [],
     gradient: data.gradient || "var(--gradient-1)",
     sort_order: data.sort_order ?? agents.length,
     is_active: data.is_active ?? true,
@@ -139,6 +140,7 @@ export function updateMockAgent(agentId: number, data: UpdateAgentRequest): { ag
     label: data.label ?? agents[idx].label,
     icon: data.icon ?? agents[idx].icon,
     desc: data.desc ?? agents[idx].desc,
+    quick_questions: data.quick_questions ?? agents[idx].quick_questions,
     gradient: data.gradient ?? agents[idx].gradient,
     sort_order: data.sort_order ?? agents[idx].sort_order,
     is_active: data.is_active ?? agents[idx].is_active,
@@ -518,4 +520,95 @@ export function getMockDifyApiConfigForAgent(agentIdStr: string): {
     dify_base_url: defaultConfig.dify_base_url || "https://api.dify.ai/v1",
     dify_api_key: defaultConfig.dify_api_key,
   }
+}
+
+/* ───── 生成 Mock SSE 数据流 ───── */
+
+/**
+ * 生成 Mock 的 SSE 响应流，模拟打字效果
+ */
+export function generateMockStream(text: string, signal?: AbortSignal): ReadableStream<Uint8Array> {
+  console.log("[DEBUG] generateMockStream 被调用，输入 text:", text.slice(0, 200), "...")
+  return new ReadableStream({
+    async start(controller) {
+      const encoder = new TextEncoder()
+      const chunkSize = 5 // 每次发送的字符数，模拟打字效果
+
+      // 从文本中提取思考内容
+      const thinkMatch = text.match(/<think>([\s\S]*?)<\/think>/)
+      const thinkContent = thinkMatch ? thinkMatch[1] : null
+      const mainText = text.replace(/<think>[\s\S]*?<\/think>/, '').trim()
+      console.log("[DEBUG] 解析结果: thinkContent=", !!thinkContent, thinkContent?.slice(0, 100), "mainText=", mainText.slice(0, 100))
+
+      // 如果有思考内容，先发送 agent_thought
+      if (thinkContent) {
+        // 逐字发送思考过程，模拟打字效果
+        let j = 0
+        while (j < thinkContent.length) {
+          if (signal?.aborted) {
+            controller.close()
+            return
+          }
+
+          const chunk = thinkContent.slice(j, j + chunkSize)
+          const thoughtEvent = {
+            event: "agent_thought",
+            thought: chunk,
+            created_at: Math.floor(Date.now() / 1000),
+          }
+          controller.enqueue(encoder.encode(`data: ${JSON.stringify(thoughtEvent)}\n\n`))
+          j += chunkSize
+
+          await new Promise(resolve => setTimeout(resolve, 20))
+        }
+        // 思考完成后，延迟一小段时间，让用户看到"思考结束"的状态展示一下
+        await new Promise(resolve => setTimeout(resolve, 500))
+      } else {
+        // 如果没有思考内容，发送一个默认的
+        const thoughtEvent = {
+          event: "agent_thought",
+          thought: "思考中...",
+          created_at: Math.floor(Date.now() / 1000),
+        }
+        controller.enqueue(encoder.encode(`data: ${JSON.stringify(thoughtEvent)}\n\n`))
+        await new Promise(resolve => setTimeout(resolve, 600))
+      }
+
+      // 逐字发送主文本
+      let i = 0
+      while (i < mainText.length) {
+        if (signal?.aborted) {
+          controller.close()
+          return
+        }
+
+        const chunk = mainText.slice(i, i + chunkSize)
+        const event = {
+          event: "message",
+          answer: chunk,
+          created_at: Math.floor(Date.now() / 1000),
+        }
+        controller.enqueue(encoder.encode(`data: ${JSON.stringify(event)}\n\n`))
+        i += chunkSize
+
+        // 模拟打字延迟
+        await new Promise(resolve => setTimeout(resolve, 15))
+      }
+
+      // 发送结束事件
+      const endEvent = {
+        event: "message_end",
+        created_at: Math.floor(Date.now() / 1000),
+        metadata: {
+          usage: {
+            prompt_tokens: 0,
+            completion_tokens: mainText.length,
+            total_tokens: mainText.length,
+          },
+        },
+      }
+      controller.enqueue(encoder.encode(`data: ${JSON.stringify(endEvent)}\n\n`))
+      controller.close()
+    },
+  })
 }

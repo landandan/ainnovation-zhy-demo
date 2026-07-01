@@ -1,11 +1,20 @@
 "use client"
 
 import React, { useState, useEffect, useRef } from "react"
+import ReactMarkdown from "react-markdown"
+import remarkGfm from "remark-gfm"
+import remarkMath from "remark-math"
+import rehypeKatex from "rehype-katex"
+import rehypeRaw from "rehype-raw"
 
 interface ThinkingBlockProps {
   text: string
   /** 思考是否已停止（流已结束），停止后隐藏动画点图标 */
   isComplete?: boolean
+  /** 默认是否展开 */
+  defaultExpanded?: boolean
+  /** 思考完成后是否自动折叠 */
+  autoCollapse?: boolean
 }
 
 /**
@@ -13,20 +22,37 @@ interface ThinkingBlockProps {
  * 默认折叠，可展开查看模型的思考过程
  * 左侧带彩色强调线，视觉上独立于消息气泡
  */
-export function ThinkingBlock({ text, isComplete }: ThinkingBlockProps) {
-  const [expanded, setExpanded] = useState(false)
+export function ThinkingBlock({ text, isComplete, defaultExpanded = false, autoCollapse = false }: ThinkingBlockProps) {
+  const [expanded, setExpanded] = useState(defaultExpanded)
+  const [hasUserToggled, setHasUserToggled] = useState(false) // 标记用户是否手动操作过
+  
+  // 当 isComplete 变为 true 且 autoCollapse 为 true 时，且用户没手动操作过，延迟一小段时间再自动折叠
+  useEffect(() => {
+    if (isComplete && autoCollapse && !hasUserToggled) {
+      const timer = setTimeout(() => {
+        setExpanded(false)
+      }, 600) // 延迟 600ms 折叠，让用户看到"已思考"状态
+      return () => clearTimeout(timer)
+    }
+  }, [isComplete, autoCollapse, hasUserToggled])
 
   return (
     <div
       className="rounded-xl overflow-hidden"
       style={{
-        border: "1px solid var(--border)",
+        borderWidth: "1px",
+        borderStyle: "solid",
+        borderColor: "var(--border)",
+        borderLeftWidth: "3px",
+        borderLeftColor: "var(--accent)",
         background: "var(--thinking-bg, rgba(var(--muted-rgb, 100, 100, 100), 0.06))",
-        borderLeft: "3px solid var(--accent)",
       }}
     >
       <button
-        onClick={() => setExpanded(!expanded)}
+        onClick={() => {
+          setExpanded(!expanded)
+          setHasUserToggled(true)
+        }}
         className="flex items-center gap-2.5 w-full px-3.5 py-2.5 text-[12px] font-medium transition-colors hover:opacity-80"
         style={{ color: "var(--text-muted)" }}
       >
@@ -64,7 +90,7 @@ export function ThinkingBlock({ text, isComplete }: ThinkingBlockProps) {
 
       {expanded && (
         <div
-          className="px-3.5 pb-3.5 pt-1 text-[12px] leading-relaxed whitespace-pre-wrap"
+          className="px-3.5 pb-3.5 pt-1 text-[12px] leading-relaxed prose-content kimi-style-markdown"
           style={{
             color: "var(--text-secondary)",
             borderTop: "1px solid var(--border)",
@@ -72,7 +98,12 @@ export function ThinkingBlock({ text, isComplete }: ThinkingBlockProps) {
             overflowY: "auto",
           }}
         >
-          {text}
+          <ReactMarkdown
+            remarkPlugins={[remarkGfm, remarkMath]}
+            rehypePlugins={[rehypeKatex, rehypeRaw]}
+          >
+            {text.replace(/<\/?think>/g, '').trim()}
+          </ReactMarkdown>
         </div>
       )}
     </div>
