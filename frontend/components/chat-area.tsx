@@ -5,6 +5,7 @@ import type { Message } from "@/app/page"
 import { MessageBubble } from "./message-bubble"
 import { ThinkingBlock } from "./thinking-block"
 import { CanvasDragonAvatar } from "./canvas-dragon-avatar"
+import { WorkflowProgressComponent } from "./workflow-progress"
 
 interface ChatAreaProps {
   messages: Message[]
@@ -14,10 +15,12 @@ interface ChatAreaProps {
   agentDesc?: string
   quickQuestions?: string[]
   currentAgentId?: string
+  onRetryWorkflow?: () => void
+  onStopWorkflow?: () => void
 }
 
 export const ChatArea = forwardRef<HTMLDivElement, ChatAreaProps>(
-  function ChatArea({ messages, onUseSuggestion, isStreaming, agentLabel = "深海智航", agentDesc, quickQuestions, currentAgentId }, ref) {
+  function ChatArea({ messages, onUseSuggestion, isStreaming, agentLabel = "深海智航", agentDesc, quickQuestions, currentAgentId, onRetryWorkflow, onStopWorkflow }, ref) {
     const [showScrollButton, setShowScrollButton] = useState(false)
     const internalRef = useRef<HTMLDivElement>(null)
 
@@ -122,7 +125,17 @@ export const ChatArea = forwardRef<HTMLDivElement, ChatAreaProps>(
                 borderColor: "var(--border)",
               }}
             >
-              <span className="text-lg">📄</span>
+              <div
+                className="flex h-7 w-7 items-center justify-center rounded-lg"
+                style={{ background: "var(--secondary)", color: "var(--text-secondary)" }}
+              >
+                <svg width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                  <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                  <polyline points="14 2 14 8 20 8" />
+                  <line x1="8" y1="13" x2="16" y2="13" />
+                  <line x1="8" y1="17" x2="13" y2="17" />
+                </svg>
+              </div>
               <span
                 className="max-w-[56px] truncate text-[9px] font-medium"
                 style={{ color: "inherit", opacity: 0.9 }}
@@ -145,19 +158,22 @@ export const ChatArea = forwardRef<HTMLDivElement, ChatAreaProps>(
         >
           {/* Title */}
           <h2
-            className="mb-4 text-[32px] font-extrabold tracking-tight"
+            className="mb-3 text-[30px] font-extrabold tracking-tight"
             style={{ color: "var(--foreground)" }}
           >
-            {`Hi~，我是${agentLabel}智能体`}
+            开始一段新的业务对话
           </h2>
 
           {/* Subtitle */}
           <p
-            className="mb-8 text-[18px] font-medium"
+            className="mb-3 max-w-[760px] text-[16px] font-medium leading-7"
             style={{ color: "var(--text-secondary)" }}
           >
-            {agentDesc && agentDesc.trim() ? agentDesc : "有什么我能帮你的吗?"}
+            {agentDesc && agentDesc.trim()
+              ? `${agentLabel}已就绪，${agentDesc}`
+              : `${agentLabel}已就绪，你可以直接发起问答、上传资料，或从下面的高频任务开始。`}
           </p>
+
 
           {/* Quick question tags */}
           <div className="flex flex-wrap justify-center gap-3 max-w-[700px]">
@@ -199,6 +215,12 @@ export const ChatArea = forwardRef<HTMLDivElement, ChatAreaProps>(
       >
         <div className="flex flex-col gap-5 p-4 sm:p-6 pb-2 max-w-[960px] mx-auto w-full">
         {messages.map((msg, idx) => {
+          const isLatestMessage = idx === messages.length - 1
+          const visibleWorkflowProgress =
+            msg.workflowProgress && msg.workflowProgress.status !== "idle"
+              ? msg.workflowProgress
+              : undefined
+
           // 首 token 等待阶段：脉冲骨架屏
           if (msg.waiting) {
             return (
@@ -212,31 +234,37 @@ export const ChatArea = forwardRef<HTMLDivElement, ChatAreaProps>(
                     <CanvasDragonAvatar size={36} />
                   </div>
                   <div className="flex flex-col gap-2 min-w-0">
-                    {/* 思考过程实时显示（等待态也展示） */}
-                    {msg.thinking && (
+                    {visibleWorkflowProgress && (
+                      <WorkflowProgressComponent
+                        progress={visibleWorkflowProgress}
+                        onRetry={onRetryWorkflow}
+                        onStop={isLatestMessage ? onStopWorkflow : undefined}
+                      />
+                    )}
+                    {!visibleWorkflowProgress && msg.thinking && (
                       <ThinkingBlock text={msg.thinking} isComplete={false} />
                     )}
-                    {/* 脉冲骨架屏 */}
-                    <div
-                      className="rounded-2xl px-5 py-4 waiting-skeleton"
-                      style={{
-                        background: "var(--card)",
-                        border: "1px solid var(--border)",
-                        borderBottomLeftRadius: "8px",
-                        boxShadow: "var(--shadow-sm)",
-                      }}
-                    >
-                      {/* 首 token 等待 loading 图标 */}
-                      <div className="flex items-center gap-2 mb-3">
-                        <span className="spinner" style={{ width: 14, height: 14, borderWidth: 2 }} />
-                        <span className="text-[11px]" style={{ color: "var(--text-muted)" }}>
-                          正在思考...
-                        </span>
+                    {!visibleWorkflowProgress && !msg.thinking && (
+                      <div
+                        className="rounded-2xl px-5 py-4 waiting-skeleton"
+                        style={{
+                          background: "var(--card)",
+                          border: "1px solid var(--border)",
+                          borderBottomLeftRadius: "8px",
+                          boxShadow: "var(--shadow-sm)",
+                        }}
+                      >
+                        <div className="flex items-center gap-2 mb-3">
+                          <span className="spinner" style={{ width: 14, height: 14, borderWidth: 2 }} />
+                          <span className="text-[11px]" style={{ color: "var(--text-muted)" }}>
+                            正在思考...
+                          </span>
+                        </div>
+                        <div className="skeleton-line skeleton-line-1" />
+                        <div className="skeleton-line skeleton-line-2" />
+                        <div className="skeleton-line skeleton-line-3" />
                       </div>
-                      <div className="skeleton-line skeleton-line-1" />
-                      <div className="skeleton-line skeleton-line-2" />
-                      <div className="skeleton-line skeleton-line-3" />
-                    </div>
+                    )}
                   </div>
                 </div>
               </div>
@@ -256,27 +284,41 @@ export const ChatArea = forwardRef<HTMLDivElement, ChatAreaProps>(
                     <CanvasDragonAvatar size={36} />
                   </div>
                   <div className="flex flex-col gap-2 min-w-0">
-                    {/* 等待状态时不显示思考块 */}
-                    <div
-                      className="rounded-2xl px-5 py-4 waiting-skeleton"
-                      style={{
-                        background: "var(--card)",
-                        border: "1px solid var(--border)",
-                        borderBottomLeftRadius: "8px",
-                        boxShadow: "var(--shadow-sm)",
-                      }}
-                    >
-                      {/* 首 token 等待 loading 图标 */}
-                      <div className="flex items-center gap-2 mb-3">
-                        <span className="spinner" style={{ width: 14, height: 14, borderWidth: 2 }} />
-                        <span className="text-[11px]" style={{ color: "var(--text-muted)" }}>
-                          正在思考...
-                        </span>
+                    {!visibleWorkflowProgress && msg.thinking && (
+                      <ThinkingBlock
+                        text={msg.thinking}
+                        isComplete={msg.thinkingComplete}
+                        defaultExpanded={!msg.thinkingComplete}
+                        autoCollapse={true}
+                      />
+                    )}
+                    {visibleWorkflowProgress ? (
+                      <WorkflowProgressComponent
+                        progress={visibleWorkflowProgress}
+                        onRetry={onRetryWorkflow}
+                        onStop={isLatestMessage ? onStopWorkflow : undefined}
+                      />
+                    ) : !msg.thinking ? (
+                      <div
+                        className="rounded-2xl px-5 py-4 waiting-skeleton"
+                        style={{
+                          background: "var(--card)",
+                          border: "1px solid var(--border)",
+                          borderBottomLeftRadius: "8px",
+                          boxShadow: "var(--shadow-sm)",
+                        }}
+                      >
+                        <div className="flex items-center gap-2 mb-3">
+                          <span className="spinner" style={{ width: 14, height: 14, borderWidth: 2 }} />
+                          <span className="text-[11px]" style={{ color: "var(--text-muted)" }}>
+                            正在思考...
+                          </span>
+                        </div>
+                        <div className="skeleton-line skeleton-line-1" />
+                        <div className="skeleton-line skeleton-line-2" />
+                        <div className="skeleton-line skeleton-line-3" />
                       </div>
-                      <div className="skeleton-line skeleton-line-1" />
-                      <div className="skeleton-line skeleton-line-2" />
-                      <div className="skeleton-line skeleton-line-3" />
-                    </div>
+                    ) : null}
                   </div>
                 </div>
               </div>
@@ -340,17 +382,15 @@ export const ChatArea = forwardRef<HTMLDivElement, ChatAreaProps>(
                 )}
 
                 <div className="flex flex-col gap-1.5 min-w-0">
+                  {visibleWorkflowProgress && (
+                    <WorkflowProgressComponent
+                      progress={visibleWorkflowProgress}
+                      onRetry={onRetryWorkflow}
+                      onStop={isLatestMessage ? onStopWorkflow : undefined}
+                    />
+                  )}
                   {/* AI 思考过程（独立可折叠块，在气泡上方） */}
-                  {console.log("[DEBUG] ThinkingBlock 渲染条件检查:", {
-                    "msg.role": msg.role,
-                    "msg.thinking": !!msg.thinking,
-                    "msg.thinkingLength": msg.thinking?.length,
-                    "msg.loading": msg.loading,
-                    "msg.waiting": msg.waiting,
-                    "msg.thinkingComplete": msg.thinkingComplete,
-                    "isStreaming": isStreaming,
-                  })}
-                  {msg.thinking && !msg.loading && (
+                  {msg.thinking && !msg.loading && !visibleWorkflowProgress && (
                     <ThinkingBlock
                       text={msg.thinking}
                       isComplete={msg.thinkingComplete || !isStreaming}

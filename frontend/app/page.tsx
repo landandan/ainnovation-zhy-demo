@@ -27,7 +27,17 @@ import {
   getAgentInputs,
   uploadFilesToDify,
   stopDifyTask,
-} from "@/lib/dify-api"
+} from '@/lib/dify-api'
+import {
+  WorkflowProgress,
+  createInitialProgress,
+  handleWorkflowStarted,
+  handleNodeStarted,
+  handleNodeFinished,
+  handleWorkflowFinished,
+  handleWorkflowError,
+  handleWorkflowStopped,
+} from '@/lib/workflow-progress'
 import { getUserSettings, updateUserSettings, isAuthenticated } from "@/lib/api-client"
 
 export interface MessageFileAttachment {
@@ -44,6 +54,7 @@ export interface Message {
   text: string
   images?: string[]
   files?: MessageFileAttachment[]
+  workflowProgress?: WorkflowProgress
   time: string
   loading?: boolean
   thinking?: string
@@ -138,17 +149,60 @@ function normalizeMessageAttachments(rawAttachments: unknown[]): MessageFileAtta
   })
 }
 
+function extractThinkingFromContent(content: string): {
+  thinking: string | null
+  mainText: string
+  hasThinkTag: boolean
+} {
+  if (!content) {
+    return {
+      thinking: null,
+      mainText: "",
+      hasThinkTag: false,
+    }
+  }
+
+  const openTag = "<think>"
+  const closeTag = "</think>"
+  const openIndex = content.indexOf(openTag)
+
+  if (openIndex === -1) {
+    return {
+      thinking: null,
+      mainText: content.trim(),
+      hasThinkTag: false,
+    }
+  }
+
+  const afterOpen = content.slice(openIndex + openTag.length)
+  const closeIndex = afterOpen.indexOf(closeTag)
+
+  if (closeIndex === -1) {
+    return {
+      thinking: afterOpen.trim() || null,
+      mainText: content.slice(0, openIndex).trim(),
+      hasThinkTag: true,
+    }
+  }
+
+  const thinking = afterOpen.slice(0, closeIndex).trim()
+  const mainText = `${content.slice(0, openIndex)}${afterOpen.slice(closeIndex + closeTag.length)}`.trim()
+
+  return {
+    thinking: thinking || null,
+    mainText,
+    hasThinkTag: true,
+  }
+}
+
 function mapMessage(m: MessageApi): Message {
   const content = m.content || "";
-  // 解析 <think> 标签
-  const thinkMatch = content.match(/<think>([\s\S]*?)<\/think>/);
-  const thinkingContent = thinkMatch ? thinkMatch[1] : null;
-  const mainText = content.replace(/<think>[\s\S]*?<\/think>/, '').trim();
+  const { thinking, mainText } = extractThinkingFromContent(content)
   
   return {
     role: m.role === "assistant" ? "ai" : m.role as "user" | "ai",
     text: mainText,
-    thinking: thinkingContent,
+    thinking,
     thinkingComplete: true, // 历史消息中的思考肯定是完成的
     files: normalizeMessageAttachments(m.attachments),
     time: new Date(m.created_at).toLocaleTimeString("zh-CN", { hour: "2-digit", minute: "2-digit" }),
@@ -178,6 +232,7 @@ export default function Page() {
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
   const [sidebarHovered, setSidebarHovered] = useState(false)
+  const [historySearch, setHistorySearch] = useState("")
 
   const maybeCloseSidebar = useCallback(() => {
     if (typeof window !== "undefined" && window.innerWidth < 1024) {
@@ -215,6 +270,12 @@ export default function Page() {
   const currentTaskIdRef = useRef<string | null>(null)
   /** 当前任务是否为 Workflow 类型（由 SSE 事件判定），用于选择正确的停止端点 */
   const isWorkflowTaskRef = useRef<boolean>(false)
+  /** 保存当前请求的上下文，用于重试 */
+  const lastRequestRef = useRef<{
+    userText: string
+    files?: Array<{ type: string; transfer_method: string; upload_file_id: string }>
+    userAttachments?: MessageFileAttachment[]
+  } | null>(null)
 
   /* ───── Toast hook ───── */
   const { toasts, dismissToast, success, error, warning, info } = useToast()
@@ -513,9 +574,11 @@ export default function Page() {
       const decoder = new TextDecoder()
       let buffer = ""
       let fullAnswer = ""
+      let rawAssistantContent = ""
       let fullThinking = ""
       let firstTokenArrived = false
       let thinkingComplete = false // 标记思考是否完成
+      let currentWorkflowProgress = createInitialProgress()
       let newDifyConversationId: string | null = null
       let assistantDifyMessageId: string | undefined
       const assistantAttachments: MessageFileAttachment[] = []
@@ -552,28 +615,45 @@ export default function Page() {
             switch (event.event) {
               // Workflow 类型事件：出现即标记为 Workflow 应用
               case "workflow_started":
+                isWorkflowTaskRef.current = true
+                if (event.task_id && !currentTaskIdRef.current) {
+                  currentTaskIdRef.current = event.task_id
+                }
+                currentWorkflowProgress = handleWorkflowStarted(currentWorkflowProgress, event)
+                chunkHasUpdates = true
+                break
+
               case "node_started":
                 isWorkflowTaskRef.current = true
                 if (event.task_id && !currentTaskIdRef.current) {
                   currentTaskIdRef.current = event.task_id
                 }
+                currentWorkflowProgress = handleNodeStarted(currentWorkflowProgress, event)
+                chunkHasUpdates = true
                 break
 
               case "node_finished":
+                isWorkflowTaskRef.current = true
+                if (event.task_id && !currentTaskIdRef.current) {
+                  currentTaskIdRef.current = event.task_id
+                }
+                currentWorkflowProgress = handleNodeFinished(currentWorkflowProgress, event)
+                chunkHasUpdates = true
+                break
+
               case "workflow_finished":
                 isWorkflowTaskRef.current = true
                 if (event.task_id && !currentTaskIdRef.current) {
                   currentTaskIdRef.current = event.task_id
                 }
+                currentWorkflowProgress = handleWorkflowFinished(currentWorkflowProgress)
                 chunkHasUpdates = true
                 break
 
               // Chatflow / Agent 类型事件
               case "agent_thought":
-                console.log("[DEBUG] 收到 agent_thought 事件:", event)
                 if (event.thought) {
                   fullThinking += event.thought
-                  console.log("[DEBUG] fullThinking 更新:", fullThinking)
                   chunkHasUpdates = true
                 }
                 if (event.task_id && !currentTaskIdRef.current) {
@@ -583,11 +663,18 @@ export default function Page() {
 
               case "message":
                 if (event.answer) {
+                  rawAssistantContent += event.answer
+                  const parsedContent = extractThinkingFromContent(rawAssistantContent)
+                  fullAnswer = parsedContent.mainText
+                  if (parsedContent.hasThinkTag) {
+                    fullThinking = parsedContent.thinking || ""
+                  }
                   if (!firstTokenArrived) {
                     firstTokenArrived = true
-                    thinkingComplete = true // 收到第一个消息事件，标记思考完成
                   }
-                  fullAnswer += event.answer
+                  thinkingComplete = parsedContent.hasThinkTag
+                    ? parsedContent.mainText.length > 0
+                    : true
                   chunkHasUpdates = true
                 }
                 if (event.task_id && !currentTaskIdRef.current) {
@@ -626,6 +713,7 @@ export default function Page() {
                 break
 
               case "error":
+                currentWorkflowProgress = handleWorkflowError(currentWorkflowProgress, event)
                 throw new Error(event.message || "Dify 返回错误")
             }
           } catch (parseError) {
@@ -642,6 +730,13 @@ export default function Page() {
                 ...updated[messageIndex],
                 text: fullAnswer,
                 files: assistantAttachments.length > 0 ? [...assistantAttachments] : updated[messageIndex].files,
+                workflowProgress:
+                  currentWorkflowProgress.status === "idle"
+                    ? updated[messageIndex].workflowProgress
+                    : {
+                        ...currentWorkflowProgress,
+                        nodes: currentWorkflowProgress.nodes.map((node) => ({ ...node })),
+                      },
                 thinking: fullThinking,
                 thinkingComplete: thinkingComplete,
                 waiting: false,
@@ -673,7 +768,7 @@ export default function Page() {
             await persistMessage(newConv.id, "user", userText, {
               attachments: userAttachments,
             })
-            await persistMessage(newConv.id, "assistant", fullAnswer, {
+            await persistMessage(newConv.id, "assistant", rawAssistantContent || fullAnswer, {
               attachments: assistantAttachments,
               difyMessageId: assistantDifyMessageId,
             })
@@ -686,7 +781,7 @@ export default function Page() {
         await persistMessage(activeConversationId, "user", userText, {
           attachments: userAttachments,
         })
-        await persistMessage(activeConversationId, "assistant", fullAnswer, {
+        await persistMessage(activeConversationId, "assistant", rawAssistantContent || fullAnswer, {
           attachments: assistantAttachments,
           difyMessageId: assistantDifyMessageId,
         })
@@ -697,7 +792,7 @@ export default function Page() {
         // 静默处理，不显示错误 toast
         setMessages((prev) =>
           prev.map((m) =>
-            m.waiting ? { ...m, waiting: false } : m,
+            m.waiting ? { ...m, waiting: false, loading: false } : m,
           ),
         )
         return
@@ -705,18 +800,29 @@ export default function Page() {
 
       const errMsg = err instanceof Error ? err.message : "未知错误"
       const time = new Date().toLocaleTimeString("zh-CN", { hour: "2-digit", minute: "2-digit" })
-      // 不显示 toast 错误提示，仅在聊天中委婉提示
-
       setMessages((prev) => {
-        const filtered = prev.filter((m) => !m.loading && !m.waiting)
-        return [
-          ...filtered,
-          {
-            role: "ai",
-            text: "抱歉，我暂时无法回答这个问题。请稍后再试，或换个方式提问。",
+        const latestAiIndex = [...prev].reverse().findIndex((m) => m.role === "ai")
+        if (latestAiIndex === -1) return prev
+
+        const actualIndex = prev.length - 1 - latestAiIndex
+        return prev.map((m, index) => {
+          if (index !== actualIndex) return m
+
+          const nextWorkflowProgress = m.workflowProgress
+            ? m.workflowProgress.status === "error"
+              ? m.workflowProgress
+              : handleWorkflowStopped(m.workflowProgress, errMsg)
+            : undefined
+
+          return {
+            ...m,
+            waiting: false,
+            loading: false,
+            workflowProgress: nextWorkflowProgress,
+            text: m.text || (nextWorkflowProgress ? "" : "抱歉，我暂时无法回答这个问题。请稍后再试，或换个方式提问。"),
             time,
-          },
-        ]
+          }
+        })
       })
     } finally {
       // 清理当前 controller
@@ -724,7 +830,7 @@ export default function Page() {
         abortControllerRef.current = null
       }
       setMessages((prev) =>
-        prev.map((m) => (m.waiting ? { ...m, waiting: false } : m)),
+        prev.map((m) => (m.waiting ? { ...m, waiting: false, loading: false } : m)),
       )
       setIsStreaming(false)
     }
@@ -749,12 +855,50 @@ export default function Page() {
     }
     setMessages((prev) =>
       prev.map((m) =>
-        m.waiting ? { ...m, waiting: false, text: m.text || "(已停止生成)" } : m,
+        m.waiting
+          ? {
+              ...m,
+              waiting: false,
+              loading: false,
+              text: m.text || "(已停止生成)",
+              workflowProgress: m.workflowProgress
+                ? handleWorkflowStopped(m.workflowProgress, "流程已停止")
+                : m.workflowProgress,
+            }
+          : m,
       ),
     )
     setIsStreaming(false)
     // 静默处理，不显示提示
   }, [currentAgentId, user])
+
+  /* ───── 重试工作流请求 ───── */
+  const handleRetryWorkflow = async () => {
+    const lastRequest = lastRequestRef.current
+    if (!lastRequest) {
+      warning("没有可重试的请求")
+      return
+    }
+
+    // 构建新的消息列表
+    const time = new Date().toLocaleTimeString("zh-CN", { hour: "2-digit", minute: "2-digit" })
+    const newMessages: Message[] = [...messages]
+    
+    // 添加 AI 等待消息
+    newMessages.push({ 
+      role: "ai", 
+      text: "", 
+      time, 
+      workflowProgress: createInitialProgress(),
+      waiting: true, 
+      thinking: "", 
+      thinkingComplete: false 
+    })
+    setMessages(newMessages)
+
+    // 重新调用 API
+    callDifyAPI(lastRequest.userText, newMessages, lastRequest.files, lastRequest.userAttachments)
+  }
 
   /* ───── 发送消息（异步：先上传文件，再合并到 chat 请求） ───── */
   const handleSendMessage = async (text: string) => {
@@ -792,6 +936,7 @@ export default function Page() {
       role: "ai", 
       text: "", 
       time, 
+      workflowProgress: createInitialProgress(),
       waiting: true, 
       thinking: "", 
       thinkingComplete: false 
@@ -818,6 +963,13 @@ export default function Page() {
         error(`附件上传失败: ${errMsg}`)
         // 上传失败时仍然发送文本消息，不带 files
       }
+    }
+
+    // 保存请求上下文，用于重试
+    lastRequestRef.current = {
+      userText: text || "请分析我上传的文件",
+      files: difyFiles,
+      userAttachments,
     }
 
     callDifyAPI(text || "请分析我上传的文件", newMessages, difyFiles, userAttachments)
@@ -858,14 +1010,143 @@ export default function Page() {
       <div
         style={{
           minHeight: "100vh",
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
+          display: "grid",
+          gridTemplateColumns: "320px minmax(0, 1fr)",
           background: "var(--background)",
           color: "var(--text-secondary)",
         }}
       >
-        正在加载...
+        <div
+          style={{
+            borderRight: "1px solid var(--border)",
+            padding: "20px 16px",
+            display: "flex",
+            flexDirection: "column",
+            gap: "14px",
+            background: "var(--sidebar)",
+          }}
+        >
+          <div
+            style={{
+              width: "140px",
+              height: "18px",
+              borderRadius: "999px",
+              background: "var(--secondary)",
+            }}
+          />
+          <div
+            style={{
+              width: "100%",
+              height: "44px",
+              borderRadius: "16px",
+              background: "var(--secondary)",
+            }}
+          />
+          {Array.from({ length: 6 }).map((_, index) => (
+            <div
+              key={index}
+              style={{
+                width: "100%",
+                height: "56px",
+                borderRadius: "16px",
+                background: "var(--secondary)",
+                opacity: 1 - index * 0.08,
+              }}
+            />
+          ))}
+        </div>
+        <div
+          style={{
+            display: "flex",
+            flexDirection: "column",
+            minWidth: 0,
+          }}
+        >
+          <div
+            style={{
+              height: "64px",
+              borderBottom: "1px solid var(--border)",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "space-between",
+              padding: "0 24px",
+            }}
+          >
+            <div
+              style={{
+                width: "120px",
+                height: "18px",
+                borderRadius: "999px",
+                background: "var(--secondary)",
+              }}
+            />
+            <div style={{ display: "flex", gap: "12px" }}>
+              {Array.from({ length: 2 }).map((_, index) => (
+                <div
+                  key={index}
+                  style={{
+                    width: "38px",
+                    height: "38px",
+                    borderRadius: "12px",
+                    background: "var(--secondary)",
+                  }}
+                />
+              ))}
+            </div>
+          </div>
+          <div
+            style={{
+              flex: 1,
+              padding: "32px 24px 20px",
+              display: "flex",
+              flexDirection: "column",
+              gap: "18px",
+              alignItems: "center",
+              justifyContent: "center",
+            }}
+          >
+            <div
+              style={{
+                width: "min(420px, 72%)",
+                height: "24px",
+                borderRadius: "999px",
+                background: "var(--secondary)",
+              }}
+            />
+            <div
+              style={{
+                width: "min(560px, 86%)",
+                height: "14px",
+                borderRadius: "999px",
+                background: "var(--secondary)",
+              }}
+            />
+            <div
+              style={{
+                width: "min(760px, 92%)",
+                display: "grid",
+                gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))",
+                gap: "14px",
+                marginTop: "10px",
+              }}
+            >
+              {Array.from({ length: 4 }).map((_, index) => (
+                <div
+                  key={index}
+                  style={{
+                    height: "64px",
+                    borderRadius: "18px",
+                    background: "var(--secondary)",
+                    opacity: 1 - index * 0.08,
+                  }}
+                />
+              ))}
+            </div>
+            <div style={{ fontSize: "13px", color: "var(--text-muted)" }}>
+              正在准备会话环境与历史记录...
+            </div>
+          </div>
+        </div>
       </div>
     )
   }
@@ -918,6 +1199,7 @@ export default function Page() {
           onSelectAgent={handleSelectAgent}
           collapsed={sidebarCollapsed && !sidebarHovered}
           onToggleCollapse={() => setSidebarCollapsed(!sidebarCollapsed)}
+          searchQuery={historySearch}
         />
       </div>
 
@@ -926,6 +1208,8 @@ export default function Page() {
           onMenuToggle={() => setSidebarOpen(true)}
           currentTheme={theme}
           onThemeChange={handleThemeChange}
+          searchQuery={historySearch}
+          onSearchChange={setHistorySearch}
         />
 
         <ChatArea
@@ -937,6 +1221,8 @@ export default function Page() {
           agentDesc={currentAgentDesc}
           quickQuestions={currentAgentQuickQuestions}
           currentAgentId={currentAgentId}
+          onRetryWorkflow={handleRetryWorkflow}
+          onStopWorkflow={handleStopStreaming}
         />
 
         <InputArea
@@ -953,6 +1239,7 @@ export default function Page() {
           isStreaming={isStreaming}
           onStopStreaming={handleStopStreaming}
           agentLabel={currentAgentLabel === "未知应用" ? "深海智航" : currentAgentLabel}
+          onOpenSettings={handleOpenSettings}
         />
       </main>
 

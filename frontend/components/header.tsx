@@ -7,9 +7,11 @@ interface HeaderProps {
   onMenuToggle: () => void
   currentTheme: ThemeId
   onThemeChange: (theme: ThemeId) => void
+  searchQuery: string
+  onSearchChange: (value: string) => void
 }
 
-export function Header({ onMenuToggle, currentTheme, onThemeChange }: HeaderProps) {
+export function Header({ onMenuToggle, currentTheme, onThemeChange, searchQuery, onSearchChange }: HeaderProps) {
   const [searchOpen, setSearchOpen] = useState(false)
   const searchInputRef = useRef<HTMLInputElement>(null)
 
@@ -19,6 +21,12 @@ export function Header({ onMenuToggle, currentTheme, onThemeChange }: HeaderProp
       searchInputRef.current.focus()
     }
   }, [searchOpen])
+
+  useEffect(() => {
+    if (searchQuery && !searchOpen) {
+      setSearchOpen(true)
+    }
+  }, [searchQuery, searchOpen])
 
   const currentThemeData = THEMES.find((t) => t.id === currentTheme)
 
@@ -57,7 +65,13 @@ export function Header({ onMenuToggle, currentTheme, onThemeChange }: HeaderProp
       {/* 搜索按钮 */}
       <div className={`flex items-center gap-2 transition-all duration-300 ${searchOpen ? "w-[240px]" : "w-auto"}`}>
         <button
-          onClick={() => setSearchOpen(!searchOpen)}
+          onClick={() => {
+            if (searchOpen && !searchQuery) {
+              setSearchOpen(false)
+              return
+            }
+            setSearchOpen(true)
+          }}
           className="flex h-[38px] w-[38px] items-center justify-center rounded-xl transition-all hover:bg-white/10"
           style={{ color: "var(--text-secondary)" }}
           aria-label="搜索"
@@ -68,19 +82,48 @@ export function Header({ onMenuToggle, currentTheme, onThemeChange }: HeaderProp
           </svg>
         </button>
         {searchOpen && (
-          <input
-            ref={searchInputRef}
-            type="text"
-            placeholder="搜索对话..."
-            className="h-[38px] flex-1 min-w-0 rounded-xl border-none px-3 text-sm outline-none transition-all"
+          <div
+            className="flex h-[38px] flex-1 items-center rounded-xl px-2"
             style={{
               background: "var(--secondary)",
               color: "var(--foreground)",
             }}
-            onKeyDown={(e) => {
-              if (e.key === "Escape") setSearchOpen(false)
-            }}
-          />
+          >
+            <input
+              ref={searchInputRef}
+              type="text"
+              placeholder="搜索历史会话..."
+              className="h-full flex-1 min-w-0 border-none bg-transparent px-1 text-sm outline-none transition-all"
+              value={searchQuery}
+              onChange={(e) => onSearchChange(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Escape") {
+                  if (searchQuery) {
+                    onSearchChange("")
+                  } else {
+                    setSearchOpen(false)
+                  }
+                }
+              }}
+            />
+            {searchQuery && (
+              <button
+                onClick={() => {
+                  onSearchChange("")
+                  searchInputRef.current?.focus()
+                }}
+                className="flex h-7 w-7 items-center justify-center rounded-lg transition-all hover:bg-white/10"
+                style={{ color: "var(--text-muted)" }}
+                aria-label="清空搜索"
+                title="清空搜索"
+              >
+                <svg width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                  <line x1="18" y1="6" x2="6" y2="18" />
+                  <line x1="6" y1="6" x2="18" y2="18" />
+                </svg>
+              </button>
+            )}
+          </div>
         )}
       </div>
 

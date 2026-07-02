@@ -16,6 +16,7 @@ interface InputAreaProps {
   isStreaming?: boolean
   onStopStreaming?: () => void
   agentLabel?: string
+  onOpenSettings?: () => void
 }
 
 export function InputArea({
@@ -32,6 +33,7 @@ export function InputArea({
   isStreaming = false,
   onStopStreaming,
   agentLabel = "深海智航",
+  onOpenSettings,
 }: InputAreaProps) {
   const [text, setText] = useState("")
   const textareaRef = useRef<HTMLTextAreaElement>(null)
@@ -124,7 +126,17 @@ export function InputArea({
                   animation: "fadeSlideUp 0.25s ease",
                 }}
               >
-                <span className="text-lg">📄</span>
+                <div
+                  className="flex h-7 w-7 items-center justify-center rounded-lg"
+                  style={{ background: "var(--secondary)", color: "var(--text-secondary)" }}
+                >
+                  <svg width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                    <polyline points="14 2 14 8 20 8" />
+                    <line x1="8" y1="13" x2="16" y2="13" />
+                    <line x1="8" y1="17" x2="13" y2="17" />
+                  </svg>
+                </div>
                 <span
                   className="max-w-[56px] truncate text-[9px] font-medium"
                   style={{ color: "var(--foreground)" }}
@@ -166,21 +178,22 @@ export function InputArea({
 
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
-              <button
-                className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-sm transition-all hover:bg-white/5"
-                style={{ color: "var(--text-secondary)" }}
+              <div
+                className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-sm"
+                style={{ color: "var(--text-secondary)", background: "var(--primary)" }}
               >
                 <svg width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
                   <circle cx="12" cy="12" r="10" />
                   <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3" />
                   <line x1="12" y1="17" x2="12.01" y2="17" />
                 </svg>
-                <span>{agentLabel}</span>
-              </button>
+                <span>当前助手: {agentLabel}</span>
+              </div>
             </div>
 
             <div className="flex items-center gap-1">
               <button
+                onClick={onOpenSettings}
                 className="flex h-9 w-9 items-center justify-center rounded-lg transition-all hover:bg-white/5"
                 style={{ color: "var(--text-secondary)" }}
                 title="设置"
@@ -239,14 +252,12 @@ export function InputArea({
 
         {/* Security hint */}
         <div
-          className="flex items-center justify-center gap-1.5 text-[10px]"
+          className="flex flex-wrap items-center justify-center gap-x-3 gap-y-1 text-[10px]"
           style={{ color: "var(--text-muted)" }}
         >
-          <svg width="11" height="11" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-            <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
-            <path d="M7 11V7a5 5 0 0 1 10 0v4" />
-          </svg>
-          数据加密传输中 · 您的信息安全受保护
+          <span>Enter 发送</span>
+          <span>Shift + Enter 换行</span>
+          <span>支持图片与文档上传</span>
         </div>
       </div>
 

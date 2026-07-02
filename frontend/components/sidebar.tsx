@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useMemo, useState } from "react"
 import type { ChatHistoryItem } from "@/app/page"
 import type { UserInfo } from "@/lib/api-client"
 import type { AgentDef } from "./agent-section"
@@ -41,6 +41,7 @@ interface SidebarProps {
   collapsed?: boolean
   /** 切换折叠状态 */
   onToggleCollapse?: () => void
+  searchQuery?: string
 }
 
 export function Sidebar({
@@ -62,6 +63,7 @@ export function Sidebar({
   onSelectAgent,
   collapsed = false,
   onToggleCollapse,
+  searchQuery = "",
 }: SidebarProps) {
   const displayName = user?.display_name || user?.username || "用户"
   const userInitial = displayName.charAt(0).toUpperCase()
@@ -77,6 +79,17 @@ export function Sidebar({
   // 重命名状态
   const [editingHistoryId, setEditingHistoryId] = useState<number | null>(null)
   const [editTitle, setEditTitle] = useState("")
+
+  const normalizedSearch = searchQuery.trim().toLowerCase()
+  const filteredChatHistory = useMemo(() => {
+    if (!normalizedSearch) return chatHistory
+    return chatHistory.filter((item) => {
+      const agentName = agentNames[item.agent] || ""
+      return [item.title, item.preview, agentName].some((value) =>
+        value.toLowerCase().includes(normalizedSearch),
+      )
+    })
+  }, [agentNames, chatHistory, normalizedSearch])
 
   const handleLogout = () => {
     onLogout()
@@ -142,7 +155,7 @@ export function Sidebar({
             <div className="flex items-center gap-1">
               <button
                 onClick={onToggleCollapse}
-                className="expand-btn flex h-[36px] w-[36px] items-center justify-center rounded-xl transition-all hover:bg-gray-100 dark:hover:bg-white/10 flex-shrink-0"
+                className="expand-btn hidden h-[36px] w-[36px] items-center justify-center rounded-xl transition-all hover:bg-gray-100 dark:hover:bg-white/10 flex-shrink-0 lg:flex"
                 style={{ color: "var(--text-muted)" }}
                 aria-label={collapsed ? "展开侧边栏" : "折叠侧边栏"}
                 title={collapsed ? "展开侧边栏" : "折叠侧边栏"}
@@ -156,10 +169,11 @@ export function Sidebar({
                 className="flex h-[36px] w-[36px] items-center justify-center rounded-xl transition-all hover:bg-gray-100 dark:hover:bg-white/10 lg:hidden flex-shrink-0"
                 style={{ color: "var(--text-muted)" }}
                 aria-label="关闭菜单"
+                title="关闭菜单"
               >
                 <svg width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-                  <rect x="3" y="3" width="18" height="18" rx="4" />
-                  <line x1="9" y1="3" x2="9" y2="21" />
+                  <line x1="18" y1="6" x2="6" y2="18" />
+                  <line x1="6" y1="6" x2="18" y2="18" />
                 </svg>
               </button>
             </div>
@@ -315,18 +329,38 @@ export function Sidebar({
               )}
             </div>
 
+            {normalizedSearch && (
+              <div className="px-3 pb-2 text-[11px]" style={{ color: "var(--text-muted)" }}>
+                {filteredChatHistory.length > 0
+                  ? `匹配到 ${filteredChatHistory.length} 条会话`
+                  : `没有找到与“${searchQuery.trim()}”相关的会话`}
+              </div>
+            )}
+
             {chatHistory.length === 0 ? (
               <div
                 className="py-10 text-center rounded-2xl border-2 border-dashed"
                 style={{ color: "var(--text-muted)", borderColor: "var(--border)" }}
               >
-                <div className="text-4xl mb-3">💬</div>
+                <div className="mx-auto mb-3 flex h-11 w-11 items-center justify-center rounded-2xl" style={{ background: "var(--secondary)", color: "var(--text-muted)" }}>
+                  <svg width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                    <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+                  </svg>
+                </div>
                 <div className="text-[13px] font-medium">暂无对话记录</div>
                 <div className="text-[12px] mt-1 opacity-70">点击「新建会话」开始</div>
               </div>
+            ) : filteredChatHistory.length === 0 ? (
+              <div
+                className="py-10 text-center rounded-2xl border"
+                style={{ color: "var(--text-muted)", borderColor: "var(--border)", background: "var(--card)" }}
+              >
+                <div className="text-[13px] font-medium">没有匹配结果</div>
+                <div className="mt-1 text-[12px] opacity-70">试试搜索会话标题或所属助手</div>
+              </div>
             ) : (
               <div className="sidebar-history-list space-y-1 overflow-y-auto flex-1 pr-1">
-                {chatHistory.map((item) => {
+                {filteredChatHistory.map((item) => {
                   const hovered = hoveredHistoryId === item.id
                   const activeStyle = {
                     background: "var(--card)",
@@ -532,10 +566,10 @@ export function Sidebar({
                 <label className="flex items-center gap-2 text-[12px]" style={{ color: "var(--text-secondary)" }}>
                   <input
                     type="checkbox"
-                    checked={selectedHistoryIds.size === chatHistory.length && chatHistory.length > 0}
+                    checked={selectedHistoryIds.size === filteredChatHistory.length && filteredChatHistory.length > 0}
                     onChange={(e) => {
                       if (e.target.checked) {
-                        setSelectedHistoryIds(new Set(chatHistory.map((c) => c.id)))
+                        setSelectedHistoryIds(new Set(filteredChatHistory.map((c) => c.id)))
                       } else {
                         setSelectedHistoryIds(new Set())
                       }

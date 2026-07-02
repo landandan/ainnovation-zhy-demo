@@ -25,16 +25,17 @@ interface ThinkingBlockProps {
 export function ThinkingBlock({ text, isComplete, defaultExpanded = false, autoCollapse = false }: ThinkingBlockProps) {
   const [expanded, setExpanded] = useState(defaultExpanded)
   const [hasUserToggled, setHasUserToggled] = useState(false) // 标记用户是否手动操作过
+  const shouldAutoCollapse = text.trim().length > 140
   
   // 当 isComplete 变为 true 且 autoCollapse 为 true 时，且用户没手动操作过，延迟一小段时间再自动折叠
   useEffect(() => {
-    if (isComplete && autoCollapse && !hasUserToggled) {
+    if (isComplete && autoCollapse && shouldAutoCollapse && !hasUserToggled) {
       const timer = setTimeout(() => {
         setExpanded(false)
-      }, 600) // 延迟 600ms 折叠，让用户看到"已思考"状态
+      }, 1800) // 保留更充足的阅读时间，再自动收起长思考内容
       return () => clearTimeout(timer)
     }
-  }, [isComplete, autoCollapse, hasUserToggled])
+  }, [isComplete, autoCollapse, hasUserToggled, shouldAutoCollapse])
 
   return (
     <div
