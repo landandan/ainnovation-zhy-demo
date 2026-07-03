@@ -1,0 +1,21 @@
+# 1. 忽略本地的虚拟环境（极其重要，否则会把 Windows 的依赖带入 Linux 构建环境）
+venv/
+.venv/
+env/
+__pycache__/
+*.pyc
+
+# 2. 忽略我们自己写的脚本和生成的打包产物
+scripts/*.tar
+scripts/*.tar.gz
+deploy.sh
+
+# 3. 忽略本地的环境变量和敏感文件
+# .env
+
+# 4. 忽略本地的持久化数据和 SQLite 数据库
+# data/
+
+# 5. 忽略 Git 历史
+.git/
+.gitignore

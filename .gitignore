@@ -1,0 +1,30 @@
+# v0 sandbox internal files
+__v0_runtime_loader.js
+__v0_devtools.tsx
+__v0_jsx-dev-runtime.ts
+.snowflake/
+.v0-trash/
+.vercel/
+amp
+
+# Eval Script/ Local Document
+eval/
+enhancement-doc/
+deploy_package/
+*db
+
+# Environment variables
+.env*.local
+.env
+
+# Common ignores
+__pycache__
+venv
+out/
+node_modules
+.next/
+.DS_Store
+.npmrc
+package-lock.json
+yarn.lock
+pnpm-lock.yaml
