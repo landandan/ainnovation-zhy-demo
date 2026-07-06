@@ -138,7 +138,20 @@ python scripts/init_admin.py
 
 ```bash
 cd backend
-source venv/bin/activate
+// 创建并激活虚拟环境
+python3 -m venv venv
+// 安装依赖
+pip install -r requirements.txt
+// 复制环境变量模板
+cp .env.example .env
+// 注意： windows 环境需要将 `DATABASE_URL` 从 `../data/cnooc.db` 改为 `../../data/cnooc.db`
+# 示例：  
+DATABASE_URL=sqlite:///../../data/cnooc.db
+
+cd ..
+mkdir -p data
+// 初始化数据库
+python scripts/init_admin.py --force
 
 # 启动 Flask（debug 模式，代码修改自动 reload）
 python app.py
