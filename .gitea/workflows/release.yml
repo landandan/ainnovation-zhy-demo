@@ -37,7 +37,7 @@ jobs:
 
           TAG="v$(date +%Y.%m%d)-${{ github.run_number }}-${SHORT_SHA}"
 
-          BUILD_TIME=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+          BUILD_TIME=$(TZ="Asia/Shanghai" date +"%Y-%m-%d %H:%M:%S")
 
           echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
           echo "build_time=${BUILD_TIME}" >> "$GITHUB_OUTPUT"
