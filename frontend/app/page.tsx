@@ -7,6 +7,7 @@ import { Header } from "@/components/header"
 import { ChatArea } from "@/components/chat-area"
 import { InputArea } from "@/components/input-area"
 import { Toast } from "@/components/toast"
+import { ResourceSidebar } from "@/components/resource-sidebar"
 import { useToast } from "@/components/toast"
 import { useAuth } from "@/lib/auth-store"
 import {
@@ -49,6 +50,11 @@ export interface MessageFileAttachment {
   type?: string
 }
 
+export interface ResourceItem {
+  document_name: string
+  content: string
+}
+
 export interface Message {
   role: "user" | "ai"
   text: string
@@ -60,6 +66,7 @@ export interface Message {
   thinking?: string
   thinkingComplete?: boolean
   waiting?: boolean
+  resourcesList?: ResourceItem[]
 }
 
 export interface ChatHistoryItem {
@@ -195,6 +202,17 @@ function extractThinkingFromContent(content: string): {
   }
 }
 
+function normalizeResources(rawResources: unknown): ResourceItem[] {
+  if (!Array.isArray(rawResources)) return []
+  return rawResources.map((item) => {
+    const record = item as Record<string, unknown>
+    return {
+      document_name: typeof record.document_name === "string" ? record.document_name : "未知文档",
+      content: typeof record.content === "string" ? record.content : "",
+    }
+  })
+}
+
 function mapMessage(m: MessageApi): Message {
   const content = m.content || "";
   const { thinking, mainText } = extractThinkingFromContent(content)
@@ -205,6 +223,7 @@ function mapMessage(m: MessageApi): Message {
     thinking: thinking || undefined,
     thinkingComplete: true, // 历史消息中的思考肯定是完成的
     files: normalizeMessageAttachments(m.attachments),
+    resourcesList: normalizeResources((m as any).resources_list),
     time: new Date(m.created_at).toLocaleTimeString("zh-CN", { hour: "2-digit", minute: "2-digit" }),
   }
 }
@@ -258,10 +277,13 @@ export default function Page() {
   const [rawDocFiles, setRawDocFiles] = useState<File[]>([])
   const [isRecording, setIsRecording] = useState(false)
   const [isStreaming, setIsStreaming] = useState(false)
+  const [resourceSidebarOpen, setResourceSidebarOpen] = useState(false)
+  const [resourceSidebarResources, setResourceSidebarResources] = useState<ResourceItem[]>([])
   const chatAreaRef = useRef<HTMLDivElement>(null)
 
   /* ───── 对话持久化状态 ───── */
   const [activeConversationId, setActiveConversationId] = useState<number | null>(null)
+  const [sessionId, setSessionId] = useState<string>(() => `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`)
   const difyConversationIdRef = useRef<string | null>(null)
 
   /* ───── 流式请求中断 ───── */
@@ -303,7 +325,8 @@ export default function Page() {
           getAgents(),
           getConversations(),
         ])
-
+        console.log('agentsRes123:', agentsRes)
+        console.log('convsRes123:', convsRes)
         if (agentsRes.agents?.length > 0) {
           const mapped = agentsRes.agents.map(mapAgentDef)
           setAgentDefs(mapped)
@@ -454,6 +477,7 @@ export default function Page() {
   const handleNewChat = () => {
     setMessages([])
     setActiveConversationId(null)
+    setSessionId(`${Date.now()}-${Math.random().toString(36).substr(2, 9)}`)
     difyConversationIdRef.current = null
     setSidebarOpen(false)
     setIsStreaming(false)
@@ -479,6 +503,7 @@ export default function Page() {
       // 切换到该对话所属的智能体
       const conv = conversations.find((c) => c.id === id)
       if (conv) setCurrentAgentId(conv.agent_id_str)
+      setSessionId(`${Date.now()}-${Math.random().toString(36).substr(2, 9)}`)
       difyConversationIdRef.current = null
       maybeCloseSidebar()
       // 静默切换，不显示提示
@@ -566,6 +591,7 @@ export default function Page() {
         agentId: currentAgentId,
         signal: controller.signal,
         files,
+        sessionId,
       })
 
       const reader = response.body?.getReader()
@@ -581,6 +607,7 @@ export default function Page() {
       let currentWorkflowProgress = createInitialProgress()
       let newDifyConversationId: string | null = null
       let assistantDifyMessageId: string | undefined
+      let resourcesList: any = []
       const assistantAttachments: MessageFileAttachment[] = []
       const aiTime = new Date().toLocaleTimeString("zh-CN", { hour: "2-digit", minute: "2-digit" })
       // 重置当前 task_id 和 workflow 标志（新一轮请求）
@@ -594,6 +621,7 @@ export default function Page() {
         if (done) break
 
         buffer += decoder.decode(value, { stream: true })
+        console.log('buffer123:', buffer)
         const lines = buffer.split("\n")
         buffer = lines.pop() || ""
 
@@ -608,6 +636,7 @@ export default function Page() {
 
           try {
             const event = JSON.parse(jsonStr)
+            console.log('event123:', event)
             if (typeof event.message_id === "string" && event.message_id.trim()) {
               assistantDifyMessageId = event.message_id.trim()
             }
@@ -664,6 +693,7 @@ export default function Page() {
               case "message":
                 if (event.answer) {
                   rawAssistantContent += event.answer
+                  resourcesList = event.retriever_resources || []
                   const parsedContent = extractThinkingFromContent(rawAssistantContent)
                   fullAnswer = parsedContent.mainText
                   if (parsedContent.hasThinkTag) {
@@ -739,6 +769,7 @@ export default function Page() {
                       },
                 thinking: fullThinking,
                 thinkingComplete: thinkingComplete,
+                resourcesList: resourcesList,
                 waiting: false,
                 loading: false,
                 time: aiTime,
@@ -1204,42 +1235,54 @@ export default function Page() {
       </div>
 
       <main className="main">
-        <Header
-          onMenuToggle={() => setSidebarOpen(true)}
-          currentTheme={theme}
-          onThemeChange={handleThemeChange}
-          searchQuery={historySearch}
-          onSearchChange={setHistorySearch}
-        />
+        <div className="main-content">
+          <Header
+            onMenuToggle={() => setSidebarOpen(true)}
+            currentTheme={theme}
+            onThemeChange={handleThemeChange}
+            searchQuery={historySearch}
+            onSearchChange={setHistorySearch}
+          />
 
-        <ChatArea
-          ref={chatAreaRef}
-          messages={messages}
-          onUseSuggestion={(text) => handleSendMessage(text)}
-          isStreaming={isStreaming}
-          agentLabel={currentAgentLabel === "未知应用" ? "深海智航" : currentAgentLabel}
-          agentDesc={currentAgentDesc}
-          quickQuestions={currentAgentQuickQuestions}
-          currentAgentId={currentAgentId}
-          onRetryWorkflow={handleRetryWorkflow}
-          onStopWorkflow={handleStopStreaming}
-        />
+          <ChatArea
+            ref={chatAreaRef}
+            messages={messages}
+            onUseSuggestion={(text) => handleSendMessage(text)}
+            isStreaming={isStreaming}
+            agentLabel={currentAgentLabel === "未知应用" ? "深海智航" : currentAgentLabel}
+            agentDesc={currentAgentDesc}
+            quickQuestions={currentAgentQuickQuestions}
+            currentAgentId={currentAgentId}
+            onRetryWorkflow={handleRetryWorkflow}
+            onStopWorkflow={handleStopStreaming}
+            onOpenResources={(resources) => {
+              setResourceSidebarResources(resources)
+              setResourceSidebarOpen(true)
+            }}
+          />
 
-        <InputArea
-          uploadedImages={uploadedImages}
-          uploadedFiles={uploadedFiles}
-          onSendMessage={handleSendMessage}
-          onImageUpload={handleImageUpload}
-          onFileUpload={handleFileUpload}
-          onRemoveImage={handleRemoveImage}
-          onRemoveFile={handleRemoveFile}
-          onVoiceToggle={handleVoiceToggle}
-          isRecording={isRecording}
-          disabled={isStreaming}
-          isStreaming={isStreaming}
-          onStopStreaming={handleStopStreaming}
-          agentLabel={currentAgentLabel === "未知应用" ? "深海智航" : currentAgentLabel}
-          onOpenSettings={handleOpenSettings}
+          <InputArea
+            uploadedImages={uploadedImages}
+            uploadedFiles={uploadedFiles}
+            onSendMessage={handleSendMessage}
+            onImageUpload={handleImageUpload}
+            onFileUpload={handleFileUpload}
+            onRemoveImage={handleRemoveImage}
+            onRemoveFile={handleRemoveFile}
+            onVoiceToggle={handleVoiceToggle}
+            isRecording={isRecording}
+            disabled={isStreaming}
+            isStreaming={isStreaming}
+            onStopStreaming={handleStopStreaming}
+            agentLabel={currentAgentLabel === "未知应用" ? "深海智航" : currentAgentLabel}
+            onOpenSettings={handleOpenSettings}
+          />
+        </div>
+
+        <ResourceSidebar
+          isOpen={resourceSidebarOpen}
+          onClose={() => setResourceSidebarOpen(false)}
+          resources={resourceSidebarResources}
         />
       </main>
 

@@ -1,7 +1,7 @@
 "use client"
 
 import { forwardRef, useState, useEffect, useRef } from "react"
-import type { Message } from "@/app/page"
+import type { Message, ResourceItem } from "@/app/page"
 import { MessageBubble } from "./message-bubble"
 import { ThinkingBlock } from "./thinking-block"
 import { CanvasDragonAvatar } from "./canvas-dragon-avatar"
@@ -17,12 +17,17 @@ interface ChatAreaProps {
   currentAgentId?: string
   onRetryWorkflow?: () => void
   onStopWorkflow?: () => void
+  onOpenResources?: (resources: ResourceItem[]) => void
 }
 
 export const ChatArea = forwardRef<HTMLDivElement, ChatAreaProps>(
-  function ChatArea({ messages, onUseSuggestion, isStreaming, agentLabel = "深海智航", agentDesc, quickQuestions, currentAgentId, onRetryWorkflow, onStopWorkflow }, ref) {
+  function ChatArea({ messages, onUseSuggestion, isStreaming, agentLabel = "深海智航", agentDesc, quickQuestions, currentAgentId, onRetryWorkflow, onStopWorkflow, onOpenResources }, ref) {
     const [showScrollButton, setShowScrollButton] = useState(false)
     const internalRef = useRef<HTMLDivElement>(null)
+
+    const handleResourceClick = (resources: ResourceItem[]) => {
+      onOpenResources?.(resources)
+    }
 
     const setRefs = (node: HTMLDivElement | null) => {
       ;(internalRef as React.MutableRefObject<HTMLDivElement | null>).current = node
@@ -64,7 +69,7 @@ export const ChatArea = forwardRef<HTMLDivElement, ChatAreaProps>(
       // 使用 requestAnimationFrame 确保在 DOM 更新后执行滚动
       requestAnimationFrame(() => {
         // 判断是否在底部附近 (阈值设为 150px)
-        const isNearBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 150
+        const isNearBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 180
         
         // 如果最后一条消息是用户发送的，或者正在流式输出且在底部附近，强制滚动到底部
         const lastMessage = messages[messages.length - 1]
@@ -210,7 +215,7 @@ export const ChatArea = forwardRef<HTMLDivElement, ChatAreaProps>(
     return (
       <div
         ref={setRefs}
-        className="flex flex-1 flex-col overflow-y-auto"
+        className="flex flex-1 flex-col overflow-y-auto transition-all duration-300"
         style={{ background: "var(--background)" }}
       >
         <div className="flex flex-col gap-5 p-4 sm:p-6 pb-2 max-w-[960px] mx-auto w-full">
@@ -432,6 +437,44 @@ export const ChatArea = forwardRef<HTMLDivElement, ChatAreaProps>(
                       agentId={currentAgentId}
                       attachments={msg.files}
                     />
+                  )}
+
+                  {!isUser && msg.resourcesList && msg.resourcesList.length > 0 && (
+                    <button
+                      onClick={() => handleResourceClick(msg.resourcesList!)}
+                      className="w-full flex items-center justify-between px-3 py-2.5 rounded-xl border transition-all hover:border-[var(--accent)] hover:bg-[var(--secondary)] group"
+                      style={{
+                        borderColor: "var(--border)",
+                        background: "rgba(255,255,255,0.04)",
+                      }}
+                    >
+                      <div className="flex items-center gap-2.5">
+                        <svg width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" style={{ color: "var(--text-muted)" }}>
+                          <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                          <polyline points="14 2 14 8 20 8" />
+                          <line x1="8" y1="13" x2="16" y2="13" />
+                          <line x1="8" y1="17" x2="13" y2="17" />
+                        </svg>
+                        <span className="text-xs font-medium" style={{ color: "var(--text-secondary)" }}>
+                          {msg.resourcesList[0].document_name}
+                        </span>
+                        <span className="text-[10px] px-2 py-0.5 rounded-full" style={{ background: "var(--secondary)", color: "var(--text-muted)" }}>
+                          {msg.resourcesList.length}
+                        </span>
+                      </div>
+                      <svg
+                        width="14"
+                        height="14"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="2"
+                        viewBox="0 0 24 24"
+                        className="transition-transform group-hover:translate-x-0.5"
+                        style={{ color: "var(--text-muted)" }}
+                      >
+                        <path d="M9 18l6-6-6-6" />
+                      </svg>
+                    </button>
                   )}
 
                   {/* Timestamp hidden (Kimi style: 无时间条) */}

@@ -2,6 +2,7 @@
 import { createContext, useContext, useState, useEffect, useCallback, type ReactNode } from "react"
 import {
   login as apiLogin,
+  logout as apiLogout,
   register as apiRegister,
   getMe,
   getToken,
@@ -12,7 +13,7 @@ import {
   type RegisterRequest,
   type UserInfo,
 } from "./api-client"
-import { isMockMode, getMockToken, getMockUser, clearMockData, disableMockMode } from "./mock-config"
+import { isMockMode, getMockToken, getMockUser, clearMockData, disableMockMode, enableMockMode } from "./mock-config"
 
 interface AuthContextType {
   user: UserInfo | null
@@ -21,6 +22,7 @@ interface AuthContextType {
   login: (data: LoginRequest) => Promise<UserInfo>
   register: (data: RegisterRequest) => Promise<UserInfo>
   logout: () => void
+  enableMockLogin: () => void
 }
 
 const AuthContext = createContext<AuthContextType | null>(null)
@@ -57,8 +59,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setLoading(true)
     try {
       const res = await apiLogin(data)
-      setToken(res.token)
-      setUser(res.user)
+      console.log('res123:', res)
+      setToken(res?.data?.access_token)
+      //setUser(res.user)
+      setUser(res?.data?.user)
       // 正常登录（非 mock 模式）后清除 mock 残留数据
       if (!isMockMode()) {
         clearMockData()
@@ -85,7 +89,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }, [])
 
-  const logout = useCallback(() => {
+  const logout = useCallback(async () => {
     // 记录是否为 mock 模式（在清除前判断），用于决定跳转目标
     const wasMockMode = isMockMode()
     removeToken()
@@ -94,13 +98,24 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (wasMockMode) {
       disableMockMode()
     }
-    // 退出后跳转登录页，mock 模式携带 ?mock=true 以便登录页重新开启 mock 模式
-    const target = wasMockMode ? "/login?mock=true" : "/login"
-    window.location.href = target
+    const res = await apiLogout()
+    console.log('logout123:', res)
+    if (res?.data?.code == '200') {
+      // 退出后跳转登录页，mock 模式携带 ?mock=true 以便登录页重新开启 mock 模式
+      const target = wasMockMode ? "/login?mock=true" : "/login"
+      window.location.href = target
+    }
+  }, [])
+
+  const enableMockLogin = useCallback(() => {
+    enableMockMode()
+    setToken(getMockToken())
+    setUser(getMockUser())
+    setInitialized(true)
   }, [])
 
   return (
-    <AuthContext.Provider value={{ user, loading, initialized, login, register, logout }}>
+    <AuthContext.Provider value={{ user, loading, initialized, login, register, logout, enableMockLogin }}>
       {children}
     </AuthContext.Provider>
   )
