@@ -202,7 +202,7 @@ function mapMessage(m: MessageApi): Message {
   return {
     role: m.role === "assistant" ? "ai" : m.role as "user" | "ai",
     text: mainText,
-    thinking,
+    thinking: thinking || undefined,
     thinkingComplete: true, // 历史消息中的思考肯定是完成的
     files: normalizeMessageAttachments(m.attachments),
     time: new Date(m.created_at).toLocaleTimeString("zh-CN", { hour: "2-digit", minute: "2-digit" }),
