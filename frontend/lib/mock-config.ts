@@ -79,9 +79,22 @@ const LS_SETTINGS = "cnooc-mock-settings"
 
 function readAgents(): AgentDefApi[] {
   if (typeof window === "undefined") return []
+  const mock = [{
+    "id": 111,
+    "agent_id": "oa",
+    "label": "oa助手",
+    "icon": "🤖",
+    "desc": "自定义应用",
+    "quick_questions": [],
+    "gradient": "var(--gradient-1)",
+    "sort_order": 0,
+    "is_active": true,
+    "dify_configs": []
+  }]
   try {
     const raw = localStorage.getItem(LS_AGENTS)
-    return raw ? JSON.parse(raw) : []
+    //return raw ? JSON.parse(raw) : []
+    return raw ? [...mock, ...JSON.parse(raw)] : mock
   } catch {
     return []
   }
@@ -527,7 +540,7 @@ export function getMockDifyApiConfigForAgent(agentIdStr: string): {
 /**
  * 生成 Mock 的 SSE 响应流，模拟打字效果
  */
-export function generateMockStream(text: string, signal?: AbortSignal): ReadableStream<Uint8Array> {
+export function generateMockStream(text: string, retriever_resources: any, signal?: AbortSignal): ReadableStream<Uint8Array> {
   console.log("[DEBUG] generateMockStream 被调用，输入 text:", text.slice(0, 200), "...")
   return new ReadableStream({
     async start(controller) {
@@ -586,6 +599,7 @@ export function generateMockStream(text: string, signal?: AbortSignal): Readable
         const event = {
           event: "message",
           answer: chunk,
+          retriever_resources,
           created_at: Math.floor(Date.now() / 1000),
         }
         controller.enqueue(encoder.encode(`data: ${JSON.stringify(event)}\n\n`))

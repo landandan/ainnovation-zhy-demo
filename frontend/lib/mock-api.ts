@@ -741,6 +741,126 @@ A: 可以，点击输入框旁边的上传按钮即可上传图片或文件
   ],
 }
 
+const MOCK_RESPONSES_RETRIEVER_RESOURCES: Record<string, any> = {
+  help: [
+    {
+      "id": "d78911d0-64dc-485a-8da5-55cb0a661a01",
+      "message_id": "90c2b73d-8841-4ff0-8ed2-e0e97848bf94",
+      "position": 1,
+      "dataset_id": "0173e9df-ac82-45c4-adb7-43d307d2a6c3",
+      "dataset_name": "oa\u52a9\u624b",
+      "document_id": "63e06965-a2c6-4ba3-a09b-1a1f4fb72b32",
+      "document_name": "\u4e2d\u56fd\u6d77\u6cb9\u534f\u540c\u529e\u516c\u7cfb\u7edf\u5feb\u901f\u5165\u95e8\u6307\u5357-\u7cfb\u7edf\u603b\u89c8.md",
+      "data_source_type": "upload_file",
+      "segment_id": "1d23e706-e215-4d78-bff1-e09be8593f1d",
+      "score": 0.9950167536735535,
+      "hit_count": 8,
+      "word_count": 371,
+      "segment_position": 3,
+      "index_node_hash": "64907fc894c722e300ff9ad015c24c6a38f24367faed2a3d70fa139cbcb4e96e",
+      "content": "1.2 \u90e8\u95e8\u9996\u9875\n\n![](http:\/\/192.168.10.66\/files\/tools\/0e8b1d6d-5f63-42ed-a0ba-36260b7b319b.jpg?timestamp=1783389094&nonce=e66d9680ec70294de201b0ff55e0986f&sign=7uVNXlg3ssn8AS7iLmqMdcbl3boloatkpY7Br4uUQs0=)\n\n01\u65e5\u5e38\u529e\u516c\uff1a\u5404\u90e8\u95e8\u8bbe\u7f6e\u7684\u5e38\u7528\u529e\u516c\u94fe\u63a5\uff0c\u65b9\u4fbf\u5458\u5de5\u5feb\u901f\u8bbf\u95ee\u3002\n\n02\u7535\u8bdd\u67e5\u8be2\uff1a\u5feb\u901f\u67e5\u8be2\u516c\u53f8\u540c\u4e8b\u7684\u529e\u516c\u7535\u8bdd\u3002\n\n03\u9886\u5bfc\u65e5\u7a0b\uff1a\u5feb\u901f\u67e5\u8be2\u672c\u90e8\u95e8\u9886\u5bfc\u7684\u65e5\u7a0b\u5b89\u6392\u3002\n\n04\u90e8\u95e8\u7b80\u4ecb\uff1a\u67e5\u770b\u90e8\u95e8\u57fa\u672c\u60c5\u51b5\u3001\u4e3b\u8981\u804c\u80fd\u7b49\u6982\u51b5\u4fe1\u606f\u3002\n\n05\u5e38\u7528\u94fe\u63a5\uff1a\u90e8\u95e8\u4e1a\u52a1\u76f8\u5173\u7684\u5185\u5916\u90e8\u5e38\u7528\u94fe\u63a5\u3002\n\n06\u5404\u90e8\u95e8\u53ef\u81ea\u5b9a\u4e49\u680f\u76ee\u540d\u79f0\u53ca\u5185\u5bb9\uff0c\u66f4\u597d\u5730\u5c55\u793a\u672c\u90e8\u95e8\u5de5\u4f5c\u3002\n\n## 1.3 \u5e94\u7528\u5c55\u5385",
+      "summary": null,
+      "created_at": null
+    },
+    {
+        "id": "ae9ba7e1-4ef1-4121-a27f-2ae91488e842",
+        "message_id": "607e6e57-4821-4642-9c54-129cdf894950",
+        "position": 2,
+        "dataset_id": "0173e9df-ac82-45c4-adb7-43d307d2a6c3",
+        "dataset_name": "oa\u52a9\u624b",
+        "document_id": "63e06965-a2c6-4ba3-a09b-1a1f4fb72b32",
+        "document_name": "\u4e2d\u56fd\u6d77\u6cb9\u534f\u540c\u529e\u516c\u7cfb\u7edf\u5feb\u901f\u5165\u95e8\u6307\u5357-\u7cfb\u7edf\u603b\u89c8.md",
+        "data_source_type": "upload_file",
+        "segment_id": "c0550fab-1eb1-4258-a364-ea1425320c99",
+        "score": 0.9856225848197937,
+        "hit_count": 8,
+        "word_count": 338,
+        "segment_position": 2,
+        "index_node_hash": "f201e7cbe592788ffeb7824821b056e8b910a8917f6f916ec9dc52a9093995f8",
+        "content": "06\u901a\u77e5\u516c\u544a\uff1a\u67e5\u770b\u603b\u516c\u53f8\u53d1\u5e03\u7684\u901a\u77e5\u516c\u544a\u3002\n\n07\u603b\u516c\u53f8\u65b0\u95fb\/\u6240\u5c5e\u5355\u4f4d\u65b0\u95fb\uff1a\u5c55\u793a\u603b\u516c\u53f8\u673a\u5173\u53ca\u5404\u6240\u5c5e\u5355\u4f4d\u7684\u65b0\u95fb\u8d44\u8baf\u3002\n\n08\u666e\u53d1\u6587\u4ef6\uff1a\u5c55\u793a\u603b\u516c\u53f8\u516c\u6587\u4e00\u4f53\u5316\u7cfb\u7edf\u53d1\u5e03\u7684\u666e\u53d1\u6027\u6587\u4ef6\n\n09\u4e1a\u52a1\u52a8\u6001\uff1a\u5c55\u793a\u603b\u516c\u53f8\u673a\u5173\u53ca\u5404\u6240\u5c5e\u5355\u4f4d\u7684\u4e1a\u52a1\u52a8\u6001\u3002\n\n10\u4fe1\u606f\u524d\u6cbf\uff1a\u5c55\u793a\u96c6\u56e2\u524d\u6cbf\u4fe1\u606f\u3002\n\n11\u529e\u516c\u5e38\u7528\uff1a\u529e\u516c\u5e38\u7528\u529f\u80fd\u6a21\u5757\u7684\u5feb\u6377\u5165\u53e3\n\n12\u5e94\u7528\u5bfc\u822a\uff1a\u70b9\u51fb\u8bbf\u95ee\u603b\u516c\u53f8\u7684\u5176\u4ed6IT\u7cfb\u7edf\n\n13\u673a\u5173\u90e8\u95e8\uff1a\u9009\u62e9\u8bbf\u95ee\u603b\u516c\u53f8\u673a\u5173\u5404\u90e8\u95e8\u7684\u201c\u90e8\u95e8\u9996\u9875\u201d\u3002\n\n14\u6240\u5c5e\u5355\u4f4d\uff1a\u9009\u62e9\u8bbf\u95ee\u603b\u516c\u53f8\u5404\u6240\u5c5e\u5355\u4f4d\u7684OA\u7cfb\u7edf\u9996\u9875\u3002\n\n15\u5e38\u7528\u94fe\u63a5\uff1a\u5916\u90e8\u5e38\u7528\u7ad9\u70b9\u7684\u5feb\u6377\u94fe\u63a5\u3002\n\n16\u6d77\u6cb9\u4e13\u9898\uff1a\u603b\u516c\u53f8\u673a\u5173\u5404\u7c7b\u4e13\u9898\u4fe1\u606f\u7684\u5c55\u793a\u7a97\u53e3\u3002\n\n17\u5e94\u7528\u5c55\u5385\uff1a\u57fa\u4e8e\u534f\u540c\u529e\u516c\u5e73\u53f0\u5f00\u53d1\u7684\u6240\u6709\u6a21\u677f\u53ca\u5b9e\u4f8b\u5316\u5e94\u7528\u7684\u96c6\u4e2d\u5c55\u793a\u3001\u5171\u4eab\u548c\u7ba1\u7406\u5e73\u53f0\u3002\n\n## 1.2 \u90e8\u95e8\u9996\u9875",
+        "summary": null,
+        "created_at": null
+    },
+    {
+        "id": "1db26a61-ab65-425d-9336-e6f0495b68cb",
+        "message_id": "45473b83-45ad-4166-a0c2-c736af4a0804",
+        "position": 3,
+        "dataset_id": "0173e9df-ac82-45c4-adb7-43d307d2a6c3",
+        "dataset_name": "oa\u52a9\u624b",
+        "document_id": "8bfe16a5-26c5-4d81-8caf-5d9af246f891",
+        "document_name": "\u4e2d\u56fd\u6d77\u6cb9\u534f\u540c\u529e\u516c\u7cfb\u7edf\uff08\u65b0OA\uff09\u7528\u6237\u624b\u518c.md",
+        "data_source_type": "upload_file",
+        "segment_id": "4586a57f-a394-49c2-90bb-c1c2f3f7a6c5",
+        "score": 0.9666776061058044,
+        "hit_count": 1,
+        "word_count": 362,
+        "segment_position": 10,
+        "index_node_hash": "5185c3b9067865e34911fd56b73171c7e20e68ed0dcf80f0e4b90dcaf0f33418",
+        "content": "---\nsource: \u4e2d\u56fd\u6d77\u6cb9\u534f\u540c\u529e\u516c\u7cfb\u7edf\uff08\u65b0OA\uff09\u7528\u6237\u624b\u518c\nsection_path: \u4e2d\u56fd\u6d77\u6d0b\u77f3\u6cb9\u96c6\u56e2\u6709\u9650\u516c\u53f8\u534f\u540c\u529e\u516c\u6280\u672f\u5e73\u53f0\u9879\u76ee\uff08\u65b0 OA \u7cfb\u7edf\uff09\u7528\u6237\u624b\u518c > 2.3 \u90e8\u95e8\u9996\u9875\nchunk_index: 10\n---\n\n## 2.3 \u90e8\u95e8\u9996\u9875\n\n\u5982\u679c\u8be5\u7528\u6237\u90e8\u95e8\u6709\u5355\u72ec\u7684\u90e8\u95e8\u9996\u9875\uff0c\u4e0a\u9762\u53ef\u4ee5\u70b9\u51fb\u201c\u90e8\u95e8\u9996\u9875\u201d\u8fdb\u5165\u5404\u90e8\u95e8\u9996\u9875\u3002\u5982\u679c\u6ca1\u6709\u90e8\u95e8\u9996\u9875\uff0c\u5219\u6ca1\u6709\u8fd9\u4e2a\u5bfc\u822a\u9875\u7b7e\u3002\u4ee5\u89c4\u5212\u8ba1\u5212\u90e8\u4e3a\u4f8b\u622a\u56fe\u3002\n\n![](http:\/\/192.168.10.66\/files\/0c5a0208-9ddb-4fbd-976f-acb4fa1b65a6\/image-preview?timestamp=1783389094&nonce=def34236fa9935aa5054f222439b415e&sign=BwvGqaXkhtmjyGRC4CKaJPxFaakE8xosrnbbvQ-DEQ0=)\n\u56fe\u7247\u8bf4\u660e\uff1a\u8be5\u622a\u56fe\u5bf9\u5e94\u64cd\u4f5c\u6b65\u9aa4\u6216\u9875\u9762\uff1a\u5982\u679c\u8be5\u7528\u6237\u90e8\u95e8\u6709\u5355\u72ec\u7684\u90e8\u95e8\u9996\u9875\uff0c\u4e0a\u9762\u53ef\u4ee5\u70b9\u51fb\u201c\u90e8\u95e8\u9996\u9875\u201d\u8fdb\u5165\u5404\u90e8\u95e8\u9996\u9875\u3002\u5982\u679c\u6ca1\u6709\u90e8\u95e8\u9996\u9875\uff0c\u5219\u6ca1\u6709\u8fd9\u4e2a\u5bfc\u822a\u9875\u7b7e\u3002\u4ee5\u89c4\u5212\u8ba1\u5212\u90e8\u4e3a\u4f8b\u622a\u56fe\u3002",
+        "summary": null,
+        "created_at": null
+    }
+  ],
+  help1: [
+    {
+      "id": "d78911d0-64dc-485a-8da5-55cb0a661a01",
+      "message_id": "90c2b73d-8841-4ff0-8ed2-e0e97848bf94",
+      "position": 1,
+      "dataset_id": "0173e9df-ac82-45c4-adb7-43d307d2a6c3",
+      "dataset_name": "oa\u52a9\u624b",
+      "document_id": "63e06965-a2c6-4ba3-a09b-1a1f4fb72b32",
+      "document_name": "\u6cb9\u534f\u540c\u529e\u516c\u7cfb\u7edf\u5feb\u901f\u5165\u95e8\u6307\u5357-\u7cfb\u7edf\u603b\u89c8.md",
+      "data_source_type": "upload_file",
+      "segment_id": "1d23e706-e215-4d78-bff1-e09be8593f1d",
+      "score": 0.9950167536735535,
+      "hit_count": 8,
+      "word_count": 371,
+      "segment_position": 3,
+      "index_node_hash": "64907fc894c722e300ff9ad015c24c6a38f24367faed2a3d70fa139cbcb4e96e",
+      "content": "\u9875\n\n![](http:\/\/192.168.10.66\/files\/tools\/0e8b1d6d-5f63-42ed-a0ba-36260b7b319b.jpg?timestamp=1783389094&nonce=e66d9680ec70294de201b0ff55e0986f&sign=7uVNXlg3ssn8AS7iLmqMdcbl3boloatkpY7Br4uUQs0=)\n\n01\u65e5\u5e38\u529e\u516c\uff1a\u5404\u90e8\u95e8\u8bbe\u7f6e\u7684\u5e38\u7528\u529e\u516c\u94fe\u63a5\uff0c\u65b9\u4fbf\u5458\u5de5\u5feb\u901f\u8bbf\u95ee\u3002\n\n02\u7535\u8bdd\u67e5\u8be2\uff1a\u5feb\u901f\u67e5\u8be2\u516c\u53f8\u540c\u4e8b\u7684\u529e\u516c\u7535\u8bdd\u3002\n\n03\u9886\u5bfc\u65e5\u7a0b\uff1a\u5feb\u901f\u67e5\u8be2\u672c\u90e8\u95e8\u9886\u5bfc\u7684\u65e5\u7a0b\u5b89\u6392\u3002\n\n04\u90e8\u95e8\u7b80\u4ecb\uff1a\u67e5\u770b\u90e8\u95e8\u57fa\u672c\u60c5\u51b5\u3001\u4e3b\u8981\u804c\u80fd\u7b49\u6982\u51b5\u4fe1\u606f\u3002\n\n05\u5e38\u7528\u94fe\u63a5\uff1a\u90e8\u95e8\u4e1a\u52a1\u76f8\u5173\u7684\u5185\u5916\u90e8\u5e38\u7528\u94fe\u63a5\u3002\n\n06\u5404\u90e8\u95e8\u53ef\u81ea\u5b9a\u4e49\u680f\u76ee\u540d\u79f0\u53ca\u5185\u5bb9\uff0c\u66f4\u597d\u5730\u5c55\u793a\u672c\u90e8\u95e8\u5de5\u4f5c\u3002\n\n## 1.3 \u5e94\u7528\u5c55\u5385",
+      "summary": null,
+      "created_at": null
+    },
+    {
+        "id": "ae9ba7e1-4ef1-4121-a27f-2ae91488e842",
+        "message_id": "607e6e57-4821-4642-9c54-129cdf894950",
+        "position": 2,
+        "dataset_id": "0173e9df-ac82-45c4-adb7-43d307d2a6c3",
+        "dataset_name": "oa\u52a9\u624b",
+        "document_id": "63e06965-a2c6-4ba3-a09b-1a1f4fb72b32",
+        "document_name": "\u6cb9\u534f\u540c\u529e\u516c\u7cfb\u7edf\u5feb\u901f\u5165\u95e8\u6307\u5357-\u7cfb\u7edf\u603b\u89c8.md",
+        "data_source_type": "upload_file",
+        "segment_id": "c0550fab-1eb1-4258-a364-ea1425320c99",
+        "score": 0.9856225848197937,
+        "hit_count": 8,
+        "word_count": 338,
+        "segment_position": 2,
+        "index_node_hash": "f201e7cbe592788ffeb7824821b056e8b910a8917f6f916ec9dc52a9093995f8",
+        "content": "\u516c\u544a\uff1a\u67e5\u770b\u603b\u516c\u53f8\u53d1\u5e03\u7684\u901a\u77e5\u516c\u544a\u3002\n\n07\u603b\u516c\u53f8\u65b0\u95fb\/\u6240\u5c5e\u5355\u4f4d\u65b0\u95fb\uff1a\u5c55\u793a\u603b\u516c\u53f8\u673a\u5173\u53ca\u5404\u6240\u5c5e\u5355\u4f4d\u7684\u65b0\u95fb\u8d44\u8baf\u3002\n\n08\u666e\u53d1\u6587\u4ef6\uff1a\u5c55\u793a\u603b\u516c\u53f8\u516c\u6587\u4e00\u4f53\u5316\u7cfb\u7edf\u53d1\u5e03\u7684\u666e\u53d1\u6027\u6587\u4ef6\n\n09\u4e1a\u52a1\u52a8\u6001\uff1a\u5c55\u793a\u603b\u516c\u53f8\u673a\u5173\u53ca\u5404\u6240\u5c5e\u5355\u4f4d\u7684\u4e1a\u52a1\u52a8\u6001\u3002\n\n10\u4fe1\u606f\u524d\u6cbf\uff1a\u5c55\u793a\u96c6\u56e2\u524d\u6cbf\u4fe1\u606f\u3002\n\n11\u529e\u516c\u5e38\u7528\uff1a\u529e\u516c\u5e38\u7528\u529f\u80fd\u6a21\u5757\u7684\u5feb\u6377\u5165\u53e3\n\n12\u5e94\u7528\u5bfc\u822a\uff1a\u70b9\u51fb\u8bbf\u95ee\u603b\u516c\u53f8\u7684\u5176\u4ed6IT\u7cfb\u7edf\n\n13\u673a\u5173\u90e8\u95e8\uff1a\u9009\u62e9\u8bbf\u95ee\u603b\u516c\u53f8\u673a\u5173\u5404\u90e8\u95e8\u7684\u201c\u90e8\u95e8\u9996\u9875\u201d\u3002\n\n14\u6240\u5c5e\u5355\u4f4d\uff1a\u9009\u62e9\u8bbf\u95ee\u603b\u516c\u53f8\u5404\u6240\u5c5e\u5355\u4f4d\u7684OA\u7cfb\u7edf\u9996\u9875\u3002\n\n15\u5e38\u7528\u94fe\u63a5\uff1a\u5916\u90e8\u5e38\u7528\u7ad9\u70b9\u7684\u5feb\u6377\u94fe\u63a5\u3002\n\n16\u6d77\u6cb9\u4e13\u9898\uff1a\u603b\u516c\u53f8\u673a\u5173\u5404\u7c7b\u4e13\u9898\u4fe1\u606f\u7684\u5c55\u793a\u7a97\u53e3\u3002\n\n17\u5e94\u7528\u5c55\u5385\uff1a\u57fa\u4e8e\u534f\u540c\u529e\u516c\u5e73\u53f0\u5f00\u53d1\u7684\u6240\u6709\u6a21\u677f\u53ca\u5b9e\u4f8b\u5316\u5e94\u7528\u7684\u96c6\u4e2d\u5c55\u793a\u3001\u5171\u4eab\u548c\u7ba1\u7406\u5e73\u53f0\u3002\n\n## 1.2 \u90e8\u95e8\u9996\u9875",
+        "summary": null,
+        "created_at": null
+    },
+    {
+        "id": "1db26a61-ab65-425d-9336-e6f0495b68cb",
+        "message_id": "45473b83-45ad-4166-a0c2-c736af4a0804",
+        "position": 3,
+        "dataset_id": "0173e9df-ac82-45c4-adb7-43d307d2a6c3",
+        "dataset_name": "oa\u52a9\u624b",
+        "document_id": "8bfe16a5-26c5-4d81-8caf-5d9af246f891",
+        "document_name": "\u6cb9\u534f\u540c\u529e\u516c\u7cfb\u7edf\uff08\u65b0OA\uff09\u7528\u6237\u624b\u518c.md",
+        "data_source_type": "upload_file",
+        "segment_id": "4586a57f-a394-49c2-90bb-c1c2f3f7a6c5",
+        "score": 0.9666776061058044,
+        "hit_count": 1,
+        "word_count": 362,
+        "segment_position": 10,
+        "index_node_hash": "5185c3b9067865e34911fd56b73171c7e20e68ed0dcf80f0e4b90dcaf0f33418",
+        "content": "\u6d77\u6cb9\u534f\u540c\u529e\u516c\u7cfb\u7edf\uff08\u65b0OA\uff09\u7528\u6237\u624b\u518c\nsection_path: \u4e2d\u56fd\u6d77\u6d0b\u77f3\u6cb9\u96c6\u56e2\u6709\u9650\u516c\u53f8\u534f\u540c\u529e\u516c\u6280\u672f\u5e73\u53f0\u9879\u76ee\uff08\u65b0 OA \u7cfb\u7edf\uff09\u7528\u6237\u624b\u518c > 2.3 \u90e8\u95e8\u9996\u9875\nchunk_index: 10\n---\n\n## 2.3 \u90e8\u95e8\u9996\u9875\n\n\u5982\u679c\u8be5\u7528\u6237\u90e8\u95e8\u6709\u5355\u72ec\u7684\u90e8\u95e8\u9996\u9875\uff0c\u4e0a\u9762\u53ef\u4ee5\u70b9\u51fb\u201c\u90e8\u95e8\u9996\u9875\u201d\u8fdb\u5165\u5404\u90e8\u95e8\u9996\u9875\u3002\u5982\u679c\u6ca1\u6709\u90e8\u95e8\u9996\u9875\uff0c\u5219\u6ca1\u6709\u8fd9\u4e2a\u5bfc\u822a\u9875\u7b7e\u3002\u4ee5\u89c4\u5212\u8ba1\u5212\u90e8\u4e3a\u4f8b\u622a\u56fe\u3002\n\n![](http:\/\/192.168.10.66\/files\/0c5a0208-9ddb-4fbd-976f-acb4fa1b65a6\/image-preview?timestamp=1783389094&nonce=def34236fa9935aa5054f222439b415e&sign=BwvGqaXkhtmjyGRC4CKaJPxFaakE8xosrnbbvQ-DEQ0=)\n\u56fe\u7247\u8bf4\u660e\uff1a\u8be5\u622a\u56fe\u5bf9\u5e94\u64cd\u4f5c\u6b65\u9aa4\u6216\u9875\u9762\uff1a\u5982\u679c\u8be5\u7528\u6237\u90e8\u95e8\u6709\u5355\u72ec\u7684\u90e8\u95e8\u9996\u9875\uff0c\u4e0a\u9762\u53ef\u4ee5\u70b9\u51fb\u201c\u90e8\u95e8\u9996\u9875\u201d\u8fdb\u5165\u5404\u90e8\u95e8\u9996\u9875\u3002\u5982\u679c\u6ca1\u6709\u90e8\u95e8\u9996\u9875\uff0c\u5219\u6ca1\u6709\u8fd9\u4e2a\u5bfc\u822a\u9875\u7b7e\u3002\u4ee5\u89c4\u5212\u8ba1\u5212\u90e8\u4e3a\u4f8b\u622a\u56fe\u3002",
+        "summary": null,
+        "created_at": null
+    }
+  ]
+}
 /* ───── 流式 Mock 回答（模拟 SSE 逐字吐出） ───── */
 
 /**
@@ -833,6 +953,65 @@ export function createMockStream(
             conversation_id: mockConversationId,
             answer: chunk,
             created_at: (startTime + Date.now() - startTime) / 1000,
+            retriever_resources: [
+                {
+                    "id": "d78911d0-64dc-485a-8da5-55cb0a661a01",
+                    "message_id": "90c2b73d-8841-4ff0-8ed2-e0e97848bf94",
+                    "position": 1,
+                    "dataset_id": "0173e9df-ac82-45c4-adb7-43d307d2a6c3",
+                    "dataset_name": "oa\u52a9\u624b",
+                    "document_id": "63e06965-a2c6-4ba3-a09b-1a1f4fb72b32",
+                    "document_name": "\u4e2d\u56fd\u6d77\u6cb9\u534f\u540c\u529e\u516c\u7cfb\u7edf\u5feb\u901f\u5165\u95e8\u6307\u5357-\u7cfb\u7edf\u603b\u89c8.md",
+                    "data_source_type": "upload_file",
+                    "segment_id": "1d23e706-e215-4d78-bff1-e09be8593f1d",
+                    "score": 0.9950167536735535,
+                    "hit_count": 8,
+                    "word_count": 371,
+                    "segment_position": 3,
+                    "index_node_hash": "64907fc894c722e300ff9ad015c24c6a38f24367faed2a3d70fa139cbcb4e96e",
+                    "content": "1.2 \u90e8\u95e8\u9996\u9875\n\n![](http:\/\/192.168.10.66\/files\/tools\/0e8b1d6d-5f63-42ed-a0ba-36260b7b319b.jpg?timestamp=1783389094&nonce=e66d9680ec70294de201b0ff55e0986f&sign=7uVNXlg3ssn8AS7iLmqMdcbl3boloatkpY7Br4uUQs0=)\n\n01\u65e5\u5e38\u529e\u516c\uff1a\u5404\u90e8\u95e8\u8bbe\u7f6e\u7684\u5e38\u7528\u529e\u516c\u94fe\u63a5\uff0c\u65b9\u4fbf\u5458\u5de5\u5feb\u901f\u8bbf\u95ee\u3002\n\n02\u7535\u8bdd\u67e5\u8be2\uff1a\u5feb\u901f\u67e5\u8be2\u516c\u53f8\u540c\u4e8b\u7684\u529e\u516c\u7535\u8bdd\u3002\n\n03\u9886\u5bfc\u65e5\u7a0b\uff1a\u5feb\u901f\u67e5\u8be2\u672c\u90e8\u95e8\u9886\u5bfc\u7684\u65e5\u7a0b\u5b89\u6392\u3002\n\n04\u90e8\u95e8\u7b80\u4ecb\uff1a\u67e5\u770b\u90e8\u95e8\u57fa\u672c\u60c5\u51b5\u3001\u4e3b\u8981\u804c\u80fd\u7b49\u6982\u51b5\u4fe1\u606f\u3002\n\n05\u5e38\u7528\u94fe\u63a5\uff1a\u90e8\u95e8\u4e1a\u52a1\u76f8\u5173\u7684\u5185\u5916\u90e8\u5e38\u7528\u94fe\u63a5\u3002\n\n06\u5404\u90e8\u95e8\u53ef\u81ea\u5b9a\u4e49\u680f\u76ee\u540d\u79f0\u53ca\u5185\u5bb9\uff0c\u66f4\u597d\u5730\u5c55\u793a\u672c\u90e8\u95e8\u5de5\u4f5c\u3002\n\n## 1.3 \u5e94\u7528\u5c55\u5385",
+                    "summary": null,
+                    "created_at": null
+                },
+                {
+                    "id": "ae9ba7e1-4ef1-4121-a27f-2ae91488e842",
+                    "message_id": "607e6e57-4821-4642-9c54-129cdf894950",
+                    "position": 2,
+                    "dataset_id": "0173e9df-ac82-45c4-adb7-43d307d2a6c3",
+                    "dataset_name": "oa\u52a9\u624b",
+                    "document_id": "63e06965-a2c6-4ba3-a09b-1a1f4fb72b32",
+                    "document_name": "\u4e2d\u56fd\u6d77\u6cb9\u534f\u540c\u529e\u516c\u7cfb\u7edf\u5feb\u901f\u5165\u95e8\u6307\u5357-\u7cfb\u7edf\u603b\u89c8.md",
+                    "data_source_type": "upload_file",
+                    "segment_id": "c0550fab-1eb1-4258-a364-ea1425320c99",
+                    "score": 0.9856225848197937,
+                    "hit_count": 8,
+                    "word_count": 338,
+                    "segment_position": 2,
+                    "index_node_hash": "f201e7cbe592788ffeb7824821b056e8b910a8917f6f916ec9dc52a9093995f8",
+                    "content": "06\u901a\u77e5\u516c\u544a\uff1a\u67e5\u770b\u603b\u516c\u53f8\u53d1\u5e03\u7684\u901a\u77e5\u516c\u544a\u3002\n\n07\u603b\u516c\u53f8\u65b0\u95fb\/\u6240\u5c5e\u5355\u4f4d\u65b0\u95fb\uff1a\u5c55\u793a\u603b\u516c\u53f8\u673a\u5173\u53ca\u5404\u6240\u5c5e\u5355\u4f4d\u7684\u65b0\u95fb\u8d44\u8baf\u3002\n\n08\u666e\u53d1\u6587\u4ef6\uff1a\u5c55\u793a\u603b\u516c\u53f8\u516c\u6587\u4e00\u4f53\u5316\u7cfb\u7edf\u53d1\u5e03\u7684\u666e\u53d1\u6027\u6587\u4ef6\n\n09\u4e1a\u52a1\u52a8\u6001\uff1a\u5c55\u793a\u603b\u516c\u53f8\u673a\u5173\u53ca\u5404\u6240\u5c5e\u5355\u4f4d\u7684\u4e1a\u52a1\u52a8\u6001\u3002\n\n10\u4fe1\u606f\u524d\u6cbf\uff1a\u5c55\u793a\u96c6\u56e2\u524d\u6cbf\u4fe1\u606f\u3002\n\n11\u529e\u516c\u5e38\u7528\uff1a\u529e\u516c\u5e38\u7528\u529f\u80fd\u6a21\u5757\u7684\u5feb\u6377\u5165\u53e3\n\n12\u5e94\u7528\u5bfc\u822a\uff1a\u70b9\u51fb\u8bbf\u95ee\u603b\u516c\u53f8\u7684\u5176\u4ed6IT\u7cfb\u7edf\n\n13\u673a\u5173\u90e8\u95e8\uff1a\u9009\u62e9\u8bbf\u95ee\u603b\u516c\u53f8\u673a\u5173\u5404\u90e8\u95e8\u7684\u201c\u90e8\u95e8\u9996\u9875\u201d\u3002\n\n14\u6240\u5c5e\u5355\u4f4d\uff1a\u9009\u62e9\u8bbf\u95ee\u603b\u516c\u53f8\u5404\u6240\u5c5e\u5355\u4f4d\u7684OA\u7cfb\u7edf\u9996\u9875\u3002\n\n15\u5e38\u7528\u94fe\u63a5\uff1a\u5916\u90e8\u5e38\u7528\u7ad9\u70b9\u7684\u5feb\u6377\u94fe\u63a5\u3002\n\n16\u6d77\u6cb9\u4e13\u9898\uff1a\u603b\u516c\u53f8\u673a\u5173\u5404\u7c7b\u4e13\u9898\u4fe1\u606f\u7684\u5c55\u793a\u7a97\u53e3\u3002\n\n17\u5e94\u7528\u5c55\u5385\uff1a\u57fa\u4e8e\u534f\u540c\u529e\u516c\u5e73\u53f0\u5f00\u53d1\u7684\u6240\u6709\u6a21\u677f\u53ca\u5b9e\u4f8b\u5316\u5e94\u7528\u7684\u96c6\u4e2d\u5c55\u793a\u3001\u5171\u4eab\u548c\u7ba1\u7406\u5e73\u53f0\u3002\n\n## 1.2 \u90e8\u95e8\u9996\u9875",
+                    "summary": null,
+                    "created_at": null
+                },
+                {
+                    "id": "1db26a61-ab65-425d-9336-e6f0495b68cb",
+                    "message_id": "45473b83-45ad-4166-a0c2-c736af4a0804",
+                    "position": 3,
+                    "dataset_id": "0173e9df-ac82-45c4-adb7-43d307d2a6c3",
+                    "dataset_name": "oa\u52a9\u624b",
+                    "document_id": "8bfe16a5-26c5-4d81-8caf-5d9af246f891",
+                    "document_name": "\u4e2d\u56fd\u6d77\u6cb9\u534f\u540c\u529e\u516c\u7cfb\u7edf\uff08\u65b0OA\uff09\u7528\u6237\u624b\u518c.md",
+                    "data_source_type": "upload_file",
+                    "segment_id": "4586a57f-a394-49c2-90bb-c1c2f3f7a6c5",
+                    "score": 0.9666776061058044,
+                    "hit_count": 1,
+                    "word_count": 362,
+                    "segment_position": 10,
+                    "index_node_hash": "5185c3b9067865e34911fd56b73171c7e20e68ed0dcf80f0e4b90dcaf0f33418",
+                    "content": "---\nsource: \u4e2d\u56fd\u6d77\u6cb9\u534f\u540c\u529e\u516c\u7cfb\u7edf\uff08\u65b0OA\uff09\u7528\u6237\u624b\u518c\nsection_path: \u4e2d\u56fd\u6d77\u6d0b\u77f3\u6cb9\u96c6\u56e2\u6709\u9650\u516c\u53f8\u534f\u540c\u529e\u516c\u6280\u672f\u5e73\u53f0\u9879\u76ee\uff08\u65b0 OA \u7cfb\u7edf\uff09\u7528\u6237\u624b\u518c > 2.3 \u90e8\u95e8\u9996\u9875\nchunk_index: 10\n---\n\n## 2.3 \u90e8\u95e8\u9996\u9875\n\n\u5982\u679c\u8be5\u7528\u6237\u90e8\u95e8\u6709\u5355\u72ec\u7684\u90e8\u95e8\u9996\u9875\uff0c\u4e0a\u9762\u53ef\u4ee5\u70b9\u51fb\u201c\u90e8\u95e8\u9996\u9875\u201d\u8fdb\u5165\u5404\u90e8\u95e8\u9996\u9875\u3002\u5982\u679c\u6ca1\u6709\u90e8\u95e8\u9996\u9875\uff0c\u5219\u6ca1\u6709\u8fd9\u4e2a\u5bfc\u822a\u9875\u7b7e\u3002\u4ee5\u89c4\u5212\u8ba1\u5212\u90e8\u4e3a\u4f8b\u622a\u56fe\u3002\n\n![](http:\/\/192.168.10.66\/files\/0c5a0208-9ddb-4fbd-976f-acb4fa1b65a6\/image-preview?timestamp=1783389094&nonce=def34236fa9935aa5054f222439b415e&sign=BwvGqaXkhtmjyGRC4CKaJPxFaakE8xosrnbbvQ-DEQ0=)\n\u56fe\u7247\u8bf4\u660e\uff1a\u8be5\u622a\u56fe\u5bf9\u5e94\u64cd\u4f5c\u6b65\u9aa4\u6216\u9875\u9762\uff1a\u5982\u679c\u8be5\u7528\u6237\u90e8\u95e8\u6709\u5355\u72ec\u7684\u90e8\u95e8\u9996\u9875\uff0c\u4e0a\u9762\u53ef\u4ee5\u70b9\u51fb\u201c\u90e8\u95e8\u9996\u9875\u201d\u8fdb\u5165\u5404\u90e8\u95e8\u9996\u9875\u3002\u5982\u679c\u6ca1\u6709\u90e8\u95e8\u9996\u9875\uff0c\u5219\u6ca1\u6709\u8fd9\u4e2a\u5bfc\u822a\u9875\u7b7e\u3002\u4ee5\u89c4\u5212\u8ba1\u5212\u90e8\u4e3a\u4f8b\u622a\u56fe\u3002",
+                    "summary": null,
+                    "created_at": null
+                }
+            ],
           })
           currentIndex += chunkSize
 
@@ -902,16 +1081,19 @@ export function createMockBlockingResponse(
 /**
  * 获取预设的 Mock 回答
  */
-export function getMockResponse(agentId: string, userText: string): string {
+export function getMockResponse(agentId: string, userText: string): Record<string, any> {
+  const randomBit = Math.floor(Math.random() * 2);
+  const newId: string =  randomBit === 1 ? `${agentId}1` : agentId
   const responses = MOCK_RESPONSES[agentId] || MOCK_RESPONSES.knowledge || ["Mock response"]
+  const retriever_resources: any = MOCK_RESPONSES_RETRIEVER_RESOURCES[newId] || ["Mock response"]
   
   // 根据用户输入选择不同的回答
   const idx =
     userText.length > 10
       ? (userText.charCodeAt(0) + userText.charCodeAt(userText.length - 1)) % responses.length
       : Date.now() % responses.length
-  
-  return responses[idx]
+  const mockText: string = responses[idx]
+  return { mockText: responses[idx], retriever_resources }
 }
 
 function sleep(ms: number): Promise<void> {

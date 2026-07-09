@@ -71,7 +71,7 @@ export class ApiError extends Error {
 let authRedirectInProgress = false
 
 // 在开发环境下，直接请求后端 5000 端口以绕过 Next.js 代理的缓冲问题
-const API_BASE_URL = process.env.NODE_ENV === 'development' ? 'http://localhost:5000/api' : '/api'
+const API_BASE_URL = process.env.NODE_ENV === 'development' ? '' : '/api'//? 'http://localhost:5000/api' : '/api'
 
 async function request<T>(
   method: string,
@@ -156,9 +156,22 @@ export interface UserInfo {
   created_at: string
 }
 
-export interface LoginResponse {
-  token: string
+export interface LoginData {
+  token?: string
+  // user: UserInfo
+  access_token: string
+  client_id: string
   user: UserInfo
+}
+export interface LoginResponse {
+  data: LoginData
+}
+export interface logoutData {
+  code: string
+  msg: string
+}
+export interface LogoutResponse {
+  data: logoutData
 }
 
 export async function login(data: LoginRequest): Promise<LoginResponse> {
@@ -167,7 +180,21 @@ export async function login(data: LoginRequest): Promise<LoginResponse> {
     const result = mockLogin(data.username, data.password)
     return result
   }
-  return request<LoginResponse>("POST", "/auth/login", data)
+  return request<LoginResponse>("POST", "/api/auth/login", {
+    ...data,
+    "clientId": "0d4c873ff6146ecd7f38e2e45526ab1b",
+    "grantType": "password",
+    "tenantId": "000000",
+    "uuid": `${new Date().getTime()}`,
+  })
+}
+export async function logout(): Promise<LogoutResponse> {
+  // if (isMockMode()) {
+  //   await mockDelay()
+  //   // Mock 模式下注册直接返回 admin 用户
+  //   return { token: "mock-jwt-token-admin-1234567890", user: getMockUser() }
+  // }
+  return request<LogoutResponse>("POST", "/api/auth/logout", {})
 }
 
 export async function register(data: RegisterRequest): Promise<LoginResponse> {
@@ -281,7 +308,8 @@ export async function getConversations(params?: {
   if (params?.page) qs.set("page", String(params.page))
   if (params?.per_page) qs.set("per_page", String(params.per_page))
   const query = qs.toString()
-  return request<ConversationsListResponse>("GET", `/conversations${query ? `?${query}` : ""}`)
+  return request<ConversationsListResponse>("GET", `/api/h5/chat/messages/page?pageNum=1&pageSize=10`)
+  // return request<ConversationsListResponse>("GET", `/conversations${query ? `?${query}` : ""}`)
 }
 
 export async function createConversation(data: {

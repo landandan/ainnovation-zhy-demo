@@ -58,6 +58,7 @@ CNOOC-demo/
 │   │   ├── chat-area.tsx       # 聊天区域
 │   │   ├── agent-section.tsx   # 智能体选择
 │   │   ├── input-area.tsx      # 输入框 + 附件
+│   │   ├── resource-sidebar.tsx# 右侧边栏（引用来源）
 │   │   └── ...
 │   ├── lib/
 │   │   ├── api-client.ts       # 前端 API 客户端（自动 JWT）
