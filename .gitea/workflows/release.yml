@@ -21,6 +21,7 @@ jobs:
           else
             echo "PAT_TOKEN OK"
           fi
+
       - name: Checkout Repository
         uses: actions/checkout@v4
         with:
@@ -36,11 +37,15 @@ jobs:
 
           TAG="v$(date +%Y.%m%d)-${{ github.run_number }}-${SHORT_SHA}"
 
+          BUILD_TIME=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+
           echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
+          echo "build_time=${BUILD_TIME}" >> "$GITHUB_OUTPUT"
 
           echo "=============================="
           echo "Release Tag : ${TAG}"
           echo "Commit      : ${SHORT_SHA}"
+          echo "Build Time  : ${BUILD_TIME}"
           echo "=============================="
 
       - name: Show Docker Version
@@ -107,6 +112,7 @@ jobs:
         uses: akkuman/gitea-release-action@v1
         env:
           NODE_OPTIONS: --experimental-fetch
+
         with:
           token: ${{ secrets.PAT_TOKEN }}
 
@@ -127,9 +133,10 @@ jobs:
             ${{ github.run_number }}
 
             **Build Time**
-            $(date -u +"%Y-%m-%dT%H:%M:%SZ")
+            ${{ steps.version.outputs.build_time }}
 
             ---
+
             本版本由 Gitea Actions 自动构建。
 
           files: |
