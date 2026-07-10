@@ -370,6 +370,19 @@ export function deleteMockConversation(convId: number): { message: string } {
   return { message: "已删除" }
 }
 
+export function deleteMockConversationBySessionId(sessionId: string): { message: string } {
+  const conversations = readConversations()
+  const removed = conversations.filter((c) => c.sessionId === sessionId)
+  writeConversations(conversations.filter((c) => c.sessionId !== sessionId))
+
+  if (typeof window !== "undefined") {
+    for (const conv of removed) {
+      localStorage.removeItem(LS_MESSAGES_PREFIX + conv.id)
+    }
+  }
+  return { message: "已删除" }
+}
+
 /* ───── Mock Message CRUD ───── */
 
 function readMessages(convId: number): MessageApi[] {

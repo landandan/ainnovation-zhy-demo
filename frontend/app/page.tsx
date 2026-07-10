@@ -568,13 +568,14 @@ export default function Page() {
     }
   }
 
-  const handleDeleteHistory = async (id: number) => {
+  const handleDeleteHistory = async (sessionIdToDelete: string) => {
     try {
-      await deleteConversationApi(id)
-      setConversations((prev) => prev.filter((c) => c.id !== id))
-      if (activeConversationId === id) {
+      await deleteConversationApi(sessionIdToDelete)
+      setConversations((prev) => prev.filter((c) => c.sessionId !== sessionIdToDelete))
+      if (sessionId === sessionIdToDelete) {
         setMessages([])
         setActiveConversationId(null)
+        setSessionId("")
         difyConversationIdRef.current = null
       }
       success("对话已删除")
@@ -584,22 +585,20 @@ export default function Page() {
     }
   }
 
-  const handleBulkDeleteHistory = async (ids: number[]) => {
+  const handleBulkDeleteHistory = async (sessionIds: string[]) => {
     try {
-      // 依次删除每个会话
-      for (const id of ids) {
-        await deleteConversationApi(id)
+      const uniqueSessionIds = [...new Set(sessionIds.filter(Boolean))]
+      for (const sid of uniqueSessionIds) {
+        await deleteConversationApi(sid)
       }
-      // 从列表中移除所有删除的会话
-      setConversations((prev) => prev.filter((c) => !ids.includes(c.id)))
-      // 如果当前激活的会话在删除列表中，清空消息
-      if (activeConversationId && ids.includes(activeConversationId)) {
+      setConversations((prev) => prev.filter((c) => !uniqueSessionIds.includes(c.sessionId)))
+      if (sessionId && uniqueSessionIds.includes(sessionId)) {
         setMessages([])
         setActiveConversationId(null)
+        setSessionId("")
         difyConversationIdRef.current = null
       }
-      // 只显示一个成功提示
-      success(`已删除 ${ids.length} 条对话`)
+      success(`已删除 ${uniqueSessionIds.length} 条对话`)
     } catch (err) {
       console.error("批量删除对话失败:", err)
       error("批量删除失败")

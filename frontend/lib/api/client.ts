@@ -24,6 +24,7 @@ import {
   createMockConversation,
   updateMockConversation,
   deleteMockConversation,
+  deleteMockConversationBySessionId,
   getMockMessages,
   addMockMessage,
   getMockUserSettings,
@@ -290,12 +291,12 @@ export async function updateConversation(
   return request<{ conversation: ConversationApi }>("PUT", `/conversations/${convId}`, data)
 }
 
-export async function deleteConversationApi(convId: number): Promise<{ message: string }> {
+export async function deleteConversationApi(sessionId: string): Promise<{ message: string }> {
   if (isMockMode()) {
     await mockDelay()
-    return deleteMockConversation(convId)
+    return deleteMockConversationBySessionId(sessionId)
   }
-  return request<{ message: string }>("DELETE", `/conversations/${convId}`)
+  return request<{ message: string }>("POST", `/h5/chat/messages/del?sessionId=${encodeURIComponent(sessionId)}`)
 }
 
 export async function getMessages(
