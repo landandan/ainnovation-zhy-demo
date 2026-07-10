@@ -75,7 +75,7 @@
 :root {
   /* 基础色彩 - 主区白底，与 Kimi 侧栏形成对比 */
   --background: #FFFFFF;
-  --foreground: #000000e6
+  --foreground: #000000e6;
   --card: #FFFFFF;
   --card-foreground: #1A1D23;
   --popover: #FFFFFF;
@@ -183,6 +183,17 @@
   --sidebar-history-active-border-color: transparent;
   --sidebar-history-active-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
   --sidebar-history-hover-bg: #EBEBEB;
+  --sidebar-history-menu-bg: #FFFFFF;
+  --sidebar-history-menu-border: #E5E5E5;
+  --sidebar-history-menu-shadow: 0 4px 16px rgba(0, 0, 0, 0.1);
+  --sidebar-history-menu-hover-bg: #F5F5F5;
+  --sidebar-history-menu-danger-hover-bg: #FEF2F2;
+
+  /* 确认弹窗 — Kimi 白底实心卡片 */
+  --confirm-dialog-bg: #FFFFFF;
+  --confirm-dialog-border: #E5E5E5;
+  --confirm-dialog-shadow: 0 8px 32px rgba(0, 0, 0, 0.12);
+  --confirm-dialog-overlay: rgba(0, 0, 0, 0.45);
 
   /* 侧边栏 — 新建会话按钮（白底 + 细边框 + 轻阴影） */
   --sidebar-new-chat-bg: #FFFFFF;

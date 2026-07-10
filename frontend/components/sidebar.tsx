@@ -1,6 +1,6 @@
 "use client"
 
-import { useMemo, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import type { ChatHistoryItem } from "@/app/page"
 import type { UserInfo } from "@/lib/api-client"
 import type { AgentDef } from "./agent-section"
@@ -8,16 +8,22 @@ import type { AgentDef } from "./agent-section"
 type HistoryDeleteDialogState =
   | {
       mode: "single"
-      ids: number[]
+      sessionIds: string[]
       title: string
     }
   | {
       mode: "bulk"
-      ids: number[]
+      sessionIds: string[]
       title: string
       count: number
     }
   | null
+
+type HistoryMenuState = {
+  item: ChatHistoryItem
+  top: number
+  left: number
+} | null
 
 interface SidebarProps {
   open: boolean
@@ -26,8 +32,8 @@ interface SidebarProps {
   chatHistory: ChatHistoryItem[]
   agentNames: Record<string, string>
   onSelectHistory: (item: any) => void
-  onDeleteHistory: (id: number) => void | Promise<void>
-  onBulkDeleteHistory?: (ids: number[]) => void | Promise<void>
+  onDeleteHistory: (sessionId: string) => void | Promise<void>
+  onBulkDeleteHistory?: (sessionIds: string[]) => void | Promise<void>
   onRenameHistory?: (id: number, newTitle: string) => void
   onOpenSettings: () => void
   activeConversationId: number | null
@@ -70,9 +76,9 @@ export function Sidebar({
   const [agentsExpanded, setAgentsExpanded] = useState(true)
   const [hoveredHistoryId, setHoveredHistoryId] = useState<number | null>(null)
   const [hoveredAgentId, setHoveredAgentId] = useState<string | null>(null)
-  const [menuHistoryId, setMenuHistoryId] = useState<number | null>(null)
+  const [historyMenu, setHistoryMenu] = useState<HistoryMenuState>(null)
   const [bulkMode, setBulkMode] = useState(false)
-  const [selectedHistoryIds, setSelectedHistoryIds] = useState<Set<number>>(new Set())
+  const [selectedHistoryIds, setSelectedHistoryIds] = useState<Set<string>>(new Set())
   const [deleteDialog, setDeleteDialog] = useState<HistoryDeleteDialogState>(null)
   const [deletingHistory, setDeletingHistory] = useState(false)
   
@@ -90,6 +96,32 @@ export function Sidebar({
       )
     })
   }, [agentNames, chatHistory, normalizedSearch])
+
+  useEffect(() => {
+    if (!historyMenu) return
+    const closeMenu = () => setHistoryMenu(null)
+    window.addEventListener("scroll", closeMenu, true)
+    window.addEventListener("resize", closeMenu)
+    return () => {
+      window.removeEventListener("scroll", closeMenu, true)
+      window.removeEventListener("resize", closeMenu)
+    }
+  }, [historyMenu])
+
+  const openHistoryMenu = (e: React.MouseEvent<HTMLButtonElement>, item: ChatHistoryItem) => {
+    e.stopPropagation()
+    if (historyMenu?.item.id === item.id) {
+      setHistoryMenu(null)
+      return
+    }
+    const rect = e.currentTarget.getBoundingClientRect()
+    const menuWidth = 132
+    setHistoryMenu({
+      item,
+      top: rect.bottom + 6,
+      left: Math.max(8, Math.min(rect.right - menuWidth, window.innerWidth - menuWidth - 8)),
+    })
+  }
 
   const handleLogout = () => {
     onLogout()
@@ -109,12 +141,10 @@ export function Sidebar({
     setDeletingHistory(true)
     try {
       if (deleteDialog.mode === "bulk" && onBulkDeleteHistory) {
-        // 批量删除模式，使用批量删除方法
-        await onBulkDeleteHistory(deleteDialog.ids)
+        await onBulkDeleteHistory(deleteDialog.sessionIds)
       } else {
-        // 单个删除模式，或没有提供批量删除方法，使用单个删除
-        for (const id of deleteDialog.ids) {
-          await onDeleteHistory(id)
+        for (const sid of deleteDialog.sessionIds) {
+          await onDeleteHistory(sid)
         }
       }
       setDeleteDialog(null)
@@ -381,8 +411,8 @@ export function Sidebar({
                       onClick={() => {
                         if (bulkMode) {
                           const next = new Set(selectedHistoryIds)
-                          if (next.has(item.id)) next.delete(item.id)
-                          else next.add(item.id)
+                          if (next.has(item.sessionId)) next.delete(item.sessionId)
+                          else next.add(item.sessionId)
                           setSelectedHistoryIds(next)
                         } else {
                           onSelectHistory(item)
@@ -393,8 +423,8 @@ export function Sidebar({
                           e.preventDefault()
                           if (bulkMode) {
                             const next = new Set(selectedHistoryIds)
-                            if (next.has(item.id)) next.delete(item.id)
-                            else next.add(item.id)
+                            if (next.has(item.sessionId)) next.delete(item.sessionId)
+                            else next.add(item.sessionId)
                             setSelectedHistoryIds(next)
                           } else {
                             onSelectHistory(item)
@@ -413,11 +443,11 @@ export function Sidebar({
                         {bulkMode && (
                           <input
                             type="checkbox"
-                            checked={selectedHistoryIds.has(item.id)}
+                            checked={selectedHistoryIds.has(item.sessionId)}
                             onChange={(e) => {
                               const next = new Set(selectedHistoryIds)
-                              if (e.target.checked) next.add(item.id)
-                              else next.delete(item.id)
+                              if (e.target.checked) next.add(item.sessionId)
+                              else next.delete(item.sessionId)
                               setSelectedHistoryIds(next)
                             }}
                             onClick={(e) => e.stopPropagation()}
@@ -460,20 +490,18 @@ export function Sidebar({
                         ) : (
                           <span className="sidebar-text-item truncate flex-1" title={item.query}>{item.query}</span>
                         )}
-                        <div className="relative ml-1 w-5 flex-shrink-0">
+                        <div className="relative ml-1 flex-shrink-0">
                           {!bulkMode && (
                             <button
-                              onClick={(e) => {
-                                e.stopPropagation()
-                                setMenuHistoryId(menuHistoryId === item.id ? null : item.id)
-                              }}
+                              type="button"
+                              onClick={(e) => openHistoryMenu(e, item)}
                               className="transition-all cursor-pointer rounded-md flex items-center justify-center hover:bg-black/10 dark:hover:bg-white/10"
                               style={{
                                 width: "24px",
                                 height: "24px",
                                 color: "var(--text-muted)",
-                                opacity: hovered || item.active || menuHistoryId === item.id ? 0.9 : 0,
-                                pointerEvents: hovered || item.active || menuHistoryId === item.id ? "auto" : "none",
+                                opacity: hovered || item.active || historyMenu?.item.id === item.id ? 0.9 : 0,
+                                pointerEvents: hovered || item.active || historyMenu?.item.id === item.id ? "auto" : "none",
                               }}
                               title="更多"
                               aria-label="更多"
@@ -482,62 +510,6 @@ export function Sidebar({
                                 <circle cx="5" cy="12" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="19" cy="12" r="2"/>
                               </svg>
                             </button>
-                          )}
-                          {menuHistoryId === item.id && (
-                            <>
-                              <div 
-                                className="fixed inset-0 z-40" 
-                                onClick={(e) => {
-                                  e.stopPropagation()
-                                  setMenuHistoryId(null)
-                                }}
-                              />
-                              <div
-                                className="absolute right-0 mt-1 rounded-md z-50 py-1"
-                                style={{
-                                  background: "var(--card)",
-                                  border: "1px solid var(--border)",
-                                  boxShadow: "0 4px 12px rgba(0,0,0,0.1)",
-                                  minWidth: 100,
-                                }}
-                              >
-                                <button
-                                  className="flex items-center gap-2 w-full text-left px-3 py-2 text-[12px] hover:bg-black/5 dark:hover:bg-white/10 transition-colors rounded-sm"
-                                  style={{ color: "var(--foreground)" }}
-                                  onClick={(e) => {
-                                    e.stopPropagation()
-                                    setMenuHistoryId(null)
-                                    setEditingHistoryId(item.id)
-                                    setEditTitle(item.query)
-                                  }}
-                                >
-                                  <svg width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-                                    <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
-                                    <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
-                                  </svg>
-                                  重命名
-                                </button>
-                                <button
-                                  className="flex items-center gap-2 w-full text-left px-3 py-2 text-[12px] hover:bg-red-50 dark:hover:bg-red-500/10 transition-colors rounded-sm"
-                                  style={{ color: "#EF4444" }}
-                                  onClick={(e) => {
-                                    e.stopPropagation()
-                                    setMenuHistoryId(null)
-                                    setDeleteDialog({
-                                      mode: "single",
-                                      ids: [item.id],
-                                      title: item.query,
-                                    })
-                                  }}
-                                >
-                                  <svg width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-                                    <polyline points="3 6 5 6 21 6" />
-                                    <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
-                                  </svg>
-                                  删除
-                                </button>
-                              </div>
-                            </>
                           )}
                         </div>
                       </div>
@@ -557,7 +529,7 @@ export function Sidebar({
                     checked={selectedHistoryIds.size === filteredChatHistory.length && filteredChatHistory.length > 0}
                     onChange={(e) => {
                       if (e.target.checked) {
-                        setSelectedHistoryIds(new Set(filteredChatHistory.map((c) => c.id)))
+                        setSelectedHistoryIds(new Set(filteredChatHistory.map((c) => c.sessionId)))
                       } else {
                         setSelectedHistoryIds(new Set())
                       }
@@ -584,14 +556,14 @@ export function Sidebar({
                     style={{ background: "var(--accent)", color: "var(--accent-foreground)" }}
                     disabled={selectedHistoryIds.size === 0}
                     onClick={() => {
-                      const ids = Array.from(selectedHistoryIds)
-                      if (ids.length === 0) return
+                      const sessionIds = [...new Set(Array.from(selectedHistoryIds).filter(Boolean))]
+                      if (sessionIds.length === 0) return
                       setDeleteDialog({
                         mode: "bulk",
-                        ids,
-                        count: ids.length,
-                        title: ids.length === 1
-                          ? (chatHistory.find((item) => item.id === ids[0])?.title || "该会话")
+                        sessionIds,
+                        count: sessionIds.length,
+                        title: sessionIds.length === 1
+                          ? (chatHistory.find((item) => item.sessionId === sessionIds[0])?.title || "该会话")
                           : "这些会话",
                       })
                     }}
@@ -654,53 +626,90 @@ export function Sidebar({
             </div>
       </aside>
 
+      {historyMenu && (
+        <>
+          <div className="fixed inset-0 z-[1000]" onClick={() => setHistoryMenu(null)} />
+          <div
+            className="sidebar-history-dropdown"
+            style={{
+              position: "fixed",
+              top: historyMenu.top,
+              left: historyMenu.left,
+              zIndex: 1001,
+            }}
+          >
+            <button
+              type="button"
+              className="sidebar-history-dropdown-item"
+              onClick={(e) => {
+                e.stopPropagation()
+                setHistoryMenu(null)
+                setEditingHistoryId(historyMenu.item.id)
+                setEditTitle(historyMenu.item.query || historyMenu.item.title)
+              }}
+            >
+              <svg width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
+                <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
+              </svg>
+              <span>重命名</span>
+            </button>
+            <button
+              type="button"
+              className="sidebar-history-dropdown-item sidebar-history-dropdown-item--danger"
+              onClick={(e) => {
+                e.stopPropagation()
+                setHistoryMenu(null)
+                setDeleteDialog({
+                  mode: "single",
+                  sessionIds: [historyMenu.item.sessionId],
+                  title: historyMenu.item.query || historyMenu.item.title,
+                })
+              }}
+            >
+              <svg width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" aria-hidden="true">
+                <polyline points="3 6 5 6 21 6" />
+                <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+              </svg>
+              <span>删除</span>
+            </button>
+          </div>
+        </>
+      )}
+
       {deleteDialog && (
         <>
           <div
-            className="fixed inset-0 z-[1100] bg-black/40 backdrop-blur-sm"
+            className="confirm-dialog-overlay"
             onClick={() => {
               if (!deletingHistory) {
                 setDeleteDialog(null)
               }
             }}
           />
-          <div
-            style={{
-              position: "fixed",
-              top: "50%",
-              left: "50%",
-              transform: "translate(-50%, -50%)",
-              zIndex: 1101,
-              width: "min(360px, calc(100vw - 32px))",
-              background: "var(--card)",
-              borderRadius: "16px",
-              border: "1px solid var(--border)",
-              boxShadow: "0 20px 60px rgba(0,0,0,0.4)",
-              padding: "24px",
-            }}
-          >
-            <h4 className="text-[15px] font-bold mb-2" style={{ color: "var(--foreground)" }}>
+          <div className="confirm-dialog-panel">
+            <h4 className="confirm-dialog-title">
               {deleteDialog.mode === "bulk" ? "删除历史会话" : "删除会话"}
             </h4>
-            <p className="text-[13px] mb-6 leading-relaxed" style={{ color: "var(--text-secondary)" }}>
+            <p className="confirm-dialog-message">
               {deleteDialog.mode === "bulk"
                 ? `确定要删除已选中的 ${deleteDialog.count} 条历史会话吗？删除后将无法恢复。`
                 : `确定要删除「${deleteDialog.title}」吗？删除后将无法恢复。`}
             </p>
-            <div className="flex justify-end gap-2">
+            <div className="confirm-dialog-actions">
               <button
+                type="button"
                 onClick={() => setDeleteDialog(null)}
                 disabled={deletingHistory}
-                className="rounded-xl px-4 py-2 text-[12px] font-medium transition-all hover:bg-white/10 disabled:opacity-50"
-                style={{ color: "var(--text-secondary)" }}
+                className="confirm-dialog-cancel"
               >
                 取消
               </button>
               <button
+                type="button"
                 onClick={handleConfirmDelete}
                 disabled={deletingHistory}
-                className="rounded-xl px-4 py-2 text-[12px] font-semibold text-white transition-all hover:-translate-y-0.5 disabled:opacity-50 disabled:cursor-not-allowed"
-                style={{ background: "#EF4444", boxShadow: "0 2px 8px rgba(239,68,68,0.3)" }}
+                className="confirm-dialog-danger"
               >
                 {deletingHistory ? "删除中..." : "确认删除"}
               </button>
