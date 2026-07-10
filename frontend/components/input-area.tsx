@@ -87,10 +87,9 @@ export function InputArea({
 
   return (
     <div
-      className="flex-shrink-0 border-t px-6 pb-5 pt-4"
+      className="flex-shrink-0 px-6 pb-6 pt-4"
       style={{
-        background: "var(--primary)",
-        borderColor: "var(--border)",
+        background: "var(--background)",
       }}
     >
       <div className="mx-auto flex max-w-[960px] flex-col gap-3">
@@ -156,10 +155,11 @@ export function InputArea({
 
         {/* Input wrapper */}
         <div
-          className="flex flex-col gap-2 rounded-2xl border px-4 py-3 transition-all focus-within:border-[var(--accent)] focus-within:shadow-[0_0_0_3px_var(--glow)]"
+          className="flex flex-col gap-2 rounded-2xl border px-4 py-3 transition-all focus-within:border-[var(--accent)] focus-within:shadow-[0_4px_20px_rgba(37,99,235,0.15)]"
           style={{
-            background: "var(--secondary)",
-            borderColor: "transparent",
+            background: "var(--card)",
+            borderColor: "var(--border)",
+            boxShadow: "var(--shadow-md)",
           }}
         >
           <textarea
