@@ -233,7 +233,7 @@ function mapMessage(m: MessageApi): Message {
   return {
     role: m.role === "assistant" ? "ai" : m.role as "user" | "ai",
     text: mainText,
-    thinking,
+    thinking: thinking || undefined,
     thinkingComplete: true, // 历史消息中的思考肯定是完成的
     query: m.query,
     // files: normalizeMessageAttachments(m.attachments),
@@ -302,7 +302,6 @@ export default function Page() {
   const [isStreaming, setIsStreaming] = useState(false)
   const [resourceSidebarOpen, setResourceSidebarOpen] = useState(false)
   const [resourceSidebarResources, setResourceSidebarResources] = useState<ResourceItem[]>([])
-  const chatAreaRef = useRef<HTMLDivElement>(null)
 
   /* ───── 对话持久化状态 ───── */
   const [activeConversationId, setActiveConversationId] = useState<number | null>(null)
@@ -471,27 +470,9 @@ export default function Page() {
     [success],
   )
 
-  /* ───── 滚动到底 ───── */
-  const scrollToBottom = useCallback(() => {
-    if (chatAreaRef.current) {
-      chatAreaRef.current.scrollTop = chatAreaRef.current.scrollHeight
-    }
-  }, [])
-
-  const isAtBottom = useCallback(() => {
-    const el = chatAreaRef.current
-    if (!el) return true
-    return el.scrollHeight - el.scrollTop - el.clientHeight < 100
-  }, [])
-
-  useEffect(() => {
-    if (isAtBottom()) {
-      scrollToBottom()
-    }
-  }, [messages, scrollToBottom, isAtBottom])
-
   /* ───── 智能体切换 ───── */
   const handleSelectAgent = (agentId: string) => {
+    refreshConversations()
     if (isStreaming) {
       handleStopStreaming()
     }
@@ -499,6 +480,18 @@ export default function Page() {
     handleNewChat()
     maybeCloseSidebar()
   }
+
+  const refreshConversations = useCallback(async () => {
+    try {
+      const convsRes = await getConversations()
+      if (convsRes?.data?.rows?.length > 0) {
+        setConversations(convsRes?.data?.rows)
+      }
+      console.log('convsRes123:', convsRes)
+    } catch (err) {
+      console.error("刷新会话列表失败:", err)
+    }
+  }, [])
 
   const handleNewChat = () => {
     setMessages([])
@@ -512,10 +505,12 @@ export default function Page() {
     setUploadedFiles([])
     setRawImageFiles([])
     setRawDocFiles([])
+    refreshConversations()
   }
 
   const handleSelectHistory = async (item: any) => {
     try {
+      refreshConversations()
       const id = item.id
       console.log('id123:', id)
       console.log('sessionId123:', item.sessionId)
@@ -617,6 +612,7 @@ export default function Page() {
       const response = await callDifyChatStream({
         query: userText,
         user: user?.username || "anonymous",
+        userId: user?.id,
         conversationId: difyConversationIdRef.current,
         inputs: getAgentInputs(currentAgentId, agentDefs),
         agentId: currentAgentId,
@@ -727,7 +723,6 @@ export default function Page() {
               case "message":
                 if (event.answer) {
                   rawAssistantContent += event.answer
-                  resourcesList = event.retriever_resources || []
                   const parsedContent = extractThinkingFromContent(rawAssistantContent)
                   fullAnswer = parsedContent.mainText
                   if (parsedContent.hasThinkTag) {
@@ -774,6 +769,7 @@ export default function Page() {
                   currentTaskIdRef.current = event.task_id
                 }
                 chunkHasUpdates = true
+                resourcesList = event.metadata.retriever_resources || []
                 break
 
               case "error":
@@ -1279,7 +1275,6 @@ export default function Page() {
           />
 
           <ChatArea
-            ref={chatAreaRef}
             messages={messages}
             onUseSuggestion={(text) => handleSendMessage(text)}
             isStreaming={isStreaming}
