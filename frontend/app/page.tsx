@@ -167,6 +167,12 @@ function normalizeMessageAttachments(rawAttachments: unknown[]): MessageFileAtta
   })
 }
 
+function convertToMarkdown(text: string) {
+  text = text.split(`\\n`).join(`\n`)
+  
+  return text;
+}
+
 function extractThinkingFromContent(content: string): {
   thinking: string | null
   mainText: string
@@ -224,22 +230,41 @@ function normalizeResources(rawResources: unknown): ResourceItem[] {
   })
 }
 
-function mapMessage(m: MessageApi): Message {
+function mapMessage(m: MessageApi): Message[] {
   console.log('mapMessage123:', m)
-  //const content = m.content || "";
-  const content = m.answer || "";
-  const { thinking, mainText } = extractThinkingFromContent(content)
+  const result: Message[] = []
+  const baseTime = new Date(m.createTime).toLocaleTimeString("zh-CN", { hour: "2-digit", minute: "2-digit" })
+  const resourcesList = normalizeResources((m as any).resources_list)
   
-  return {
-    role: m.role === "assistant" ? "ai" : m.role as "user" | "ai",
-    text: mainText,
-    thinking: thinking || undefined,
-    thinkingComplete: true, // 历史消息中的思考肯定是完成的
-    query: m.query,
-    // files: normalizeMessageAttachments(m.attachments),
-    resourcesList: normalizeResources((m as any).resources_list),
-    time: new Date(m.createTime).toLocaleTimeString("zh-CN", { hour: "2-digit", minute: "2-digit" }),
+  if (m.query) {
+    const { thinking: userThinking, mainText: userText } = extractThinkingFromContent(m.query)
+    result.push({
+      role: "user",
+      text: userText,
+      thinking: undefined,
+      thinkingComplete: true,
+      query: m.query,
+      resourcesList: [],
+      time: baseTime,
+    })
   }
+  
+  if (m.answer) {
+    const content = convertToMarkdown(m.answer)
+    const { thinking: aiThinking, mainText: aiText } = extractThinkingFromContent(content)
+
+    result.push({
+      role: "ai",
+      text: aiText,
+      thinking: aiThinking || undefined,
+      thinkingComplete: true,
+      query: m.query,
+      resourcesList,
+      time: baseTime,
+    })
+  }
+  
+  return result
   // return {
   //   role: m.role === "assistant" ? "ai" : m.role as "user" | "ai",
   //   text: mainText,
@@ -302,7 +327,6 @@ export default function Page() {
   const [isStreaming, setIsStreaming] = useState(false)
   const [resourceSidebarOpen, setResourceSidebarOpen] = useState(false)
   const [resourceSidebarResources, setResourceSidebarResources] = useState<ResourceItem[]>([])
-  const chatAreaRef = useRef<HTMLDivElement>(null)
 
   /* ───── 对话持久化状态 ───── */
   const [activeConversationId, setActiveConversationId] = useState<number | null>(null)
@@ -471,27 +495,9 @@ export default function Page() {
     [success],
   )
 
-  /* ───── 滚动到底 ───── */
-  const scrollToBottom = useCallback(() => {
-    if (chatAreaRef.current) {
-      chatAreaRef.current.scrollTop = chatAreaRef.current.scrollHeight
-    }
-  }, [])
-
-  const isAtBottom = useCallback(() => {
-    const el = chatAreaRef.current
-    if (!el) return true
-    return el.scrollHeight - el.scrollTop - el.clientHeight < 100
-  }, [])
-
-  useEffect(() => {
-    if (isAtBottom()) {
-      scrollToBottom()
-    }
-  }, [messages, scrollToBottom, isAtBottom])
-
   /* ───── 智能体切换 ───── */
   const handleSelectAgent = (agentId: string) => {
+    refreshConversations()
     if (isStreaming) {
       handleStopStreaming()
     }
@@ -499,6 +505,18 @@ export default function Page() {
     handleNewChat()
     maybeCloseSidebar()
   }
+
+  const refreshConversations = useCallback(async () => {
+    try {
+      const convsRes = await getConversations()
+      if (convsRes?.data?.rows?.length > 0) {
+        setConversations(convsRes?.data?.rows)
+      }
+      console.log('convsRes123:', convsRes)
+    } catch (err) {
+      console.error("刷新会话列表失败:", err)
+    }
+  }, [])
 
   const handleNewChat = () => {
     setMessages([])
@@ -512,10 +530,12 @@ export default function Page() {
     setUploadedFiles([])
     setRawImageFiles([])
     setRawDocFiles([])
+    refreshConversations()
   }
 
   const handleSelectHistory = async (item: any) => {
     try {
+      refreshConversations()
       const id = item.id
       console.log('id123:', id)
       console.log('sessionId123:', item.sessionId)
@@ -528,7 +548,7 @@ export default function Page() {
       // 使用 id 进行排序最可靠，因为 id 是自增的，能准确反映插入顺序
       const sortedMsgs = [...msgsRes?.data?.messageList].sort((a, b) => new Date(a.createTime).getTime() - new Date(b.createTime).getTime());
 
-      const mappedMsgs = sortedMsgs.map(mapMessage)
+      const mappedMsgs = sortedMsgs.flatMap(mapMessage)
       setMessages(mappedMsgs)
       setActiveConversationId(id)
       // 切换到该对话所属的智能体
@@ -617,6 +637,7 @@ export default function Page() {
       const response = await callDifyChatStream({
         query: userText,
         user: user?.username || "anonymous",
+        userId: user?.id,
         conversationId: difyConversationIdRef.current,
         inputs: getAgentInputs(currentAgentId, agentDefs),
         agentId: currentAgentId,
@@ -705,6 +726,7 @@ export default function Page() {
 
               case "workflow_finished":
                 setIsStreaming(false)
+                refreshConversations()
                 isWorkflowTaskRef.current = true
                 if (event.task_id && !currentTaskIdRef.current) {
                   currentTaskIdRef.current = event.task_id
@@ -727,7 +749,6 @@ export default function Page() {
               case "message":
                 if (event.answer) {
                   rawAssistantContent += event.answer
-                  resourcesList = event.retriever_resources || []
                   const parsedContent = extractThinkingFromContent(rawAssistantContent)
                   fullAnswer = parsedContent.mainText
                   if (parsedContent.hasThinkTag) {
@@ -774,6 +795,7 @@ export default function Page() {
                   currentTaskIdRef.current = event.task_id
                 }
                 chunkHasUpdates = true
+                resourcesList = event.metadata.retriever_resources || []
                 break
 
               case "error":
@@ -1279,7 +1301,6 @@ export default function Page() {
           />
 
           <ChatArea
-            ref={chatAreaRef}
             messages={messages}
             onUseSuggestion={(text) => handleSendMessage(text)}
             isStreaming={isStreaming}
