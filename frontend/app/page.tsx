@@ -1099,7 +1099,7 @@ export default function Page() {
         style={{
           minHeight: "100vh",
           display: "grid",
-          gridTemplateColumns: "320px minmax(0, 1fr)",
+          gridTemplateColumns: "240px minmax(0, 1fr)",
           background: "var(--background)",
           color: "var(--text-secondary)",
         }}
@@ -1244,7 +1244,7 @@ export default function Page() {
     <div 
       className="app" 
       style={{
-        '--sidebar-width': sidebarCollapsed ? '72px' : '320px'
+        '--sidebar-width': sidebarCollapsed ? '72px' : '240px'
       } as React.CSSProperties}
     >
       <div

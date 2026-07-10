@@ -76,8 +76,8 @@
    ═══════════════════════════════════════════════════════════ */
 
 .sidebar {
-  width: 320px;
-  min-width:320px;
+  width: 240px;
+  min-width:240px;
   height: 100vh;
   background: var(--sidebar);
   border-right: none;
@@ -374,7 +374,7 @@
   display: flex;
   flex-direction: column;
   gap: 4px;
-  min-width: 320px;
+  min-width: 240px;
   max-width: 360px;
   max-height: 400px;
   overflow-y: auto;
@@ -574,7 +574,7 @@
   z-index: 1091;
   display: flex;
   flex-direction: column;
-  width: calc((100vw - var(--sidebar-width, 320px)) * 0.85);
+  width: calc((100vw - var(--sidebar-width, 240px)) * 0.85);
   min-width: 420px;
   height: 100vh;
   background: var(--card);
@@ -1967,16 +1967,16 @@
     z-index: 100;
     transform: translateX(-100%);
     box-shadow: none;
-    width: 320px !important;
-    min-width: 320px !important;
+    width: 240px !important;
+    min-width: 240px !important;
   }
   .sidebar.open {
     transform: translateX(0);
     box-shadow: 12px 0 48px rgba(0, 0, 0, 0.3);
   }
   .sidebar.collapsed {
-    width: 320px !important;
-    min-width: 320px !important;
+    width: 240px !important;
+    min-width: 240px !important;
   }
   .sidebar-hotspot {
     display: none;
@@ -1995,9 +1995,9 @@
 
 
 @media (max-width: 600px) {
-  .sidebar { width: 320px; min-width: 320px; }
+  .sidebar { width: 240px; min-width: 240px; }
   .toast-item { font-size: 12px; padding: 10px 16px; border-radius: 10px; }
-  .theme-menu { min-width: 320px; max-width: 300px; }
+  .theme-menu { min-width: 240px; max-width: 300px; }
   .attachment-preview-panel {
     width: 100vw;
     min-width: 0;
