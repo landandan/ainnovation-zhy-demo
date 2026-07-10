@@ -55,9 +55,9 @@ export async function request<T>(
       removeToken()
       if (typeof window !== "undefined" && !authRedirectInProgress) {
         authRedirectInProgress = true
-        setTimeout(() => {
-          window.location.href = "/login"
-        }, 100)
+        // setTimeout(() => {
+        //   window.location.href = "/login"
+        // }, 100)
       }
     }
     if (!options.suppressErrors) {
