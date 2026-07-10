@@ -219,22 +219,20 @@ function extractThinkingFromContent(content: string): {
   }
 }
 
-function normalizeResources(rawResources: unknown): ResourceItem[] {
-  if (!Array.isArray(rawResources)) return []
-  return rawResources.map((item) => {
-    const record = item as Record<string, unknown>
-    return {
-      document_name: typeof record.document_name === "string" ? record.document_name : "未知文档",
-      content: typeof record.content === "string" ? record.content : "",
-    }
-  })
+function normalizeResources(rawResources: string): ResourceItem[] {
+  if (!rawResources) return []
+  try {
+    return JSON.parse(rawResources)
+  } catch (e) {
+    return []
+  }
 }
 
 function mapMessage(m: MessageApi): Message[] {
   console.log('mapMessage123:', m)
   const result: Message[] = []
   const baseTime = new Date(m.createTime).toLocaleTimeString("zh-CN", { hour: "2-digit", minute: "2-digit" })
-  const resourcesList = normalizeResources((m as any).resources_list)
+  const resourcesList = normalizeResources((m as any).retriever_resources)
   
   if (m.query) {
     const { thinking: userThinking, mainText: userText } = extractThinkingFromContent(m.query)
@@ -556,7 +554,7 @@ export default function Page() {
       setActiveConversationId(id)
       setSessionId(item.sessionId)
       // 切换到该对话所属的智能体
-      const conv = conversations.find((c) => c.id === id)
+      const conv = conversations.find((c) => c.id === item.appId)
       if (conv) setCurrentAgentId(conv.agent_id_str)
       difyConversationIdRef.current = null
       maybeCloseSidebar()
