@@ -76,6 +76,7 @@ export interface ChatHistoryItem {
   preview: string
   time: string
   active: boolean
+  sessionId: string
 }
 
 export interface AgentDef {
@@ -101,15 +102,25 @@ export type ThemeId = (typeof THEMES)[number]["id"]
 /** 将后端 AgentDefApi 转为前端 AgentDef */
 function mapAgentDef(a: AgentDefApi): AgentDef {
   return {
-    id: a.agent_id,
-    label: a.label,
+    id: a.id,
+    label: a.appName,
     icon: a.icon,
     desc: a.desc,
-    gradient: a.gradient,
+    gradient: a.appType,
     sortOrder: a.sort_order,
-    isActive: a.is_active,
+    isActive: a.status,
     quickQuestions: a.quick_questions,
   }
+  // return {
+  //   id: a.agent_id,
+  //   label: a.label,
+  //   icon: a.icon,
+  //   desc: a.desc,
+  //   gradient: a.gradient,
+  //   sortOrder: a.sort_order,
+  //   isActive: a.is_active,
+  //   quickQuestions: a.quick_questions,
+  // }
 }
 
 /** 将后端 MessageApi 转为前端 Message */
@@ -214,7 +225,9 @@ function normalizeResources(rawResources: unknown): ResourceItem[] {
 }
 
 function mapMessage(m: MessageApi): Message {
-  const content = m.content || "";
+  console.log('mapMessage123:', m)
+  //const content = m.content || "";
+  const content = m.answer || "";
   const { thinking, mainText } = extractThinkingFromContent(content)
   
   return {
@@ -222,10 +235,20 @@ function mapMessage(m: MessageApi): Message {
     text: mainText,
     thinking,
     thinkingComplete: true, // 历史消息中的思考肯定是完成的
-    files: normalizeMessageAttachments(m.attachments),
+    query: m.query,
+    // files: normalizeMessageAttachments(m.attachments),
     resourcesList: normalizeResources((m as any).resources_list),
-    time: new Date(m.created_at).toLocaleTimeString("zh-CN", { hour: "2-digit", minute: "2-digit" }),
+    time: new Date(m.createTime).toLocaleTimeString("zh-CN", { hour: "2-digit", minute: "2-digit" }),
   }
+  // return {
+  //   role: m.role === "assistant" ? "ai" : m.role as "user" | "ai",
+  //   text: mainText,
+  //   thinking,
+  //   thinkingComplete: true, // 历史消息中的思考肯定是完成的
+  //   files: normalizeMessageAttachments(m.attachments),
+  //   resourcesList: normalizeResources((m as any).resources_list),
+  //   time: new Date(m.created_at).toLocaleTimeString("zh-CN", { hour: "2-digit", minute: "2-digit" }),
+  // }
 }
 
 export default function Page() {
@@ -283,7 +306,7 @@ export default function Page() {
 
   /* ───── 对话持久化状态 ───── */
   const [activeConversationId, setActiveConversationId] = useState<number | null>(null)
-  const [sessionId, setSessionId] = useState<string>(() => `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`)
+  const [sessionId, setSessionId] = useState<string>('')
   const difyConversationIdRef = useRef<string | null>(null)
 
   /* ───── 流式请求中断 ───── */
@@ -325,14 +348,15 @@ export default function Page() {
           getAgents(),
           getConversations(),
         ])
+        //const convsRes = cRes.data
         console.log('agentsRes123:', agentsRes)
         console.log('convsRes123:', convsRes)
-        if (agentsRes.agents?.length > 0) {
-          const mapped = agentsRes.agents.map(mapAgentDef)
+        if (agentsRes?.rows?.length > 0) {
+          const mapped = agentsRes.rows.map(mapAgentDef)
           setAgentDefs(mapped)
           // 建立 agent_id → db_id 映射
           const idMap = new Map<string, number>()
-          for (const a of agentsRes.agents) {
+          for (const a of agentsRes.rows) {
             idMap.set(a.agent_id, a.id)
           }
           agentIdToDbId.current = idMap
@@ -344,8 +368,8 @@ export default function Page() {
           }
         }
 
-        if (convsRes.conversations?.length > 0) {
-          setConversations(convsRes.conversations)
+        if (convsRes?.data?.rows?.length > 0) {
+          setConversations(convsRes?.data?.rows)
         }
       } catch (err) {
         console.error("加载数据失败:", err)
@@ -380,15 +404,17 @@ export default function Page() {
   /* ───── 衍生：build chatHistory from conversations ───── */
   const buildChatHistory = useCallback((): ChatHistoryItem[] => {
     return conversations.map((c) => ({
-      id: c.id,
+      id: c.messageId,
       title: c.title,
       agent: c.agent_id_str,
       preview: c.last_message_at ? "最近活跃" : "新对话",
-      time: new Date(c.last_message_at || c.created_at).toLocaleTimeString("zh-CN", {
+      time: new Date(c.last_message_at || c.createTime).toLocaleTimeString("zh-CN", {
         hour: "2-digit",
         minute: "2-digit",
       }),
       active: c.id === activeConversationId,
+      sessionId: c.sessionId || "",
+      query: c.query || "",
     }))
   }, [conversations, activeConversationId])
 
@@ -477,7 +503,7 @@ export default function Page() {
   const handleNewChat = () => {
     setMessages([])
     setActiveConversationId(null)
-    setSessionId(`${Date.now()}-${Math.random().toString(36).substr(2, 9)}`)
+    setSessionId(``)
     difyConversationIdRef.current = null
     setSidebarOpen(false)
     setIsStreaming(false)
@@ -488,14 +514,19 @@ export default function Page() {
     setRawDocFiles([])
   }
 
-  const handleSelectHistory = async (id: number) => {
+  const handleSelectHistory = async (item: any) => {
     try {
+      const id = item.id
+      console.log('id123:', id)
+      console.log('sessionId123:', item.sessionId)
+      console.log('item:', item)
       // 从后端加载消息
-      const msgsRes = await getMessages(id)
+      const msgsRes = await getMessages(item.sessionId)
+      console.log('msgsRes123:', msgsRes)
       
       // 确保消息按正序排列（旧的在前，新的在后）
       // 使用 id 进行排序最可靠，因为 id 是自增的，能准确反映插入顺序
-      const sortedMsgs = [...msgsRes.messages].sort((a, b) => a.id - b.id);
+      const sortedMsgs = [...msgsRes?.data?.messageList].sort((a, b) => new Date(a.createTime).getTime() - new Date(b.createTime).getTime());
 
       const mappedMsgs = sortedMsgs.map(mapMessage)
       setMessages(mappedMsgs)
@@ -503,7 +534,7 @@ export default function Page() {
       // 切换到该对话所属的智能体
       const conv = conversations.find((c) => c.id === id)
       if (conv) setCurrentAgentId(conv.agent_id_str)
-      setSessionId(`${Date.now()}-${Math.random().toString(36).substr(2, 9)}`)
+      setSessionId(item.sessionId)
       difyConversationIdRef.current = null
       maybeCloseSidebar()
       // 静默切换，不显示提示
@@ -591,7 +622,7 @@ export default function Page() {
         agentId: currentAgentId,
         signal: controller.signal,
         files,
-        sessionId,
+        sessionId: sessionId,
       })
 
       const reader = response.body?.getReader()
@@ -621,17 +652,19 @@ export default function Page() {
         if (done) break
 
         buffer += decoder.decode(value, { stream: true })
-        console.log('buffer123:', buffer)
+        //console.log('buffer123:', buffer)
         const lines = buffer.split("\n")
         buffer = lines.pop() || ""
 
         let chunkHasUpdates = false
 
         for (const line of lines) {
+          //console.log('line123:', line)
           const trimmed = line.trim()
-          if (!trimmed || !trimmed.startsWith("data: ")) continue
+          if (!trimmed || !trimmed.startsWith("data:data: ")) continue
+          console.log('trimmed123:', line)
 
-          const jsonStr = trimmed.slice(6)
+          const jsonStr = trimmed.slice(11)
           if (jsonStr === "[DONE]") continue
 
           try {
@@ -671,6 +704,7 @@ export default function Page() {
                 break
 
               case "workflow_finished":
+                setIsStreaming(false)
                 isWorkflowTaskRef.current = true
                 if (event.task_id && !currentTaskIdRef.current) {
                   currentTaskIdRef.current = event.task_id

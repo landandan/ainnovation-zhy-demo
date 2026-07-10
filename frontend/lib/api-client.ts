@@ -71,7 +71,7 @@ export class ApiError extends Error {
 let authRedirectInProgress = false
 
 // 在开发环境下，直接请求后端 5000 端口以绕过 Next.js 代理的缓冲问题
-const API_BASE_URL = process.env.NODE_ENV === 'development' ? '' : '/api'//? 'http://localhost:5000/api' : '/api'
+const API_BASE_URL = process.env.NODE_ENV === 'development' ? 'http://192.168.11.95:6039' : '/api'//? 'http://localhost:5000/api' : '/api'
 
 async function request<T>(
   method: string,
@@ -180,7 +180,7 @@ export async function login(data: LoginRequest): Promise<LoginResponse> {
     const result = mockLogin(data.username, data.password)
     return result
   }
-  return request<LoginResponse>("POST", "/api/auth/login", {
+  return request<LoginResponse>("POST", "/auth/login", {
     ...data,
     "clientId": "0d4c873ff6146ecd7f38e2e45526ab1b",
     "grantType": "password",
@@ -194,7 +194,7 @@ export async function logout(): Promise<LogoutResponse> {
   //   // Mock 模式下注册直接返回 admin 用户
   //   return { token: "mock-jwt-token-admin-1234567890", user: getMockUser() }
   // }
-  return request<LogoutResponse>("POST", "/api/auth/logout", {})
+  return request<LogoutResponse>("POST", "/auth/logout", {})
 }
 
 export async function register(data: RegisterRequest): Promise<LoginResponse> {
@@ -243,29 +243,56 @@ export interface AgentsListResponse {
 }
 
 export async function getAgents(): Promise<AgentsListResponse> {
-  if (isMockMode()) {
-    await mockDelay()
-    return getMockAgentsWithConfigs()
-  }
-  return request<AgentsListResponse>("GET", "/agents")
+  // if (isMockMode()) {
+  //   await mockDelay()
+  //   return getMockAgentsWithConfigs()
+  // }
+  return request<AgentsListResponse>("POST", "/manage/difyApp/app/list?pageNum=1&pageSize=20")
 }
 
 /* ───── Conversations API ───── */
 
 export interface ConversationApi {
+  // id: number
+  // user_id: number
+  // agent_id: number
+  // agent_id_str: string
+  // title: string
+  // dify_conversation_id: string
+  // is_pinned: boolean
+  // is_archived: boolean
+  // last_message_at: string
+  // created_at: string
+  // message_count: number
+  // messages?: MessageApi[]
   id: number
-  user_id: number
-  agent_id: number
-  agent_id_str: string
-  title: string
-  dify_conversation_id: string
-  is_pinned: boolean
-  is_archived: boolean
-  last_message_at: string
-  created_at: string
-  message_count: number
-  messages?: MessageApi[]
+  messageId: string
+  appId: string
+  sessionId: string
+  title: string;
+  query: string
+  type: string
+  messageType: string
+  answer: string
+  agentName: string
+  status: string
+  totalTokens: number
+  createTime: number
 }
+// {
+//     "messageId": "123456",
+//     "appId": "6c744963-3485-409c-971c-29ea1efe842e",
+//     "sessionId": "123456789",
+//     "title": "test",
+//     "query": "测试问题",
+//     "type": "分类",
+//     "messageType": "text",
+//     "answer": "测试回答返回内容",
+//     "agentName": "会议助手-会话记忆",
+//     "status": "1",
+//     "totalTokens": 1200,
+//     "createTime": 1783481971000
+// }
 
 export interface ConversationsListResponse {
   conversations: ConversationApi[]
@@ -276,15 +303,27 @@ export interface ConversationsListResponse {
 }
 
 export interface MessageApi {
-  id: number
-  conversation_id: number
+  messageId: string
   role: "user" | "assistant" | "system"
-  content: string
-  attachments: unknown[]
-  metadata: Record<string, unknown>
-  dify_message_id: string
-  is_error: boolean
-  created_at: string
+  messageType: string
+  query: string
+  inputFileList: unknown[]
+  answer: string
+  outputFileList: unknown[]
+  queryTokens: number
+  answerTokens: number
+  totalTokens: number
+  status: string
+  createTime: string
+  // id: number
+  // conversation_id: number
+  // role: "user" | "assistant" | "system"
+  // content: string
+  // attachments: unknown[]
+  // metadata: Record<string, unknown>
+  // dify_message_id: string
+  // is_error: boolean
+  // created_at: string
 }
 
 export interface MessagesListResponse {
@@ -308,7 +347,7 @@ export async function getConversations(params?: {
   if (params?.page) qs.set("page", String(params.page))
   if (params?.per_page) qs.set("per_page", String(params.per_page))
   const query = qs.toString()
-  return request<ConversationsListResponse>("GET", `/api/h5/chat/messages/page?pageNum=1&pageSize=10`)
+  return request<ConversationsListResponse>("POST", `/h5/chat/messages/page?pageNum=1&pageSize=10`)
   // return request<ConversationsListResponse>("GET", `/conversations${query ? `?${query}` : ""}`)
 }
 
@@ -356,19 +395,18 @@ export async function deleteConversationApi(convId: number): Promise<{ message: 
 }
 
 export async function getMessages(
-  convId: number,
-  params?: { page?: number; per_page?: number; before_id?: number },
+  sessionId: string,
 ): Promise<MessagesListResponse> {
-  if (isMockMode()) {
-    await mockDelay()
-    return getMockMessages(convId)
-  }
-  const qs = new URLSearchParams()
-  if (params?.page) qs.set("page", String(params.page))
-  if (params?.per_page) qs.set("per_page", String(params.per_page))
-  if (params?.before_id) qs.set("before_id", String(params.before_id))
-  const query = qs.toString()
-  return request<MessagesListResponse>("GET", `/conversations/${convId}/messages${query ? `?${query}` : ""}`)
+  // if (isMockMode()) {
+  //   await mockDelay()
+  //   return getMockMessages(sessionId)
+  // }
+  // const qs = new URLSearchParams()
+  // if (params?.page) qs.set("page", String(params.page))
+  // if (params?.per_page) qs.set("per_page", String(params.per_page))
+  // if (params?.before_id) qs.set("before_id", String(params.before_id))
+  // const query = qs.toString()
+  return request<MessagesListResponse>("POST", `/h5/chat/messages?sessionId=${sessionId}`)
 }
 
 export async function addMessage(

@@ -333,6 +333,7 @@ export function createMockConversation(data: {
     last_message_at: now,
     created_at: now,
     message_count: 0,
+    sessionId: '',
   }
 
   conversations.push(newConv)

@@ -27,8 +27,8 @@ function AuthGuard({ children }: { children: React.ReactNode }) {
     }
 
     if (!user && !isLoginPage) {
-      //  暂时先不支持登录 router.replace("/login")
-      enableMockLogin()
+      router.replace("/login")
+      // enableMockLogin()
     } else if (user && isLoginPage) {
       router.replace("/")
     }
