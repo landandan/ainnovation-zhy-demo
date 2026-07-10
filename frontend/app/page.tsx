@@ -551,10 +551,10 @@ export default function Page() {
       const mappedMsgs = sortedMsgs.flatMap(mapMessage)
       setMessages(mappedMsgs)
       setActiveConversationId(id)
+      setSessionId(item.sessionId)
       // 切换到该对话所属的智能体
       const conv = conversations.find((c) => c.id === id)
       if (conv) setCurrentAgentId(conv.agent_id_str)
-      setSessionId(item.sessionId)
       difyConversationIdRef.current = null
       maybeCloseSidebar()
       // 静默切换，不显示提示
