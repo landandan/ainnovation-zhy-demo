@@ -548,6 +548,7 @@ export default function Page() {
       // 使用 id 进行排序最可靠，因为 id 是自增的，能准确反映插入顺序
       const sortedMsgs = [...msgsRes?.data?.messageList].sort((a, b) => new Date(a.createTime).getTime() - new Date(b.createTime).getTime());
 
+      console.log('sortedMsgs123:', sortedMsgs)
       const mappedMsgs = sortedMsgs.flatMap(mapMessage)
       setMessages(mappedMsgs)
       setActiveConversationId(id)
