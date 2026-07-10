@@ -525,6 +525,7 @@ export default function Page() {
     difyConversationIdRef.current = null
     setSidebarOpen(false)
     setIsStreaming(false)
+    setResourceSidebarOpen(false)
     // 清空临时上传的文件和图片
     setUploadedImages([])
     setUploadedFiles([])
@@ -550,6 +551,7 @@ export default function Page() {
 
       console.log('sortedMsgs123:', sortedMsgs)
       const mappedMsgs = sortedMsgs.flatMap(mapMessage)
+      setResourceSidebarOpen(false)
       setMessages(mappedMsgs)
       setActiveConversationId(id)
       setSessionId(item.sessionId)
