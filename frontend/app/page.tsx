@@ -40,6 +40,7 @@ import {
   handleWorkflowStopped,
 } from '@/lib/workflow-progress'
 import { getUserSettings, updateUserSettings, isAuthenticated } from "@/lib/api-client"
+import { ChartNoAxesColumnDecreasing } from "lucide-react"
 
 export interface MessageFileAttachment {
   name: string
@@ -220,9 +221,11 @@ function extractThinkingFromContent(content: string): {
 }
 
 function normalizeResources(rawResources: string): ResourceItem[] {
-  if (!rawResources) return []
+  console.log('rawResources123:', rawResources)
+  if (!rawResources || !rawResources.startsWith("data: ")) return []
   try {
-    return JSON.parse(rawResources)
+    const event = JSON.parse(rawResources.slice(6).trim())
+    return event?.metadata?.retriever_resources || []
   } catch (e) {
     return []
   }
@@ -232,7 +235,7 @@ function mapMessage(m: MessageApi): Message[] {
   console.log('mapMessage123:', m)
   const result: Message[] = []
   const baseTime = new Date(m.createTime).toLocaleTimeString("zh-CN", { hour: "2-digit", minute: "2-digit" })
-  const resourcesList = normalizeResources((m as any).retriever_resources)
+  const resourcesList = normalizeResources(m.retrieverResources)
   
   if (m.query) {
     const { thinking: userThinking, mainText: userText } = extractThinkingFromContent(m.query)
@@ -679,14 +682,26 @@ export default function Page() {
         buffer = lines.pop() || ""
 
         let chunkHasUpdates = false
+        let isError = false
 
         for (const line of lines) {
           //console.log('line123:', line)
           const trimmed = line.trim()
-          if (!trimmed || !trimmed.startsWith("data:data: ")) continue
-          console.log('trimmed123:', line)
+          if (!trimmed || !trimmed.startsWith("data:")) continue
+          let outJson = JSON.parse(trimmed.slice(5).trim())
+          console.log('outJson123:', outJson)
+          if (outJson.code !== 200) {
+            fullAnswer = `哎呀，服务暂时开小差了 😅，请稍后重试。`
+            outJson.message = `data: ${JSON.stringify({
+              event: 'workflow_started',
+            })}`
+          }
+          // if (!trimmed.startsWith("data:{code=200, message=data: ")) continue
+          // console.log('trimmed123:', line)
 
-          const jsonStr = trimmed.slice(11)
+          const message = outJson.message
+          if (!message || !message.startsWith("data: ")) continue
+          const jsonStr = message.slice(6)
           if (jsonStr === "[DONE]") continue
 
           try {
