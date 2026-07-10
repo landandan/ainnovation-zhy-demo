@@ -233,10 +233,10 @@ export const ChatArea = forwardRef<HTMLDivElement, ChatAreaProps>(
         <div className="flex flex-col gap-5 p-4 sm:p-6 pb-2 max-w-[960px] mx-auto w-full">
         {messages.map((msg, idx) => {
           const isLatestMessage = idx === messages.length - 1
-          const visibleWorkflowProgress =
-            msg.workflowProgress && msg.workflowProgress.status !== "idle"
-              ? msg.workflowProgress
-              : undefined
+          const visibleWorkflowProgress = undefined
+            // msg.workflowProgress && msg.workflowProgress.status !== "idle"
+            //   ? msg.workflowProgress
+            //   : undefined
 
           // 首 token 等待阶段：脉冲骨架屏
           if (msg.waiting) {
