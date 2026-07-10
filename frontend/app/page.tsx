@@ -167,6 +167,12 @@ function normalizeMessageAttachments(rawAttachments: unknown[]): MessageFileAtta
   })
 }
 
+function convertToMarkdown(text: string) {
+  text = text.split(`\\n`).join(`\n`)
+  
+  return text;
+}
+
 function extractThinkingFromContent(content: string): {
   thinking: string | null
   mainText: string
@@ -224,22 +230,41 @@ function normalizeResources(rawResources: unknown): ResourceItem[] {
   })
 }
 
-function mapMessage(m: MessageApi): Message {
+function mapMessage(m: MessageApi): Message[] {
   console.log('mapMessage123:', m)
-  //const content = m.content || "";
-  const content = m.answer || "";
-  const { thinking, mainText } = extractThinkingFromContent(content)
+  const result: Message[] = []
+  const baseTime = new Date(m.createTime).toLocaleTimeString("zh-CN", { hour: "2-digit", minute: "2-digit" })
+  const resourcesList = normalizeResources((m as any).resources_list)
   
-  return {
-    role: m.role === "assistant" ? "ai" : m.role as "user" | "ai",
-    text: mainText,
-    thinking: thinking || undefined,
-    thinkingComplete: true, // 历史消息中的思考肯定是完成的
-    query: m.query,
-    // files: normalizeMessageAttachments(m.attachments),
-    resourcesList: normalizeResources((m as any).resources_list),
-    time: new Date(m.createTime).toLocaleTimeString("zh-CN", { hour: "2-digit", minute: "2-digit" }),
+  if (m.query) {
+    const { thinking: userThinking, mainText: userText } = extractThinkingFromContent(m.query)
+    result.push({
+      role: "user",
+      text: userText,
+      thinking: undefined,
+      thinkingComplete: true,
+      query: m.query,
+      resourcesList: [],
+      time: baseTime,
+    })
   }
+  
+  if (m.answer) {
+    const content = convertToMarkdown(m.answer)
+    const { thinking: aiThinking, mainText: aiText } = extractThinkingFromContent(content)
+
+    result.push({
+      role: "ai",
+      text: aiText,
+      thinking: aiThinking || undefined,
+      thinkingComplete: true,
+      query: m.query,
+      resourcesList,
+      time: baseTime,
+    })
+  }
+  
+  return result
   // return {
   //   role: m.role === "assistant" ? "ai" : m.role as "user" | "ai",
   //   text: mainText,
@@ -523,7 +548,7 @@ export default function Page() {
       // 使用 id 进行排序最可靠，因为 id 是自增的，能准确反映插入顺序
       const sortedMsgs = [...msgsRes?.data?.messageList].sort((a, b) => new Date(a.createTime).getTime() - new Date(b.createTime).getTime());
 
-      const mappedMsgs = sortedMsgs.map(mapMessage)
+      const mappedMsgs = sortedMsgs.flatMap(mapMessage)
       setMessages(mappedMsgs)
       setActiveConversationId(id)
       // 切换到该对话所属的智能体
@@ -701,6 +726,7 @@ export default function Page() {
 
               case "workflow_finished":
                 setIsStreaming(false)
+                refreshConversations()
                 isWorkflowTaskRef.current = true
                 if (event.task_id && !currentTaskIdRef.current) {
                   currentTaskIdRef.current = event.task_id

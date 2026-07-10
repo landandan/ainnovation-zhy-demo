@@ -107,11 +107,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }, [])
 
-  const enableMockLogin = useCallback(() => {
-    enableMockMode()
-    setToken(getMockToken())
-    setUser(getMockUser())
-    setInitialized(true)
+  const enableMockLogin = useCallback(async () => {
+    await login({
+      username: 'admin',
+      password: 'admin123',
+    })
+    // enableMockMode()
+    // setToken(getMockToken())
+    // setUser(getMockUser())
+    // setInitialized(true)
   }, [])
 
   return (
