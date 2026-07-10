@@ -185,7 +185,7 @@ export async function callDifyChatStream(params: {
   const body: DifyChatProxyRequest = {
     userId: userId || '192.168.11.30',
     agentId: agentId,//'2075139237434441730',//'2075139237434441729',//'1',
-    sessionId: conversationId || '',//`${new Date().getTime()}`,
+    sessionId: sessionId || conversationId || '',//`${new Date().getTime()}`,
     // conversation_id: "1783586820396-b8sit26yn",
     query,
     inputs: inputs || {},
