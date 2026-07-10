@@ -86,13 +86,8 @@ export function InputArea({
   }
 
   return (
-    <div
-      className="flex-shrink-0 px-6 pb-6 pt-4"
-      style={{
-        background: "var(--background)",
-      }}
-    >
-      <div className="mx-auto flex max-w-[960px] flex-col gap-3">
+    <div className="input-area-container pt-4">
+      <div className="input-area-inner">
         {/* Upload preview */}
         {(uploadedImages.length > 0 || uploadedFiles.length > 0) && (
           <div className="flex flex-wrap gap-2">
@@ -153,19 +148,11 @@ export function InputArea({
           </div>
         )}
 
-        {/* Input wrapper */}
-        <div
-          className="flex flex-col gap-2 rounded-2xl border px-4 py-3 transition-all focus-within:border-[var(--accent)] focus-within:shadow-[0_4px_20px_rgba(37,99,235,0.15)]"
-          style={{
-            background: "var(--card)",
-            borderColor: "var(--border)",
-            boxShadow: "var(--shadow-md)",
-          }}
-        >
+        {/* 输入框 — Kimi 样式，原有文案与结构 */}
+        <div className="input-box">
           <textarea
             ref={textareaRef}
-            className="min-h-[38px] max-h-[300px] flex-1 resize-none border-none bg-transparent py-2 text-sm leading-relaxed outline-none transition-height"
-            style={{ color: "var(--foreground)", transition: "height 0.15s ease" }}
+            className="input-box-textarea"
             rows={1}
             placeholder={`和${agentLabel}说点什么`}
             value={text}
@@ -176,7 +163,7 @@ export function InputArea({
             onKeyDown={handleKeydown}
           />
 
-          <div className="flex items-center justify-between">
+          <div className="input-box-toolbar">
             <div className="flex items-center gap-3">
               <div
                 className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-sm"
@@ -191,11 +178,11 @@ export function InputArea({
               </div>
             </div>
 
-            <div className="flex items-center gap-1">
+            <div className="input-box-actions">
               <button
+                type="button"
                 onClick={onOpenSettings}
-                className="flex h-9 w-9 items-center justify-center rounded-lg transition-all hover:bg-white/5"
-                style={{ color: "var(--text-secondary)" }}
+                className="input-box-icon-btn"
                 title="设置"
               >
                 <svg width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
@@ -204,9 +191,9 @@ export function InputArea({
                 </svg>
               </button>
               <button
+                type="button"
                 onClick={() => fileInputRef.current?.click()}
-                className="flex h-9 w-9 items-center justify-center rounded-lg transition-all hover:bg-white/5"
-                style={{ color: "var(--text-secondary)" }}
+                className="input-box-icon-btn"
                 title="添加附件"
               >
                 <svg width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
@@ -216,8 +203,9 @@ export function InputArea({
               </button>
               {isStreaming ? (
                 <button
+                  type="button"
                   onClick={onStopStreaming}
-                  className="flex h-9 w-9 items-center justify-center rounded-full text-white transition-all hover:scale-110 hover:shadow-lg"
+                  className="input-box-send"
                   style={{
                     background: "#ef4444",
                     boxShadow: "0 0 16px rgba(239,68,68,0.5)",
@@ -231,14 +219,11 @@ export function InputArea({
                 </button>
               ) : (
                 <button
+                  type="button"
                   onClick={handleSend}
                   disabled={!hasContent}
-                  className={`flex h-9 w-9 items-center justify-center rounded-full text-white transition-all ${
-                    hasContent ? "hover:scale-110 hover:shadow-md" : "opacity-50"
-                  }`}
-                  style={{
-                    background: "var(--accent)",
-                  }}
+                  className="input-box-send"
+                  title="发送"
                 >
                   <svg width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24">
                     <line x1="12" y1="19" x2="12" y2="5" />
@@ -250,18 +235,13 @@ export function InputArea({
           </div>
         </div>
 
-        {/* Security hint */}
-        <div
-          className="flex flex-wrap items-center justify-center gap-x-3 gap-y-1 text-[10px]"
-          style={{ color: "var(--text-muted)" }}
-        >
+        <div className="input-box-hint">
           <span>Enter 发送</span>
           <span>Shift + Enter 换行</span>
           <span>支持图片与文档上传</span>
         </div>
       </div>
 
-      {/* Hidden file inputs */}
       <input
         ref={imageInputRef}
         type="file"

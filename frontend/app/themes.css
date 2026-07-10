@@ -73,9 +73,9 @@
 
 /* ─── :root / 默认主题 — 干净层次风格 ─── */
 :root {
-  /* 基础色彩 - 微暖灰背景，增加层次感 */
-  --background: #F5F6F8;
-  --foreground: #1A1D23;
+  /* 基础色彩 - 主区白底，与 Kimi 侧栏形成对比 */
+  --background: #FFFFFF;
+  --foreground: #000000e6
   --card: #FFFFFF;
   --card-foreground: #1A1D23;
   --popover: #FFFFFF;
@@ -110,8 +110,8 @@
 
   /* 文本色阶 - 加深对比度 */
   --foreground-strong: #0A0D10;
-  --text-secondary: #3D4450;
-  --text-muted: #6B7280;
+  --text-secondary: #666666;
+  --text-muted: #888888;
 
   /* 语义状态色 */
   --success: #16A34A;
@@ -153,7 +153,7 @@
   --gradient-3: linear-gradient(135deg, #D97706 0%, #B45309 50%, #92400E 100%);
   --gradient-4: linear-gradient(135deg, #7C3AED 0%, #6D28D9 50%, #5B21B6 100%);
   --gradient-accent: linear-gradient(135deg, #2563EB 0%, #3B82F6 50%, #60A5FA 100%);
-  --gradient-bg: linear-gradient(180deg, #F5F6F8 0%, #EEEFF2 100%);
+  --gradient-bg: #FFFFFF;
 
   /* 光效 */
   --glow: rgba(37, 99, 235, 0.12);
@@ -168,15 +168,99 @@
   /* 圆角 */
   --radius: 0.75rem;
 
-  /* 侧边栏 - 与主背景有区分 */
-  --sidebar: #EAECF0;
-  --sidebar-foreground: #1A1D23;
+  /* 侧边栏 — Kimi 中性浅灰（非偏蓝） */
+  --sidebar: #fbfaf9;
+  --sidebar-foreground: #333333;
   --sidebar-primary: #2563EB;
   --sidebar-primary-foreground: #FFFFFF;
-  --sidebar-accent: #DFE1E6;
-  --sidebar-accent-foreground: #3D4450;
-  --sidebar-border: #DDDDE1;
+  --sidebar-accent: #EBEBEB;
+  --sidebar-accent-foreground: #333333;
+  --sidebar-border: #E8E8E8;
   --sidebar-ring: #2563EB;
+
+  /* 侧边栏 — 历史选中：白底卡片浮于灰底上 */
+  --sidebar-history-active-bg: #FFFFFF;
+  --sidebar-history-active-border-color: transparent;
+  --sidebar-history-active-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
+  --sidebar-history-hover-bg: #EBEBEB;
+
+  /* 侧边栏 — 新建会话按钮（白底 + 细边框 + 轻阴影） */
+  --sidebar-new-chat-bg: #FFFFFF;
+  --sidebar-new-chat-border: #E5E5E5;
+  --sidebar-new-chat-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+  --sidebar-new-chat-hover-shadow: 0 2px 6px rgba(0, 0, 0, 0.08);
+
+  /* 侧边栏 — 字体（仅默认主题，其他主题走 fallback） */
+  --sidebar-font-brand-size: 14px;
+  --sidebar-font-brand-weight: 600;
+  --sidebar-font-section-size: 12px;
+  --sidebar-font-section-weight: 400;
+  --sidebar-font-section-transform: none;
+  --sidebar-font-section-tracking: 0;
+  --sidebar-font-item-size: 13px;
+  --sidebar-font-item-weight: 400;
+  --sidebar-font-new-chat-size: 14px;
+  --sidebar-font-new-chat-weight: 500;
+  --sidebar-font-meta-size: 11px;
+  --sidebar-font-meta-weight: 400;
+
+  /* 主聊天区排版 — Kimi 风格（仅默认主题，其他主题走 fallback） */
+  --chat-font-family: "PingFang SC", "SF Pro SC", "Noto Sans SC", sans-serif;
+  --chat-font-size: 15px;
+  --chat-line-height: 1.8;
+  --chat-font-weight: 400;
+  --chat-color: #333333;
+  --chat-paragraph-gap: 0.8em;
+  --chat-list-item-gap: 0.4em;
+  --chat-heading-weight: 600;
+  --chat-heading-color: #1A1A1A;
+  --chat-h1-size: 1.375rem;
+  --chat-h2-size: 1.25rem;
+  --chat-h3-size: 1.125rem;
+  --chat-empty-title-size: 28px;
+  --chat-empty-title-weight: 600;
+  --chat-empty-title-line-height: 1.35;
+  --chat-empty-title-color: #1A1A1A;
+  --chat-empty-subtitle-size: 14px;
+  --chat-empty-subtitle-weight: 400;
+  --chat-empty-subtitle-line-height: 1.7;
+  --chat-empty-subtitle-color: #666666;
+  /* 用户问题气泡 */
+  --chat-user-bg: #1A85FF;
+  --chat-user-color: #FFFFFF;
+  --chat-user-font-size: 15px;
+  --chat-user-line-height: 1.8;
+  --chat-user-font-weight: 400;
+  --chat-user-shadow: none;
+
+  /* 提问区 — Kimi 风格（仅默认主题，其他主题走 fallback） */
+  --input-area-max-width: 960px;
+  --input-area-padding-x: 24px;
+  --input-area-padding-bottom: 24px;
+  --input-box-bg: #FFFFFF;
+  --input-box-border: #E5E5E5;
+  --input-box-border-focus: #E0E0E0;
+  --input-box-radius: 24px;
+  --input-box-shadow: 0 4px 20px rgba(0, 0, 0, 0.05);
+  --input-box-shadow-focus: 0 4px 24px rgba(0, 0, 0, 0.08);
+  --input-box-padding-x: 20px;
+  --input-box-padding-y: 16px;
+  --input-box-min-height: 120px;
+  --input-textarea-min-height: 48px;
+  --input-textarea-font-size: 15px;
+  --input-textarea-line-height: 1.6;
+  --input-placeholder-color: #A8A8A8;
+  --input-send-size: 36px;
+  --input-send-disabled-bg: #E0E0E0;
+  --input-send-disabled-color: #FFFFFF;
+  --input-send-disabled-opacity: 1;
+  --input-send-active-bg: #333333;
+
+  /* 消息操作栏 — Kimi 风格（仅默认主题） */
+  --message-action-color: #888888;
+  --message-action-color-hover: #333333;
+  --message-action-hover-bg: #F2F2F2;
+  --message-action-active-color: #1A85FF;
 
   /* 图表色 */
   --chart-1: #2563EB;
@@ -186,8 +270,8 @@
   --chart-5: #EF4444;
 
   /* Kimi 变量 */
-  --kimi-bg: #F5F6F8;
-  --kimi-sidebar-bg: #EAECF0;
+  --kimi-bg: #FFFFFF;
+  --kimi-sidebar-bg: #fbfaf9;
   --kimi-text: #1A1D23;
   --kimi-text-secondary: #3D4450;
   --kimi-text-tertiary: #6B7280;
@@ -198,10 +282,10 @@
   --kimi-accent: #2563EB;
   --kimi-accent-light: #DBEAFE;
   --kimi-shadow: 0 4px 20px rgba(0, 0, 0, 0.06);
-  --kimi-shadow-input: 0 0 0 1px rgba(26,29,35,0.18);
-  --kimi-shadow-input-hover: 0 0 0 1px var(--kimi-accent);
-  --kimi-bubble-user: #2563EB;
-  --kimi-bubble-ai: #F1F3F6;
+  --kimi-shadow-input: 0 4px 20px rgba(0, 0, 0, 0.05);
+  --kimi-shadow-input-hover: 0 4px 24px rgba(0, 0, 0, 0.08);
+  --kimi-bubble-user: #1A85FF;
+  --kimi-bubble-ai: #FFFFFF;
 }
 
 /* ═════════════════════════════════════════════════════════════════

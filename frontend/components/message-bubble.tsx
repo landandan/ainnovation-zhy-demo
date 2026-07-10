@@ -229,47 +229,25 @@ export function MessageBubble({ role, text, time, agentId, attachments }: Messag
 
   return (
     <div
-      className="rounded-2xl px-4 py-3.5 text-sm leading-relaxed relative group"
+      className="message-bubble rounded-xl px-4 py-3.5 relative group"
       style={{
         background:
-          role === "user" ? "var(--accent)" : "var(--card)",
+          role === "user" ? "var(--chat-user-bg, var(--accent))" : "var(--kimi-bubble-ai, var(--card))",
         color:
-          role === "user" ? "var(--accent-foreground)" : "var(--foreground)",
-        border: role === "ai" ? "1px solid var(--border)" : "none",
-        borderBottomRightRadius: role === "user" ? "8px" : undefined,
-        borderBottomLeftRadius: role === "ai" ? "8px" : undefined,
+          role === "user" ? "var(--chat-user-color, var(--accent-foreground))" : "var(--chat-color, var(--foreground))",
+        border: role === "ai" ? "none" : "none",
+        borderBottomRightRadius: role === "user" ? "4px" : undefined,
+        borderBottomLeftRadius: role === "ai" ? "4px" : undefined,
         boxShadow:
-          role === "user" ? "var(--shadow-md)" : "var(--shadow-sm)",
+          role === "user" ? "var(--chat-user-shadow, var(--shadow-md))" : "none",
         wordBreak: "break-word",
+        fontFamily: "var(--chat-font-family, inherit)",
+        fontSize: "var(--chat-font-size, 14px)",
+        lineHeight: "var(--chat-line-height, 1.65)",
+        fontWeight: "var(--chat-font-weight, 400)",
       }}
     >
-      {/* AI 消息的复制按钮 */}
-      {role === "ai" && (
-        <span></span>
-        // <button
-        //   onClick={handleCopy}
-        //   className="absolute right-2 top-2 flex items-center gap-1 rounded-md px-2 py-1 text-[11px] opacity-0 group-hover:opacity-100 transition-all hover:bg-white/10"
-        //   style={{ color: "var(--text-muted)" }}
-        //   title="复制全文"
-        // >
-        //   {copied ? (
-        //     <>
-        //       <svg width="12" height="12" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24">
-        //         <polyline points="20 6 9 17 4 12" />
-        //       </svg>
-        //       已复制
-        //     </>
-        //   ) : (
-        //     <>
-        //       <svg width="12" height="12" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-        //         <rect x="9" y="9" width="13" height="13" rx="2" />
-        //         <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
-        //       </svg>
-        //       复制
-        //     </>
-        //   )}
-        // </button>
-      )}
+      {/* AI 消息操作栏在 chat-area 中渲染 */}
 
       {!!attachments?.length && (
         <div
