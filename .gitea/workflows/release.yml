@@ -1,0 +1,146 @@
+name: Release Build & Publish
+
+on:
+  push:
+    branches:
+      - release
+
+permissions:
+  contents: write
+
+jobs:
+  build-and-release:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Test Secret
+        run: |
+          if [ -z "${{ secrets.PAT_TOKEN }}" ]; then
+            echo "PAT_TOKEN is empty"
+            exit 1
+          else
+            echo "PAT_TOKEN OK"
+          fi
+
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.PAT_TOKEN }}
+
+      - name: Generate Release Version
+        id: version
+        shell: bash
+        run: |
+          set -e
+
+          SHORT_SHA=$(git rev-parse --short HEAD)
+
+          TAG="v$(date +%Y.%m%d)-${{ github.run_number }}-${SHORT_SHA}"
+
+          BUILD_TIME=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+
+          echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
+          echo "build_time=${BUILD_TIME}" >> "$GITHUB_OUTPUT"
+
+          echo "=============================="
+          echo "Release Tag : ${TAG}"
+          echo "Commit      : ${SHORT_SHA}"
+          echo "Build Time  : ${BUILD_TIME}"
+          echo "=============================="
+
+      - name: Show Docker Version
+        run: |
+          docker version
+          docker compose version
+          docker info
+
+      - name: Deploy Docker Services
+        shell: bash
+        run: |
+          set -e
+
+          echo "===== Current Workspace ====="
+          pwd
+
+          ls -la
+
+          echo "===== Docker Compose Down ====="
+          docker compose down
+
+          echo "===== Docker Compose Up ====="
+          docker compose up -d --build
+
+          echo "===== Running Containers ====="
+          docker compose ps
+
+      - name: List Built Images
+        shell: bash
+        run: |
+          docker image ls
+
+      - name: Export Docker Images
+        shell: bash
+        run: |
+          set -e
+
+          mkdir -p release
+
+          IMAGES=$(docker compose config --images)
+
+          if [ -z "$IMAGES" ]; then
+            echo "ERROR: No images found."
+            echo "Please specify 'image:' in docker-compose.yml"
+            exit 1
+          fi
+
+          echo "Images:"
+          echo "$IMAGES"
+
+          for IMAGE in $IMAGES
+          do
+            FILE_NAME=$(echo "$IMAGE" | sed 's/[\/:]/_/g')
+
+            echo "Saving $IMAGE ..."
+
+            docker save "$IMAGE" \
+              | gzip > "release/${FILE_NAME}-${{ steps.version.outputs.tag }}.tar.gz"
+
+            ls -lh "release/${FILE_NAME}-${{ steps.version.outputs.tag }}.tar.gz"
+          done
+
+      - name: Create Gitea Release
+        uses: akkuman/gitea-release-action@v1
+        env:
+          NODE_OPTIONS: --experimental-fetch
+
+        with:
+          token: ${{ secrets.PAT_TOKEN }}
+
+          tag_name: ${{ steps.version.outputs.tag }}
+
+          name: Release ${{ steps.version.outputs.tag }}
+
+          body: |
+            ## 自动构建发布
+
+            **Branch**
+            release
+
+            **Commit**
+            ${{ github.sha }}
+
+            **Run Number**
+            ${{ github.run_number }}
+
+            **Build Time**
+            ${{ steps.version.outputs.build_time }}
+
+            ---
+
+            本版本由 Gitea Actions 自动构建。
+
+          files: |
+            release/*.tar.gz
+
+          draft: false
+          prerelease: false
