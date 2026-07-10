@@ -218,6 +218,7 @@ export interface MessageApi {
   totalTokens: number
   status: string
   createTime: string
+  retrieverResources: string
   // id: number
   // conversation_id: number
   // role: "user" | "assistant" | "system"
