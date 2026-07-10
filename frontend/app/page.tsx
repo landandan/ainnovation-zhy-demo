@@ -988,6 +988,66 @@ export default function Page() {
     callDifyAPI(lastRequest.userText, newMessages, lastRequest.files, lastRequest.userAttachments)
   }
 
+  /* ───── 重试指定 AI 回复 ───── */
+  const handleRetryMessage = async (messageIndex: number) => {
+    if (isStreaming) {
+      warning("请等待当前回复完成")
+      return
+    }
+
+    const aiMsg = messages[messageIndex]
+    if (!aiMsg || aiMsg.role !== "ai") return
+
+    let userIndex = messageIndex - 1
+    while (userIndex >= 0 && messages[userIndex].role !== "user") {
+      userIndex--
+    }
+    if (userIndex < 0) {
+      warning("找不到对应的问题")
+      return
+    }
+
+    const userMsg = messages[userIndex]
+    const truncated = messages.slice(0, messageIndex)
+    const time = new Date().toLocaleTimeString("zh-CN", { hour: "2-digit", minute: "2-digit" })
+    const newMessages: Message[] = [
+      ...truncated,
+      {
+        role: "ai",
+        text: "",
+        time,
+        workflowProgress: createInitialProgress(),
+        waiting: true,
+        thinking: "",
+        thinkingComplete: false,
+      },
+    ]
+    setMessages(newMessages)
+
+    const isLatestAi = messageIndex === messages.length - 1
+    if (isLatestAi && lastRequestRef.current) {
+      callDifyAPI(
+        lastRequestRef.current.userText,
+        newMessages,
+        lastRequestRef.current.files,
+        lastRequestRef.current.userAttachments,
+      )
+      return
+    }
+
+    const userText = userMsg.text || (userMsg.files?.length ? "请分析我上传的文件" : "")
+    if (!userText) {
+      warning("无法重试空问题")
+      return
+    }
+
+    lastRequestRef.current = {
+      userText,
+      userAttachments: userMsg.files,
+    }
+    callDifyAPI(userText, newMessages, undefined, userMsg.files)
+  }
+
   /* ───── 发送消息（异步：先上传文件，再合并到 chat 请求） ───── */
   const handleSendMessage = async (text: string) => {
     if (isStreaming) {
@@ -1310,6 +1370,7 @@ export default function Page() {
             quickQuestions={currentAgentQuickQuestions}
             currentAgentId={currentAgentId}
             onRetryWorkflow={handleRetryWorkflow}
+            onRetryMessage={handleRetryMessage}
             onStopWorkflow={handleStopStreaming}
             onOpenResources={(resources) => {
               setResourceSidebarResources(resources)

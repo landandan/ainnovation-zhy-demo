@@ -148,7 +148,7 @@ export function Sidebar({
               >
                 深
               </div>
-              <div className="text-[14px] font-semibold whitespace-nowrap" style={{ color: "var(--foreground)" }}>
+              <div className="sidebar-text-brand whitespace-nowrap" style={{ color: "var(--sidebar-foreground, var(--foreground))" }}>
                 深海智航
               </div>
             </div>
@@ -184,34 +184,21 @@ export function Sidebar({
             <div className="sidebar-section" style={{ padding: "0 12px 12px" }}>
               <button
                 onClick={onNewChat}
-                className="sidebar-new-chat w-full flex items-center gap-2.5 px-3 py-2 rounded-lg transition-all"
-                style={{
-                  background: "transparent",
-                  color: "var(--foreground)",
-                  border: "1px solid rgba(0,0,0,0)",
-                }}
+                className="sidebar-new-chat w-full"
               >
-                <div
-                  className="flex h-6 w-6 items-center justify-center rounded-md"
-                  style={{
-                    background: "var(--secondary)",
-                    color: "var(--foreground)",
-                  }}
-                >
-                  <svg width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-                    <path d="M12 20h9" />
-                    <path d="M16.5 3.5a2.121 2.121 0 1 1 3 3L7 19l-4 1 1-4 12.5-12.5z" />
-                  </svg>
-                </div>
-                <span className="text-[13px] font-medium">新建会话</span>
+                <svg width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" className="flex-shrink-0">
+                  <line x1="12" y1="5" x2="12" y2="19" />
+                  <line x1="5" y1="12" x2="19" y2="12" />
+                </svg>
+                <span className="sidebar-text-new-chat">新建会话</span>
               </button>
             </div>
 
             {/* 分割线 */}
-            <div
+            {/* <div
               className="sidebar-divider mx-4"
               style={{ background: "var(--border)", height: "1px" }}
-            />
+            /> */}
 
             {/* 智能体（可折叠） */}
             {agentDefs.length > 0 && onSelectAgent && (
@@ -237,7 +224,7 @@ export function Sidebar({
                 >
                   <polyline points="6 9 12 15 18 9" />
                 </svg>
-                <span className="text-[13px] font-bold uppercase tracking-wider">智能助手</span>
+                <span className="sidebar-text-section" style={{ color: "var(--text-muted)" }}>智能助手</span>
               </button>
 
               {/* 智能体列表 */}
@@ -291,7 +278,7 @@ export function Sidebar({
                           }}
                           aria-hidden="true"
                         />
-                        <span className="text-[14px] font-medium flex-1 text-left truncate">{agent.label}</span>
+                        <span className="sidebar-text-item-lg flex-1 text-left truncate">{agent.label}</span>
                       </button>
                     )
                   })}
@@ -316,12 +303,12 @@ export function Sidebar({
                   <circle cx="12" cy="12" r="10" />
                   <polyline points="12 6 12 12 16 14" strokeLinecap="round" strokeLinejoin="round"/>
                 </svg>
-                <span className="text-[12px] font-bold uppercase tracking-wider">历史会话</span>
+                <span className="sidebar-text-section-sm" style={{ color: "var(--text-muted)" }}>历史会话</span>
               </div>
               {chatHistory.length > 0 && !bulkMode && (
                 <button
                   onClick={() => setBulkMode(true)}
-                  className="text-[11px] font-medium transition-colors hover:text-[var(--foreground)]"
+                  className="sidebar-text-meta transition-colors hover:text-[var(--foreground)]"
                   style={{ color: "var(--text-muted)" }}
                 >
                   管理
@@ -363,18 +350,18 @@ export function Sidebar({
                 {filteredChatHistory.map((item) => {
                   const hovered = hoveredHistoryId === item.id
                   const activeStyle = {
-                    background: "var(--card)",
+                    background: "var(--sidebar-history-active-bg, var(--card))",
                     color: "var(--foreground)",
-                    borderRadius: "12px",
+                    borderRadius: "8px",
                     padding: "8px 10px",
-                    border: "1px solid var(--border)",
+                    border: "1px solid var(--sidebar-history-active-border-color, var(--border))",
                     outline: "none",
-                    boxShadow: "var(--shadow-sm)",
+                    boxShadow: "var(--sidebar-history-active-shadow, var(--shadow-sm))",
                   } as React.CSSProperties
                   const hoverStyle = {
-                    background: "var(--hover)",
+                    background: "var(--sidebar-history-hover-bg, var(--hover))",
                     color: "var(--foreground)",
-                    borderRadius: "12px",
+                    borderRadius: "8px",
                     padding: "8px 10px",
                     border: "1px solid transparent",
                     outline: "none",
@@ -382,7 +369,7 @@ export function Sidebar({
                   const baseStyle = {
                     background: "transparent",
                     color: "var(--foreground)",
-                    borderRadius: "12px",
+                    borderRadius: "8px",
                     padding: "8px 10px",
                     border: "1px solid transparent",
                     outline: "none",
@@ -471,7 +458,7 @@ export function Sidebar({
                             style={{ color: "var(--foreground)" }}
                           />
                         ) : (
-                          <span className="truncate text-[12px] font-medium flex-1" title={item.query}>{item.query}</span>
+                          <span className="sidebar-text-item truncate flex-1" title={item.query}>{item.query}</span>
                         )}
                         <div className="relative ml-1 w-5 flex-shrink-0">
                           {!bulkMode && (

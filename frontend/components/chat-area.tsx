@@ -3,6 +3,7 @@
 import { forwardRef, useState, useEffect, useRef } from "react"
 import type { Message, ResourceItem } from "@/app/page"
 import { MessageBubble } from "./message-bubble"
+import { MessageActions } from "./message-actions"
 import { ThinkingBlock } from "./thinking-block"
 import { CanvasDragonAvatar } from "./canvas-dragon-avatar"
 import { WorkflowProgressComponent } from "./workflow-progress"
@@ -16,12 +17,13 @@ interface ChatAreaProps {
   quickQuestions?: string[]
   currentAgentId?: string
   onRetryWorkflow?: () => void
+  onRetryMessage?: (messageIndex: number) => void
   onStopWorkflow?: () => void
   onOpenResources?: (resources: ResourceItem[]) => void
 }
 
 export const ChatArea = forwardRef<HTMLDivElement, ChatAreaProps>(
-  function ChatArea({ messages, onUseSuggestion, isStreaming, agentLabel = "深海智航", agentDesc, quickQuestions, currentAgentId, onRetryWorkflow, onStopWorkflow, onOpenResources }, ref) {
+  function ChatArea({ messages, onUseSuggestion, isStreaming, agentLabel = "深海智航", agentDesc, quickQuestions, currentAgentId, onRetryWorkflow, onRetryMessage, onStopWorkflow, onOpenResources }, ref) {
     const [showScrollButton, setShowScrollButton] = useState(false)
     const internalRef = useRef<HTMLDivElement>(null)
     const shouldFollowLatestRef = useRef(true)
@@ -170,22 +172,16 @@ export const ChatArea = forwardRef<HTMLDivElement, ChatAreaProps>(
       return (
         <div
           ref={setRefs}
-          className="flex flex-1 flex-col items-center justify-center overflow-y-auto p-6 text-center"
+          className="chat-main flex flex-1 flex-col items-center justify-center overflow-y-auto p-6 text-center"
           style={{ background: "var(--background)" }}
         >
           {/* Title */}
-          <h2
-            className="mb-3 text-[30px] font-extrabold tracking-tight"
-            style={{ color: "var(--foreground)" }}
-          >
+          <h2 className="chat-empty-title mb-3 tracking-tight">
             开始一段新的业务对话
           </h2>
 
           {/* Subtitle */}
-          <p
-            className="mb-3 max-w-[760px] text-[16px] font-medium leading-7"
-            style={{ color: "var(--text-secondary)" }}
-          >
+          <p className="chat-empty-subtitle mb-3 max-w-[760px]">
             {agentDesc && agentDesc.trim()
               ? `${agentLabel}已就绪，${agentDesc}`
               : `${agentLabel}已就绪，你可以直接发起问答、上传资料，或从下面的高频任务开始。`}
@@ -227,7 +223,7 @@ export const ChatArea = forwardRef<HTMLDivElement, ChatAreaProps>(
     return (
       <div
         ref={setRefs}
-        className="flex flex-1 flex-col overflow-y-auto transition-all duration-300"
+        className="chat-main flex flex-1 flex-col overflow-y-auto transition-all duration-300"
         style={{ background: "var(--background)" }}
       >
         <div className="flex flex-col gap-5 p-4 sm:p-6 pb-2 max-w-[960px] mx-auto w-full">
@@ -418,22 +414,13 @@ export const ChatArea = forwardRef<HTMLDivElement, ChatAreaProps>(
 
                   {/* ── 用户消息：附件+文字合并在一个气泡 ── */}
                   {isUser && (msg.text || hasAttachments) && (
-                    <div
-                      className="rounded-2xl relative group overflow-hidden"
-                      style={{
-                        background: "var(--accent)",
-                        color: "var(--accent-foreground)",
-                        borderBottomRightRadius: "8px",
-                        boxShadow: "var(--shadow-md)",
-                        wordBreak: "break-word",
-                      }}
-                    >
+                    <div className="chat-user-bubble relative group overflow-hidden">
                       {/* 附件缩略图行（文字上方） */}
                       {hasAttachments && renderAttachments(msg)}
 
                       {/* 文字内容 */}
                       {msg.text && (
-                        <div className="px-4 py-3.5 text-sm leading-relaxed">
+                        <div className="chat-text-body px-4 py-3.5">
                           {msg.text}
                         </div>
                       )}
@@ -450,6 +437,24 @@ export const ChatArea = forwardRef<HTMLDivElement, ChatAreaProps>(
                       attachments={msg.files}
                     />
                   )}
+
+                  {!isUser &&
+                    msg.text &&
+                    !msg.waiting &&
+                    !msg.loading &&
+                    !(isStreaming && isLatestMessage) && (
+                      <MessageActions
+                        text={msg.text}
+                        onRetry={
+                          onRetryMessage
+                            ? () => onRetryMessage(idx)
+                            : isLatestMessage
+                              ? onRetryWorkflow
+                              : undefined
+                        }
+                        disabled={isStreaming}
+                      />
+                    )}
 
                   {!isUser && msg.resourcesList && msg.resourcesList.length > 0 && (
                     <button
