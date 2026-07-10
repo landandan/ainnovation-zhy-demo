@@ -11,7 +11,9 @@ import { getMockResponse } from "./mock-api"
 /* ───── 请求体（前端 → 后端代理） ───── */
 
 export interface DifyChatProxyRequest {
-  agent_id: string
+  userId: string
+  agentId: string
+  sessionId: string
   query: string
   conversation_id?: string | null
   inputs?: Record<string, unknown>
@@ -30,7 +32,7 @@ export interface DifyStreamEvent {
   task_id?: string
   id?: string
   message_id?: string
-  conversation_id?: string
+  // conversation_id?: string
   answer?: string
   created_at?: number
   message?: string
@@ -113,74 +115,86 @@ export async function callDifyChatStream(params: {
     transfer_method: string
     upload_file_id: string
   }>
+  sessionId?: string
 }): Promise<Response> {
-  const { query, user, conversationId, inputs, agentId, signal, files } = params
+  const { query, user, conversationId, inputs, agentId, signal, files, sessionId } = params
 
   // --- Help 智能体：直接返回 Mock 数据，完全绕过 Dify ---
-  if (agentId === "help") {
-    console.log("[DEBUG] Help 智能体被调用，查询:", query)
-    const mockText = getMockResponse(agentId, query)
-    console.log("[DEBUG] getMockResponse 返回:", mockText.slice(0, 200), "...")
-    return new Response(generateMockStream(mockText, signal), {
-      headers: {
-        "Content-Type": "text/event-stream",
-        "Cache-Control": "no-cache",
-        "Connection": "keep-alive",
-      }
-    })
-  }
+  // if (agentId === "help") {
+  //   console.log("[DEBUG] Help 智能体被调用，查询:", query)
+  //   const { mockText, retriever_resources } = getMockResponse(agentId, query)
+  //   console.log("[DEBUG] getMockResponse 返回:", mockText.slice(0, 200), "...")
+  //   return new Response(generateMockStream(mockText, retriever_resources, signal), {
+  //     headers: {
+  //       "Content-Type": "text/event-stream",
+  //       "Cache-Control": "no-cache",
+  //       "Connection": "keep-alive",
+  //     }
+  //   })
+  // }
 
   if (!agentId) {
     throw new Error("agent_id 未指定")
   }
 
   // Mock 模式：直连 Dify chat-messages SSE 接口（不走后端代理）
-  if (isMockMode()) {
-    const { dify_base_url, dify_api_key } = getMockDifyApiConfigForAgent(agentId)
+  // if (!isMockMode()) {
+  //   const { dify_base_url, dify_api_key } = getMockDifyApiConfigForAgent(agentId)
 
-    const difyBody: Record<string, unknown> = {
-      inputs: inputs || {},
-      query,
-      response_mode: "streaming",
-      user,
-    }
+  //   const difyBody: Record<string, unknown> = {
+  //     inputs: inputs || {},
+  //     query,
+  //     response_mode: "streaming",
+  //     user,
+  //   }
 
-    if (conversationId) {
-      difyBody.conversation_id = conversationId
-    }
+  //   // if (conversationId) {
+  //   //   difyBody.conversation_id = conversationId
+  //   // }
 
-    if (files && files.length > 0) {
-      difyBody.files = files
-    }
+  //   if (files && files.length > 0) {
+  //     difyBody.files = files
+  //   }
 
-    const response = await fetch(`${dify_base_url}/chat-messages`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${dify_api_key}`,
-      },
-      body: JSON.stringify(difyBody),
-      signal,
-    })
+  //   const response = await fetch(`${dify_base_url}/chat-messages`, {
+  //     method: "POST",
+  //     headers: {
+  //       "Content-Type": "application/json",
+  //       Authorization: `Bearer ${dify_api_key}`,
+  //     },
+  //     body: JSON.stringify(difyBody),
+  //     signal,
+  //   })
 
-    if (!response.ok) {
-      const errorText = await response.text()
-      throw new Error(`Dify API 错误 (${response.status}): ${errorText}`)
-    }
+  //   if (!response.ok) {
+  //     const errorText = await response.text()
+  //     throw new Error(`Dify API 错误 (${response.status}): ${errorText}`)
+  //   }
 
-    return response
-  }
+  //   return response
+  // }
 
   // 非 Mock 模式：走后端代理
   const body: DifyChatProxyRequest = {
-    agent_id: agentId,
+    userId: '192.168.11.30',
+    agentId: agentId,//'2075139237434441730',//'2075139237434441729',//'1',
+    sessionId: conversationId || '',//`${new Date().getTime()}`,
+    // conversation_id: "1783586820396-b8sit26yn",
     query,
     inputs: inputs || {},
   }
+    //   "query": "什么是oa",
+    // "user": "192.168.11.30",
+    // "response_mode": "streaming",
+    // "conversation_id": "1783586820396-b8sit26yn",
+    //  "userId": "192.168.11.30",
+    //   "appId": "1",
+    // "inputs": {
+    // }
 
-  if (conversationId) {
-    body.conversation_id = conversationId
-  }
+  // if (conversationId) {
+  //   body.conversation_id = conversationId
+  // }
 
   if (files && files.length > 0) {
     body.files = files
@@ -192,20 +206,46 @@ export async function callDifyChatStream(params: {
   }
 
   // 在开发环境下，直接请求后端 5000 端口以绕过 Next.js 代理的缓冲问题
-  const API_BASE_URL = process.env.NODE_ENV === 'development' ? 'http://localhost:5000/api' : '/api'
+  const API_BASE_URL = process.env.NODE_ENV === 'development' ? 'http://192.168.11.95:6039' : '/api'//? 'http://192.168.10.66:6039' : '/api'//'http://192.168.11.126:26039' : '/api'//'http://192.168.10.66:6039' : '/api'
 
-  const response = await fetch(`${API_BASE_URL}/dify/chat-messages`, {
+  // /manage/dify/chat/streaming    /h5/chat/stream
+  const response = await fetch(`${API_BASE_URL}/h5/chat/stream`, {
     method: "POST",
     headers: {
-      "Content-Type": "application/json",
+      "Content-Type": "application/json;charset=UTF-8",
       Authorization: `Bearer ${token}`,
       "Cache-Control": "no-cache",
       "Connection": "keep-alive",
+      'Accept': 'text/event-stream',
+      // "transfer-encoding": "chunked", 
     },
     body: JSON.stringify(body),
+    // cache: 'no-store', // 关键：禁止 Next.js 缓存该请求
     signal,
   })
+//   {
+//     "query": "什么是oa",
+//     "user": "192.168.11.30",
+//     "response_mode": "streaming",
+//     "conversation_id": "1783586820396-b8sit26yn",
+//      "userId": "192.168.11.30",
+//       "appId": "1",
+//     "inputs": {
+//     }
+// }
+  // const response = await fetch(`${API_BASE_URL}/dify/chat-messages`, {
+  //   method: "POST",
+  //   headers: {
+  //     "Content-Type": "application/json",
+  //     Authorization: `Bearer ${token}`,
+  //     "Cache-Control": "no-cache",
+  //     "Connection": "keep-alive",
+  //   },
+  //   body: JSON.stringify(body),
+  //   signal,
+  // })
 
+  console.log('response123:', response)
   if (!response.ok) {
     const errorText = await response.text()
     throw new Error(`API 错误 (${response.status}): ${errorText}`)
@@ -355,7 +395,7 @@ export async function stopDifyTask(params: {
     const token = getToken()
     if (!token) return
 
-    const API_BASE_URL = process.env.NODE_ENV === 'development' ? 'http://localhost:5000/api' : '/api'
+    const API_BASE_URL = '/api'//process.env.NODE_ENV === 'development' ? 'http://192.168.10.66:6039/api' : '/api'
 
     await fetch(`${API_BASE_URL}/dify/chat-messages/stop`, {
       method: "POST",
