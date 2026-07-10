@@ -8,7 +8,7 @@ import { isMockMode } from "@/lib/mock-config"
 type TransitionPhase = "idle" | "cover" | "reveal"
 
 function AuthGuard({ children }: { children: React.ReactNode }) {
-  const { user, initialized } = useAuth()
+  const { user, initialized, enableMockLogin } = useAuth()
   const pathname = usePathname()
   const router = useRouter()
 
@@ -27,11 +27,12 @@ function AuthGuard({ children }: { children: React.ReactNode }) {
     }
 
     if (!user && !isLoginPage) {
-      router.replace("/login")
+      //router.replace("/login")
+      enableMockLogin()
     } else if (user && isLoginPage) {
       router.replace("/")
     }
-  }, [user, initialized, pathname, router])
+  }, [user, initialized, pathname, router, enableMockLogin])
 
   if (!initialized) {
     return (

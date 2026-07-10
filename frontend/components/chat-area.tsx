@@ -1,7 +1,7 @@
 "use client"
 
 import { forwardRef, useState, useEffect, useRef } from "react"
-import type { Message } from "@/app/page"
+import type { Message, ResourceItem } from "@/app/page"
 import { MessageBubble } from "./message-bubble"
 import { ThinkingBlock } from "./thinking-block"
 import { CanvasDragonAvatar } from "./canvas-dragon-avatar"
@@ -17,12 +17,19 @@ interface ChatAreaProps {
   currentAgentId?: string
   onRetryWorkflow?: () => void
   onStopWorkflow?: () => void
+  onOpenResources?: (resources: ResourceItem[]) => void
 }
 
 export const ChatArea = forwardRef<HTMLDivElement, ChatAreaProps>(
-  function ChatArea({ messages, onUseSuggestion, isStreaming, agentLabel = "深海智航", agentDesc, quickQuestions, currentAgentId, onRetryWorkflow, onStopWorkflow }, ref) {
+  function ChatArea({ messages, onUseSuggestion, isStreaming, agentLabel = "深海智航", agentDesc, quickQuestions, currentAgentId, onRetryWorkflow, onStopWorkflow, onOpenResources }, ref) {
     const [showScrollButton, setShowScrollButton] = useState(false)
     const internalRef = useRef<HTMLDivElement>(null)
+    const shouldFollowLatestRef = useRef(true)
+    const previousMessageCountRef = useRef(messages.length)
+
+    const handleResourceClick = (resources: ResourceItem[]) => {
+      onOpenResources?.(resources)
+    }
 
     const setRefs = (node: HTMLDivElement | null) => {
       ;(internalRef as React.MutableRefObject<HTMLDivElement | null>).current = node
@@ -33,20 +40,27 @@ export const ChatArea = forwardRef<HTMLDivElement, ChatAreaProps>(
       }
     }
 
+    const isNearBottom = (el: HTMLDivElement, threshold = 120) => {
+      return el.scrollHeight - el.scrollTop - el.clientHeight < threshold
+    }
+
     const checkScrollPosition = () => {
       const el = internalRef.current
       if (!el) return
-      const isNearBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 100
-      setShowScrollButton(!isNearBottom)
+      const nearBottom = isNearBottom(el)
+      shouldFollowLatestRef.current = nearBottom
+      setShowScrollButton(!nearBottom)
     }
 
-    const scrollToBottom = () => {
+    const scrollToBottom = (behavior: ScrollBehavior = "auto") => {
       const el = internalRef.current
       if (el) {
+        shouldFollowLatestRef.current = true
         el.scrollTo({
           top: el.scrollHeight,
-          behavior: "auto",
+          behavior,
         })
+        setShowScrollButton(false)
       }
     }
 
@@ -61,23 +75,26 @@ export const ChatArea = forwardRef<HTMLDivElement, ChatAreaProps>(
       const el = internalRef.current
       if (!el) return
 
-      // 使用 requestAnimationFrame 确保在 DOM 更新后执行滚动
+      const messageCountChanged = messages.length !== previousMessageCountRef.current
+      const messageCountIncreased = messages.length > previousMessageCountRef.current
+      previousMessageCountRef.current = messages.length
+      const lastMessage = messages[messages.length - 1]
+      const isNewUserTurn = messageCountIncreased && lastMessage?.role === "ai"
+      const isConversationSwitch = !isStreaming && messageCountChanged && messages.length > 0
+      const shouldFollowLatest =
+        shouldFollowLatestRef.current ||
+        isNewUserTurn ||
+        isConversationSwitch ||
+        (isStreaming && isNearBottom(el, 220))
+
+      if (isNewUserTurn || isConversationSwitch) {
+        shouldFollowLatestRef.current = true
+      }
+
       requestAnimationFrame(() => {
-        // 判断是否在底部附近 (阈值设为 150px)
-        const isNearBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 150
-        
-        // 如果最后一条消息是用户发送的，或者正在流式输出且在底部附近，强制滚动到底部
-        const lastMessage = messages[messages.length - 1]
-        const isLastMessageFromUser = lastMessage?.role === "user"
-
-        // 新增逻辑：如果不是流式输出，且消息列表不为空（通常意味着切换了历史会话或初次加载），强制滚动到底部
-        const isInitialLoadOrSwitch = !isStreaming && messages.length > 0;
-
-        if (isNearBottom || isLastMessageFromUser || (isStreaming && isNearBottom) || isInitialLoadOrSwitch) {
-          el.scrollTo({
-            top: el.scrollHeight,
-            behavior: "auto", // 切换会话时使用 auto 瞬间到达底部体验更好
-          })
+        if (shouldFollowLatest) {
+          scrollToBottom("auto")
+          return
         }
 
         checkScrollPosition()
@@ -210,7 +227,7 @@ export const ChatArea = forwardRef<HTMLDivElement, ChatAreaProps>(
     return (
       <div
         ref={setRefs}
-        className="flex flex-1 flex-col overflow-y-auto"
+        className="flex flex-1 flex-col overflow-y-auto transition-all duration-300"
         style={{ background: "var(--background)" }}
       >
         <div className="flex flex-col gap-5 p-4 sm:p-6 pb-2 max-w-[960px] mx-auto w-full">
@@ -434,6 +451,44 @@ export const ChatArea = forwardRef<HTMLDivElement, ChatAreaProps>(
                     />
                   )}
 
+                  {!isUser && msg.resourcesList && msg.resourcesList.length > 0 && (
+                    <button
+                      onClick={() => handleResourceClick(msg.resourcesList!)}
+                      className="w-full flex items-center justify-between px-3 py-2.5 rounded-xl border transition-all hover:border-[var(--accent)] hover:bg-[var(--secondary)] group"
+                      style={{
+                        borderColor: "var(--border)",
+                        background: "rgba(255,255,255,0.04)",
+                      }}
+                    >
+                      <div className="flex items-center gap-2.5">
+                        <svg width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" style={{ color: "var(--text-muted)" }}>
+                          <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                          <polyline points="14 2 14 8 20 8" />
+                          <line x1="8" y1="13" x2="16" y2="13" />
+                          <line x1="8" y1="17" x2="13" y2="17" />
+                        </svg>
+                        <span className="text-xs font-medium" style={{ color: "var(--text-secondary)" }}>
+                          {msg.resourcesList[0].document_name}
+                        </span>
+                        <span className="text-[10px] px-2 py-0.5 rounded-full" style={{ background: "var(--secondary)", color: "var(--text-muted)" }}>
+                          {msg.resourcesList.length}
+                        </span>
+                      </div>
+                      <svg
+                        width="14"
+                        height="14"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="2"
+                        viewBox="0 0 24 24"
+                        className="transition-transform group-hover:translate-x-0.5"
+                        style={{ color: "var(--text-muted)" }}
+                      >
+                        <path d="M9 18l6-6-6-6" />
+                      </svg>
+                    </button>
+                  )}
+
                   {/* Timestamp hidden (Kimi style: 无时间条) */}
                 </div>
               </div>
@@ -446,7 +501,10 @@ export const ChatArea = forwardRef<HTMLDivElement, ChatAreaProps>(
         {/* Scroll to bottom button - sticky to the bottom of scroll container */}
         {showScrollButton && (
           <button
-            onClick={scrollToBottom}
+            type="button"
+            onClick={() => scrollToBottom("smooth")}
+            aria-label="回到最新消息"
+            title="回到最新消息"
             className="sticky bottom-2 self-center flex items-center justify-center w-9 h-9 rounded-full shadow-md transition-all duration-200 hover:scale-110 z-10"
             style={{
               background: "var(--card)",

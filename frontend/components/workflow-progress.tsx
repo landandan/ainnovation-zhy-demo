@@ -15,16 +15,12 @@ export function WorkflowProgressComponent({
   onRetry,
   onStop,
 }: WorkflowProgressProps) {
-  if (progress.status === 'idle') {
-    return null
-  }
-
   const [expanded, setExpanded] = useState(false)
   const [contentHeight, setContentHeight] = useState(0)
   const contentRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
-    setExpanded(progress.status === 'running' || progress.status === 'error')
+    setExpanded(false)
   }, [progress.taskId, progress.startedAt])
 
   useEffect(() => {
@@ -54,6 +50,25 @@ export function WorkflowProgressComponent({
     }
     return progress.nodes[progress.nodes.length - 1]
   }, [progress])
+
+  const visibleNodes = useMemo(() => {
+    if (progress.nodes.length === 0) return []
+
+    const runningIndex = progress.nodes.findIndex((node) => node.status === 'running')
+    const activeIndex =
+      runningIndex >= 0
+        ? runningIndex
+        : progress.currentNodeIndex >= 0 && progress.currentNodeIndex < progress.nodes.length
+          ? progress.currentNodeIndex
+          : progress.nodes.length - 1
+    const endIndex = Math.min(activeIndex, progress.nodes.length - 1)
+    const startIndex = Math.max(0, endIndex - 2)
+
+    return progress.nodes.slice(startIndex, endIndex + 1).map((node, offset) => ({
+      node,
+      index: startIndex + offset,
+    }))
+  }, [progress.nodes, progress.currentNodeIndex])
 
   const summaryText = useMemo(() => {
     const parts = [`已完成 ${completedCount}/${Math.max(progress.totalNodes, progress.nodes.length || 0)} 个节点`]
@@ -155,8 +170,12 @@ export function WorkflowProgressComponent({
     }
   }
 
+  if (progress.status === 'idle') {
+    return null
+  }
+
   return (
-    <div className="mb-2 rounded-2xl border border-slate-200/80 bg-white/78 p-2.5 shadow-sm backdrop-blur-sm sm:p-3 dark:border-slate-700/80 dark:bg-slate-900/55">
+    <div className="mb-2 w-full max-w-[720px] rounded-2xl border border-slate-200/80 bg-white/78 p-2.5 shadow-sm backdrop-blur-sm sm:p-3 dark:border-slate-700/80 dark:bg-slate-900/55">
       <button
         type="button"
         onClick={() => setExpanded((value) => !value)}
@@ -221,6 +240,33 @@ export function WorkflowProgressComponent({
           style={{ width: `${progress.progressPercent}%` }}
         />
       </div>
+
+      {!expanded && visibleNodes.length > 0 && (
+        <div className="mt-2 space-y-1.5">
+          {visibleNodes.map(({ node, index }) => (
+            <div
+              key={node.id}
+              className="flex min-h-[32px] items-center gap-2 rounded-xl bg-slate-50/70 px-2.5 py-1.5 dark:bg-slate-900/45"
+            >
+              {getStatusIcon(node.status)}
+              <div className="min-w-0 flex-1">
+                <div className="flex items-center justify-between gap-2">
+                  <span className={`truncate text-[12px] font-medium ${getStatusColor(node.status)}`}>
+                    {node.name}
+                  </span>
+                  <span className="flex-shrink-0 text-[10px] text-slate-400">
+                    {getStatusLabel(node.status)}
+                  </span>
+                </div>
+                <div className="mt-0.5 flex items-center gap-2 text-[10px] text-slate-500 dark:text-slate-400">
+                  <span>#{index + 1}</span>
+                  <span>{node.duration ? formatDuration(node.duration) : node.status === 'running' ? '处理中' : '待记录'}</span>
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
 
       <div
         className="overflow-hidden transition-[max-height,opacity,margin] duration-300 ease-out"

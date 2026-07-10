@@ -25,7 +25,7 @@ interface SidebarProps {
   onNewChat: () => void
   chatHistory: ChatHistoryItem[]
   agentNames: Record<string, string>
-  onSelectHistory: (id: number) => void
+  onSelectHistory: (item: any) => void
   onDeleteHistory: (id: number) => void | Promise<void>
   onBulkDeleteHistory?: (ids: number[]) => void | Promise<void>
   onRenameHistory?: (id: number, newTitle: string) => void
@@ -85,7 +85,7 @@ export function Sidebar({
     if (!normalizedSearch) return chatHistory
     return chatHistory.filter((item) => {
       const agentName = agentNames[item.agent] || ""
-      return [item.title, item.preview, agentName].some((value) =>
+      return [item.query, item.preview, agentName, item.sessionId].some((value) =>
         value.toLowerCase().includes(normalizedSearch),
       )
     })
@@ -390,6 +390,7 @@ export function Sidebar({
                   return (
                     <div
                       key={item.id}
+                      data-session-id={item.sessionId}
                       onClick={() => {
                         if (bulkMode) {
                           const next = new Set(selectedHistoryIds)
@@ -397,7 +398,7 @@ export function Sidebar({
                           else next.add(item.id)
                           setSelectedHistoryIds(next)
                         } else {
-                          onSelectHistory(item.id)
+                          onSelectHistory(item)
                         }
                       }}
                       onKeyDown={(e) => {
@@ -409,14 +410,14 @@ export function Sidebar({
                             else next.add(item.id)
                             setSelectedHistoryIds(next)
                           } else {
-                            onSelectHistory(item.id)
+                            onSelectHistory(item)
                           }
                         }
                       }}
                       onMouseEnter={() => setHoveredHistoryId(item.id)}
                       onMouseLeave={() => setHoveredHistoryId(null)}
                       className={`sidebar-history-item ${item.active ? "active" : ""} w-full text-left group`}
-                      title={item.title}
+                      title={item.query}
                       role="button"
                       tabIndex={0}
                       style={item.active ? activeStyle : hovered ? hoverStyle : baseStyle}
@@ -470,7 +471,7 @@ export function Sidebar({
                             style={{ color: "var(--foreground)" }}
                           />
                         ) : (
-                          <span className="truncate text-[12px] font-medium flex-1" title={item.title}>{item.title}</span>
+                          <span className="truncate text-[12px] font-medium flex-1" title={item.query}>{item.query}</span>
                         )}
                         <div className="relative ml-1 w-5 flex-shrink-0">
                           {!bulkMode && (
@@ -520,7 +521,7 @@ export function Sidebar({
                                     e.stopPropagation()
                                     setMenuHistoryId(null)
                                     setEditingHistoryId(item.id)
-                                    setEditTitle(item.title)
+                                    setEditTitle(item.query)
                                   }}
                                 >
                                   <svg width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
@@ -538,7 +539,7 @@ export function Sidebar({
                                     setDeleteDialog({
                                       mode: "single",
                                       ids: [item.id],
-                                      title: item.title,
+                                      title: item.query,
                                     })
                                   }}
                                 >
