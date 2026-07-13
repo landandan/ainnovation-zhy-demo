@@ -1,6 +1,6 @@
 "use client"
 
-import React, { useState, useCallback } from "react"
+import React, { useState, useCallback, useEffect, useRef } from "react"
 import ReactMarkdown from "react-markdown"
 import remarkGfm from "remark-gfm"
 import remarkMath from "remark-math"
@@ -9,7 +9,11 @@ import rehypeRaw from "rehype-raw"
 import { DownloadLink } from "./download-link"
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { vs, vscDarkPlus } from 'react-syntax-highlighter/dist/esm/styles/prism';
-import { ChevronDownIcon, ClipboardDocumentIcon, ArrowDownTrayIcon } from '@heroicons/react/24/outline';
+import { ChevronDownIcon, ClipboardDocumentIcon, ArrowDownTrayIcon, PlusIcon, MinusIcon } from '@heroicons/react/24/outline';
+
+const PREVIEW_ZOOM_MIN = 0.5
+const PREVIEW_ZOOM_MAX = 3
+const PREVIEW_ZOOM_STEP = 0.25
 
 interface BubbleAttachment {
   name: string
@@ -85,9 +89,120 @@ function ThinkComponent({ content }: { content: string }) {
   )
 }
 
+type PreviewImage = {
+  src: string
+  alt: string
+}
+
+type PreviewPan = {
+  x: number
+  y: number
+}
+
 /* ───── 消息气泡（Markdown + LaTeX 格式支持 + 一键复制） ───── */
 export function MessageBubble({ role, text, time, agentId, attachments }: MessageBubbleProps) {
   const [copied, setCopied] = useState(false)
+  const [previewImage, setPreviewImage] = useState<PreviewImage | null>(null)
+  const [isPreviewClosing, setIsPreviewClosing] = useState(false)
+  const [previewZoom, setPreviewZoom] = useState(1)
+  const [previewPan, setPreviewPan] = useState<PreviewPan>({ x: 0, y: 0 })
+  const [isPreviewDragging, setIsPreviewDragging] = useState(false)
+  const previewDragRef = useRef<{
+    pointerId: number
+    startX: number
+    startY: number
+    originX: number
+    originY: number
+  } | null>(null)
+
+  const resetPreviewView = useCallback(() => {
+    setPreviewZoom(1)
+    setPreviewPan({ x: 0, y: 0 })
+    setIsPreviewDragging(false)
+    previewDragRef.current = null
+  }, [])
+
+  const openImagePreview = useCallback((src?: string | null, alt?: string | null) => {
+    if (!src) return
+    resetPreviewView()
+    setPreviewImage({ src, alt: alt?.trim() || "图片预览" })
+    setIsPreviewClosing(false)
+  }, [resetPreviewView])
+
+  const closeImagePreview = useCallback(() => {
+    setIsPreviewClosing(true)
+    window.setTimeout(() => {
+      setPreviewImage(null)
+      resetPreviewView()
+      setIsPreviewClosing(false)
+    }, 220)
+  }, [resetPreviewView])
+
+  const zoomInPreview = useCallback(() => {
+    setPreviewZoom((current) => Math.min(PREVIEW_ZOOM_MAX, Number((current + PREVIEW_ZOOM_STEP).toFixed(2))))
+  }, [])
+
+  const zoomOutPreview = useCallback(() => {
+    setPreviewZoom((current) => {
+      const next = Math.max(PREVIEW_ZOOM_MIN, Number((current - PREVIEW_ZOOM_STEP).toFixed(2)))
+      if (next <= 1) {
+        setPreviewPan({ x: 0, y: 0 })
+      }
+      return next
+    })
+  }, [])
+
+  const handlePreviewPointerDown = useCallback((event: React.PointerEvent<HTMLDivElement>) => {
+    if (previewZoom <= 1) return
+
+    previewDragRef.current = {
+      pointerId: event.pointerId,
+      startX: event.clientX,
+      startY: event.clientY,
+      originX: previewPan.x,
+      originY: previewPan.y,
+    }
+    event.currentTarget.setPointerCapture(event.pointerId)
+    setIsPreviewDragging(true)
+  }, [previewPan.x, previewPan.y, previewZoom])
+
+  const handlePreviewPointerMove = useCallback((event: React.PointerEvent<HTMLDivElement>) => {
+    const dragState = previewDragRef.current
+    if (!dragState || dragState.pointerId !== event.pointerId) return
+
+    setPreviewPan({
+      x: dragState.originX + (event.clientX - dragState.startX),
+      y: dragState.originY + (event.clientY - dragState.startY),
+    })
+  }, [])
+
+  const handlePreviewPointerEnd = useCallback((event: React.PointerEvent<HTMLDivElement>) => {
+    const dragState = previewDragRef.current
+    if (!dragState || dragState.pointerId !== event.pointerId) return
+
+    event.currentTarget.releasePointerCapture(event.pointerId)
+    previewDragRef.current = null
+    setIsPreviewDragging(false)
+  }, [])
+
+  useEffect(() => {
+    if (!previewImage) return
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        closeImagePreview()
+      }
+    }
+
+    const previousOverflow = document.body.style.overflow
+    document.body.style.overflow = "hidden"
+    window.addEventListener("keydown", handleKeyDown)
+
+    return () => {
+      document.body.style.overflow = previousOverflow
+      window.removeEventListener("keydown", handleKeyDown)
+    }
+  }, [previewImage, closeImagePreview])
 
   // 解析 <think> 标签 - 只移除思考标签，内容已经在外部处理
   const mainText = text.replace(/<think>[\s\S]*?<\/think>/, '').trim();
@@ -114,46 +229,25 @@ export function MessageBubble({ role, text, time, agentId, attachments }: Messag
 
   return (
     <div
-      className="rounded-2xl px-4 py-3.5 text-sm leading-relaxed relative group"
+      className="message-bubble rounded-xl px-4 py-3.5 relative group"
       style={{
         background:
-          role === "user" ? "var(--accent)" : "var(--card)",
+          role === "user" ? "var(--chat-user-bg, var(--accent))" : "var(--kimi-bubble-ai, var(--card))",
         color:
-          role === "user" ? "var(--accent-foreground)" : "var(--foreground)",
-        border: role === "ai" ? "1px solid var(--border)" : "none",
-        borderBottomRightRadius: role === "user" ? "8px" : undefined,
-        borderBottomLeftRadius: role === "ai" ? "8px" : undefined,
+          role === "user" ? "var(--chat-user-color, var(--accent-foreground))" : "var(--chat-color, var(--foreground))",
+        border: role === "ai" ? "none" : "none",
+        borderBottomRightRadius: role === "user" ? "4px" : undefined,
+        borderBottomLeftRadius: role === "ai" ? "4px" : undefined,
         boxShadow:
-          role === "user" ? "var(--shadow-md)" : "var(--shadow-sm)",
+          role === "user" ? "var(--chat-user-shadow, var(--shadow-md))" : "none",
         wordBreak: "break-word",
+        fontFamily: "var(--chat-font-family, inherit)",
+        fontSize: "var(--chat-font-size, 14px)",
+        lineHeight: "var(--chat-line-height, 1.65)",
+        fontWeight: "var(--chat-font-weight, 400)",
       }}
     >
-      {/* AI 消息的复制按钮 */}
-      {role === "ai" && (
-        <button
-          onClick={handleCopy}
-          className="absolute right-2 top-2 flex items-center gap-1 rounded-md px-2 py-1 text-[11px] opacity-0 group-hover:opacity-100 transition-all hover:bg-white/10"
-          style={{ color: "var(--text-muted)" }}
-          title="复制全文"
-        >
-          {copied ? (
-            <>
-              <svg width="12" height="12" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24">
-                <polyline points="20 6 9 17 4 12" />
-              </svg>
-              已复制
-            </>
-          ) : (
-            <>
-              <svg width="12" height="12" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-                <rect x="9" y="9" width="13" height="13" rx="2" />
-                <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
-              </svg>
-              复制
-            </>
-          )}
-        </button>
-      )}
+      {/* AI 消息操作栏在 chat-area 中渲染 */}
 
       {!!attachments?.length && (
         <div
@@ -368,14 +462,23 @@ export function MessageBubble({ role, text, time, agentId, attachments }: Messag
 
             // 图片
             img({ src, alt }) {
+              if (!src || typeof src !== "string") return null
+
               return (
-                <img
-                  src={src}
-                  alt={alt}
-                  className="my-3 max-w-full rounded-xl"
-                  style={{ border: "1px solid var(--border)" }}
-                  loading="lazy"
-                />
+                <button
+                  type="button"
+                  className="markdown-image-button"
+                  onClick={() => openImagePreview(src, typeof alt === "string" ? alt : undefined)}
+                  aria-label="点击查看大图"
+                >
+                  <img
+                    src={src}
+                    alt={alt}
+                    className="my-3 max-w-full rounded-xl"
+                    style={{ border: "1px solid var(--border)" }}
+                    loading="lazy"
+                  />
+                </button>
               )
             },
 
@@ -433,6 +536,74 @@ export function MessageBubble({ role, text, time, agentId, attachments }: Messag
             </svg>
           )}
         </button>
+      )}
+
+      {previewImage && (
+        <>
+          <div
+            className={`image-lightbox-backdrop ${isPreviewClosing ? "closing" : ""}`}
+            onClick={closeImagePreview}
+            aria-hidden="true"
+          />
+          <div
+            className={`image-lightbox-panel ${isPreviewClosing ? "closing" : ""}`}
+            role="dialog"
+            aria-modal="true"
+            aria-label={previewImage.alt}
+          >
+            <button
+              type="button"
+              className="image-lightbox-close"
+              onClick={closeImagePreview}
+              aria-label="关闭预览"
+            >
+              <svg width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                <line x1="18" y1="6" x2="6" y2="18" />
+                <line x1="6" y1="6" x2="18" y2="18" />
+              </svg>
+            </button>
+            <div
+              className={`image-lightbox-viewport ${previewZoom > 1 ? "is-zoomed" : ""} ${isPreviewDragging ? "is-dragging" : ""}`}
+              onClick={(event) => event.stopPropagation()}
+              onPointerDown={handlePreviewPointerDown}
+              onPointerMove={handlePreviewPointerMove}
+              onPointerUp={handlePreviewPointerEnd}
+              onPointerCancel={handlePreviewPointerEnd}
+            >
+              <img
+                src={previewImage.src}
+                alt={previewImage.alt}
+                className="image-lightbox-image"
+                draggable={false}
+                style={{
+                  transform: `translate(${previewPan.x}px, ${previewPan.y}px) scale(${previewZoom})`,
+                  transition: isPreviewDragging ? "none" : "transform 0.2s ease",
+                }}
+              />
+            </div>
+            <div className="image-lightbox-toolbar" onClick={(event) => event.stopPropagation()}>
+              <button
+                type="button"
+                className="image-lightbox-tool-btn"
+                onClick={zoomOutPreview}
+                disabled={previewZoom <= PREVIEW_ZOOM_MIN}
+                aria-label="缩小"
+              >
+                <MinusIcon className="h-4 w-4" />
+              </button>
+              <span className="image-lightbox-zoom-label">{Math.round(previewZoom * 100)}%</span>
+              <button
+                type="button"
+                className="image-lightbox-tool-btn"
+                onClick={zoomInPreview}
+                disabled={previewZoom >= PREVIEW_ZOOM_MAX}
+                aria-label="放大"
+              >
+                <PlusIcon className="h-4 w-4" />
+              </button>
+            </div>
+          </div>
+        </>
       )}
     </div>
   )

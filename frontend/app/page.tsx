@@ -40,6 +40,7 @@ import {
   handleWorkflowStopped,
 } from '@/lib/workflow-progress'
 import { getUserSettings, updateUserSettings, isAuthenticated } from "@/lib/api-client"
+import { ChartNoAxesColumnDecreasing } from "lucide-react"
 
 export interface MessageFileAttachment {
   name: string
@@ -67,6 +68,8 @@ export interface Message {
   thinkingComplete?: boolean
   waiting?: boolean
   resourcesList?: ResourceItem[]
+  messageId?: string
+  feedback?: "like" | "dislike" | null
 }
 
 export interface ChatHistoryItem {
@@ -219,22 +222,27 @@ function extractThinkingFromContent(content: string): {
   }
 }
 
-function normalizeResources(rawResources: unknown): ResourceItem[] {
-  if (!Array.isArray(rawResources)) return []
-  return rawResources.map((item) => {
-    const record = item as Record<string, unknown>
-    return {
-      document_name: typeof record.document_name === "string" ? record.document_name : "未知文档",
-      content: typeof record.content === "string" ? record.content : "",
-    }
-  })
+function normalizeResources(rawResources: string): ResourceItem[] {
+  console.log('rawResources123:', rawResources)
+  if (!rawResources || !rawResources.startsWith("data: ")) return []
+  try {
+    const event = JSON.parse(rawResources.slice(6).trim())
+    return event?.metadata?.retriever_resources || []
+  } catch (e) {
+    return []
+  }
+}
+
+function normalizeFeedback(rating?: string | null): "like" | "dislike" | null {
+  if (rating === "like" || rating === "dislike") return rating
+  return null
 }
 
 function mapMessage(m: MessageApi): Message[] {
   console.log('mapMessage123:', m)
   const result: Message[] = []
   const baseTime = new Date(m.createTime).toLocaleTimeString("zh-CN", { hour: "2-digit", minute: "2-digit" })
-  const resourcesList = normalizeResources((m as any).resources_list)
+  const resourcesList = normalizeResources(m.retrieverResources)
   
   if (m.query) {
     const { thinking: userThinking, mainText: userText } = extractThinkingFromContent(m.query)
@@ -261,6 +269,8 @@ function mapMessage(m: MessageApi): Message[] {
       query: m.query,
       resourcesList,
       time: baseTime,
+      messageId: m.messageId,
+      feedback: normalizeFeedback(m.rating),
     })
   }
   
@@ -525,6 +535,7 @@ export default function Page() {
     difyConversationIdRef.current = null
     setSidebarOpen(false)
     setIsStreaming(false)
+    setResourceSidebarOpen(false)
     // 清空临时上传的文件和图片
     setUploadedImages([])
     setUploadedFiles([])
@@ -550,11 +561,12 @@ export default function Page() {
 
       console.log('sortedMsgs123:', sortedMsgs)
       const mappedMsgs = sortedMsgs.flatMap(mapMessage)
+      setResourceSidebarOpen(false)
       setMessages(mappedMsgs)
       setActiveConversationId(id)
       setSessionId(item.sessionId)
       // 切换到该对话所属的智能体
-      const conv = conversations.find((c) => c.id === id)
+      const conv = conversations.find((c) => c.id === item.appId)
       if (conv) setCurrentAgentId(conv.agent_id_str)
       difyConversationIdRef.current = null
       maybeCloseSidebar()
@@ -565,13 +577,14 @@ export default function Page() {
     }
   }
 
-  const handleDeleteHistory = async (id: number) => {
+  const handleDeleteHistory = async (sessionIdToDelete: string) => {
     try {
-      await deleteConversationApi(id)
-      setConversations((prev) => prev.filter((c) => c.id !== id))
-      if (activeConversationId === id) {
+      await deleteConversationApi(sessionIdToDelete)
+      setConversations((prev) => prev.filter((c) => c.sessionId !== sessionIdToDelete))
+      if (sessionId === sessionIdToDelete) {
         setMessages([])
         setActiveConversationId(null)
+        setSessionId("")
         difyConversationIdRef.current = null
       }
       success("对话已删除")
@@ -581,22 +594,20 @@ export default function Page() {
     }
   }
 
-  const handleBulkDeleteHistory = async (ids: number[]) => {
+  const handleBulkDeleteHistory = async (sessionIds: string[]) => {
     try {
-      // 依次删除每个会话
-      for (const id of ids) {
-        await deleteConversationApi(id)
+      const uniqueSessionIds = [...new Set(sessionIds.filter(Boolean))]
+      for (const sid of uniqueSessionIds) {
+        await deleteConversationApi(sid)
       }
-      // 从列表中移除所有删除的会话
-      setConversations((prev) => prev.filter((c) => !ids.includes(c.id)))
-      // 如果当前激活的会话在删除列表中，清空消息
-      if (activeConversationId && ids.includes(activeConversationId)) {
+      setConversations((prev) => prev.filter((c) => !uniqueSessionIds.includes(c.sessionId)))
+      if (sessionId && uniqueSessionIds.includes(sessionId)) {
         setMessages([])
         setActiveConversationId(null)
+        setSessionId("")
         difyConversationIdRef.current = null
       }
-      // 只显示一个成功提示
-      success(`已删除 ${ids.length} 条对话`)
+      success(`已删除 ${uniqueSessionIds.length} 条对话`)
     } catch (err) {
       console.error("批量删除对话失败:", err)
       error("批量删除失败")
@@ -679,14 +690,26 @@ export default function Page() {
         buffer = lines.pop() || ""
 
         let chunkHasUpdates = false
+        let isError = false
 
         for (const line of lines) {
           //console.log('line123:', line)
           const trimmed = line.trim()
-          if (!trimmed || !trimmed.startsWith("data:data: ")) continue
-          console.log('trimmed123:', line)
+          if (!trimmed || !trimmed.startsWith("data:")) continue
+          let outJson = JSON.parse(trimmed.slice(5).trim())
+          console.log('outJson123:', outJson)
+          if (outJson.code !== 200) {
+            fullAnswer = `哎呀，服务暂时开小差了 😅，请稍后重试。`
+            outJson.message = `data: ${JSON.stringify({
+              event: 'workflow_started',
+            })}`
+          }
+          // if (!trimmed.startsWith("data:{code=200, message=data: ")) continue
+          // console.log('trimmed123:', line)
 
-          const jsonStr = trimmed.slice(11)
+          const message = outJson.message
+          if (!message || !message.startsWith("data: ")) continue
+          const jsonStr = message.slice(6)
           if (jsonStr === "[DONE]") continue
 
           try {
@@ -830,6 +853,7 @@ export default function Page() {
                 waiting: false,
                 loading: false,
                 time: aiTime,
+                ...(assistantDifyMessageId ? { messageId: assistantDifyMessageId } : {}),
               }
             }
             return updated
@@ -934,12 +958,11 @@ export default function Page() {
     // 2. 通知 Dify 服务端停止任务（best-effort，不阻塞 UI）
     const taskId = currentTaskIdRef.current
     const agentId = currentAgentId
-    const username = user?.username || "anonymous"
     const isWorkflow = isWorkflowTaskRef.current
-    if (taskId) {
+    if (taskId && agentId && user?.id) {
       currentTaskIdRef.current = null
       isWorkflowTaskRef.current = false
-      stopDifyTask({ agentId, taskId, user: username, isWorkflow })
+      stopDifyTask({ agentId, taskId, userId: user.id, isWorkflow })
     }
     setMessages((prev) =>
       prev.map((m) =>
@@ -986,6 +1009,66 @@ export default function Page() {
 
     // 重新调用 API
     callDifyAPI(lastRequest.userText, newMessages, lastRequest.files, lastRequest.userAttachments)
+  }
+
+  /* ───── 重试指定 AI 回复 ───── */
+  const handleRetryMessage = async (messageIndex: number) => {
+    if (isStreaming) {
+      warning("请等待当前回复完成")
+      return
+    }
+
+    const aiMsg = messages[messageIndex]
+    if (!aiMsg || aiMsg.role !== "ai") return
+
+    let userIndex = messageIndex - 1
+    while (userIndex >= 0 && messages[userIndex].role !== "user") {
+      userIndex--
+    }
+    if (userIndex < 0) {
+      warning("找不到对应的问题")
+      return
+    }
+
+    const userMsg = messages[userIndex]
+    const truncated = messages.slice(0, messageIndex)
+    const time = new Date().toLocaleTimeString("zh-CN", { hour: "2-digit", minute: "2-digit" })
+    const newMessages: Message[] = [
+      ...truncated,
+      {
+        role: "ai",
+        text: "",
+        time,
+        workflowProgress: createInitialProgress(),
+        waiting: true,
+        thinking: "",
+        thinkingComplete: false,
+      },
+    ]
+    setMessages(newMessages)
+
+    const isLatestAi = messageIndex === messages.length - 1
+    if (isLatestAi && lastRequestRef.current) {
+      callDifyAPI(
+        lastRequestRef.current.userText,
+        newMessages,
+        lastRequestRef.current.files,
+        lastRequestRef.current.userAttachments,
+      )
+      return
+    }
+
+    const userText = userMsg.text || (userMsg.files?.length ? "请分析我上传的文件" : "")
+    if (!userText) {
+      warning("无法重试空问题")
+      return
+    }
+
+    lastRequestRef.current = {
+      userText,
+      userAttachments: userMsg.files,
+    }
+    callDifyAPI(userText, newMessages, undefined, userMsg.files)
   }
 
   /* ───── 发送消息（异步：先上传文件，再合并到 chat 请求） ───── */
@@ -1099,7 +1182,7 @@ export default function Page() {
         style={{
           minHeight: "100vh",
           display: "grid",
-          gridTemplateColumns: "320px minmax(0, 1fr)",
+          gridTemplateColumns: "240px minmax(0, 1fr)",
           background: "var(--background)",
           color: "var(--text-secondary)",
         }}
@@ -1244,7 +1327,7 @@ export default function Page() {
     <div 
       className="app" 
       style={{
-        '--sidebar-width': sidebarCollapsed ? '72px' : '320px'
+        '--sidebar-width': sidebarCollapsed ? '72px' : '240px'
       } as React.CSSProperties}
     >
       <div
@@ -1309,7 +1392,9 @@ export default function Page() {
             agentDesc={currentAgentDesc}
             quickQuestions={currentAgentQuickQuestions}
             currentAgentId={currentAgentId}
+            userId={user?.id}
             onRetryWorkflow={handleRetryWorkflow}
+            onRetryMessage={handleRetryMessage}
             onStopWorkflow={handleStopStreaming}
             onOpenResources={(resources) => {
               setResourceSidebarResources(resources)
