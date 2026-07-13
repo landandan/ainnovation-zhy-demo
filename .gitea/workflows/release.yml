@@ -108,6 +108,13 @@ jobs:
             ls -lh "release/${FILE_NAME}-${{ steps.version.outputs.tag }}.tar.gz"
           done
 
+      - name: Get Commit Info
+        id: commit
+        run: |
+          echo "author=$(git log -1 --pretty=%an)" >> $GITHUB_OUTPUT
+          echo "email=$(git log -1 --pretty=%ae)" >> $GITHUB_OUTPUT
+          echo "committer=$(git log -1 --pretty=%cn)" >> $GITHUB_OUTPUT
+
       - name: Create Gitea Release
         uses: akkuman/gitea-release-action@v1
         env:
@@ -125,6 +132,15 @@ jobs:
 
             **Branch**
             release
+            
+            **Actor**
+            ${{ github.actor }}
+          
+            **Commit Author**
+            ${{ steps.commit.outputs.author }}
+          
+            **Committer**
+            ${{ steps.commit.outputs.committer }}
 
             **Commit**
             ${{ github.sha }}
