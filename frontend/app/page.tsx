@@ -68,6 +68,8 @@ export interface Message {
   thinkingComplete?: boolean
   waiting?: boolean
   resourcesList?: ResourceItem[]
+  messageId?: string
+  feedback?: "like" | "dislike" | null
 }
 
 export interface ChatHistoryItem {
@@ -231,6 +233,11 @@ function normalizeResources(rawResources: string): ResourceItem[] {
   }
 }
 
+function normalizeFeedback(rating?: string | null): "like" | "dislike" | null {
+  if (rating === "like" || rating === "dislike") return rating
+  return null
+}
+
 function mapMessage(m: MessageApi): Message[] {
   console.log('mapMessage123:', m)
   const result: Message[] = []
@@ -262,6 +269,8 @@ function mapMessage(m: MessageApi): Message[] {
       query: m.query,
       resourcesList,
       time: baseTime,
+      messageId: m.messageId,
+      feedback: normalizeFeedback(m.rating),
     })
   }
   
@@ -844,6 +853,7 @@ export default function Page() {
                 waiting: false,
                 loading: false,
                 time: aiTime,
+                ...(assistantDifyMessageId ? { messageId: assistantDifyMessageId } : {}),
               }
             }
             return updated
@@ -948,12 +958,11 @@ export default function Page() {
     // 2. 通知 Dify 服务端停止任务（best-effort，不阻塞 UI）
     const taskId = currentTaskIdRef.current
     const agentId = currentAgentId
-    const username = user?.username || "anonymous"
     const isWorkflow = isWorkflowTaskRef.current
-    if (taskId) {
+    if (taskId && agentId && user?.id) {
       currentTaskIdRef.current = null
       isWorkflowTaskRef.current = false
-      stopDifyTask({ agentId, taskId, user: username, isWorkflow })
+      stopDifyTask({ agentId, taskId, userId: user.id, isWorkflow })
     }
     setMessages((prev) =>
       prev.map((m) =>
@@ -1383,6 +1392,7 @@ export default function Page() {
             agentDesc={currentAgentDesc}
             quickQuestions={currentAgentQuickQuestions}
             currentAgentId={currentAgentId}
+            userId={user?.id}
             onRetryWorkflow={handleRetryWorkflow}
             onRetryMessage={handleRetryMessage}
             onStopWorkflow={handleStopStreaming}

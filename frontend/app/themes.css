@@ -273,6 +273,18 @@
   --message-action-hover-bg: #F2F2F2;
   --message-action-active-color: #1A85FF;
 
+  --message-feedback-overlay: rgba(0, 0, 0, 0.45);
+  --message-feedback-bg: #FFFFFF;
+  --message-feedback-shadow: 0 8px 32px rgba(0, 0, 0, 0.12);
+  --message-feedback-tag-bg: #F5F5F5;
+  --message-feedback-tag-hover-bg: #EBEBEB;
+  --message-feedback-tag-selected-bg: #E8F3FF;
+  --message-feedback-tag-selected-color: #1A85FF;
+  --message-feedback-input-bg: #F5F5F5;
+  --message-feedback-cancel-bg: #F5F5F5;
+  --message-feedback-cancel-hover-bg: #EBEBEB;
+  --message-feedback-submit-bg: #1A85FF;
+
   /* 图表色 */
   --chart-1: #2563EB;
   --chart-2: #16A34A;
