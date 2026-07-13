@@ -9,7 +9,6 @@ import { getToken } from "../auth/token"
 import {
   API_BASE_URL,
   DIFY_FILE_UPLOAD_BASE_URL,
-  DIFY_STOP_PROXY_BASE_URL,
 } from "../http/routes"
 import { isMockMode, getMockDifyApiConfigForAgent, generateMockStream } from "../mock/config"
 import { getMockResponse } from "../mock/api"
@@ -352,29 +351,19 @@ export async function uploadFilesToDify(
 /* ───── 停止 Dify 任务 ───── */
 
 /**
- * 通知 Dify 服务端停止指定 task 的生成。
- *
- * Dify 根据"应用类型"使用不同的停止端点：
- * - Chatflow / Agent / Chatbot → `POST /chat-messages/{task_id}/stop`
- * - Workflow                    → `POST /workflows/run/{task_id}/stop`
- *
- * 调用方需通过 SSE 事件类型判断应用类型并传入 `isWorkflow`：
- * - 出现 `workflow_started` / `node_started` 等事件 → isWorkflow = true
- * - 出现 `agent_thought` / `message` 等事件           → isWorkflow = false
- *
- * - Mock 模式：浏览器直连对应 Dify 端点
- * - 非 Mock 模式：通过后端统一代理端点 `/api/dify/chat-messages/stop`，
- *   后端根据 `is_workflow` 参数路由到正确的 Dify URL。
- *
- * 即使请求失败也不抛错（停止是 best-effort 操作）。
+ * 停止正在生成的流式对话。
+ * 非 Mock 模式：POST /h5/chat/stop
+ * Mock 模式：直连 Dify 停止端点
+ * 即使请求失败也不抛错（best-effort）。
  */
 export async function stopDifyTask(params: {
   agentId: string
   taskId: string
-  user: string
+  userId?: number
+  user?: string
   isWorkflow?: boolean
 }): Promise<void> {
-  const { agentId, taskId, user, isWorkflow = false } = params
+  const { agentId, taskId, userId, user = "anonymous", isWorkflow = false } = params
 
   try {
     if (isMockMode()) {
@@ -393,24 +382,24 @@ export async function stopDifyTask(params: {
       return
     }
 
-    // 非 Mock 模式：走后端代理（后端根据 is_workflow 路由）
+    if (!userId) return
+
     const token = getToken()
     if (!token) return
 
-    await fetch(`${DIFY_STOP_PROXY_BASE_URL}/dify/chat-messages/stop`, {
+    await fetch(`${API_BASE_URL}/h5/chat/stop`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
         Authorization: `Bearer ${token}`,
       },
       body: JSON.stringify({
-        agent_id: agentId,
-        task_id: taskId,
-        is_workflow: isWorkflow,
+        agentId,
+        taskId,
+        userId,
       }),
     })
   } catch (err) {
-    // 停止是 best-effort，失败不抛错
-    console.warn("停止 Dify 任务失败:", err)
+    console.warn("停止对话失败:", err)
   }
 }

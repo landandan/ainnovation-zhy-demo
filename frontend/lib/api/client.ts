@@ -220,6 +220,7 @@ export interface MessageApi {
   status: string
   createTime: string
   retrieverResources: string
+  rating?: "like" | "dislike" | null | string
   // id: number
   // conversation_id: number
   // role: "user" | "assistant" | "system"
@@ -297,6 +298,20 @@ export async function deleteConversationApi(sessionId: string): Promise<{ messag
     return deleteMockConversationBySessionId(sessionId)
   }
   return request<{ message: string }>("POST", `/h5/chat/messages/del?sessionId=${encodeURIComponent(sessionId)}`)
+}
+
+export async function submitMessageFeedback(data: {
+  agentId: string
+  messageId: string
+  userId: number
+  rating?: "like" | "dislike" | null
+  content?: string
+}): Promise<{ code?: number; msg?: string }> {
+  if (isMockMode()) {
+    await mockDelay()
+    return { code: 200, msg: "操作成功" }
+  }
+  return request<{ code?: number; msg?: string }>("POST", "/h5/chat/feedback", data)
 }
 
 export async function getMessages(

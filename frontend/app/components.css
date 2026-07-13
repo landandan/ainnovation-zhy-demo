@@ -1471,6 +1471,156 @@
   flex-shrink: 0;
 }
 
+/* 消息反馈弹窗 — Kimi 风格 */
+.message-feedback-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1200;
+  background: var(--message-feedback-overlay, rgba(0, 0, 0, 0.45));
+}
+
+.message-feedback-panel {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  z-index: 1201;
+  width: min(480px, calc(100vw - 32px));
+  padding: 20px 24px 24px;
+  border-radius: 16px;
+  background: var(--message-feedback-bg, #ffffff);
+  box-shadow: var(--message-feedback-shadow, 0 8px 32px rgba(0, 0, 0, 0.12));
+}
+
+.message-feedback-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 4px;
+}
+
+.message-feedback-title {
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--foreground);
+  margin: 0;
+}
+
+.message-feedback-close {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+
+.message-feedback-close:hover:not(:disabled) {
+  background: var(--hover);
+}
+
+.message-feedback-subtitle {
+  font-size: 13px;
+  color: var(--text-secondary);
+  margin: 0 0 16px;
+}
+
+.message-feedback-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+
+.message-feedback-tag {
+  border: none;
+  border-radius: 8px;
+  padding: 8px 14px;
+  font-size: 13px;
+  line-height: 1.4;
+  cursor: pointer;
+  background: var(--message-feedback-tag-bg, #f5f5f5);
+  color: var(--foreground);
+  transition: background 0.15s ease, color 0.15s ease;
+}
+
+.message-feedback-tag:hover {
+  background: var(--message-feedback-tag-hover-bg, #ebebeb);
+}
+
+.message-feedback-tag.selected {
+  background: var(--message-feedback-tag-selected-bg, #e8f3ff);
+  color: var(--message-feedback-tag-selected-color, #1a85ff);
+}
+
+.message-feedback-textarea {
+  width: 100%;
+  min-height: 96px;
+  padding: 12px 14px;
+  border: none;
+  border-radius: 12px;
+  resize: vertical;
+  font-size: 14px;
+  line-height: 1.6;
+  background: var(--message-feedback-input-bg, #f5f5f5);
+  color: var(--foreground);
+  outline: none;
+  margin-bottom: 20px;
+}
+
+.message-feedback-textarea::placeholder {
+  color: var(--text-muted);
+}
+
+.message-feedback-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+.message-feedback-cancel {
+  border: none;
+  border-radius: 10px;
+  padding: 10px 20px;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  background: var(--message-feedback-cancel-bg, #f5f5f5);
+  color: var(--foreground);
+  transition: background 0.15s ease;
+}
+
+.message-feedback-cancel:hover:not(:disabled) {
+  background: var(--message-feedback-cancel-hover-bg, #ebebeb);
+}
+
+.message-feedback-cancel:disabled,
+.message-feedback-submit:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.message-feedback-submit {
+  border: none;
+  border-radius: 10px;
+  padding: 10px 20px;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  color: #ffffff;
+  background: var(--message-feedback-submit-bg, #1a85ff);
+  transition: opacity 0.15s ease;
+}
+
+.message-feedback-submit:hover:not(:disabled) {
+  opacity: 0.92;
+}
+
 /* ═══════════════════════════════════════════════════════════
    Input Area
    ═══════════════════════════════════════════════════════════ */

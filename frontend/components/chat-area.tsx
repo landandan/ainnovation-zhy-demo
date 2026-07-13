@@ -16,6 +16,7 @@ interface ChatAreaProps {
   agentDesc?: string
   quickQuestions?: string[]
   currentAgentId?: string
+  userId?: number
   onRetryWorkflow?: () => void
   onRetryMessage?: (messageIndex: number) => void
   onStopWorkflow?: () => void
@@ -23,7 +24,7 @@ interface ChatAreaProps {
 }
 
 export const ChatArea = forwardRef<HTMLDivElement, ChatAreaProps>(
-  function ChatArea({ messages, onUseSuggestion, isStreaming, agentLabel = "深海智航", agentDesc, quickQuestions, currentAgentId, onRetryWorkflow, onRetryMessage, onStopWorkflow, onOpenResources }, ref) {
+  function ChatArea({ messages, onUseSuggestion, isStreaming, agentLabel = "深海智航", agentDesc, quickQuestions, currentAgentId, userId, onRetryWorkflow, onRetryMessage, onStopWorkflow, onOpenResources }, ref) {
     const [showScrollButton, setShowScrollButton] = useState(false)
     const internalRef = useRef<HTMLDivElement>(null)
     const shouldFollowLatestRef = useRef(true)
@@ -445,6 +446,10 @@ export const ChatArea = forwardRef<HTMLDivElement, ChatAreaProps>(
                     !(isStreaming && isLatestMessage) && (
                       <MessageActions
                         text={msg.text}
+                        messageId={msg.messageId}
+                        agentId={currentAgentId}
+                        userId={userId}
+                        initialFeedback={msg.feedback ?? null}
                         onRetry={
                           onRetryMessage
                             ? () => onRetryMessage(idx)
