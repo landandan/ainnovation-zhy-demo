@@ -242,13 +242,76 @@ function dedupeResourcesBySegmentId(resources: ResourceItem[]): ResourceItem[] {
   return result
 }
 
+/**
+ * 将 node_finished.inputs.#context# 按 `\nsource:` 分割为引用来源列表
+ */
+function parseContextToResources(context: string): ResourceItem[] {
+  if (!context || typeof context !== "string" || !context.trim()) return []
+
+  const segments = context.split(/\nsource:\s*/).map((s) => s.trim()).filter(Boolean)
+  const resources: ResourceItem[] = []
+
+  for (const segment of segments) {
+    // 首段可能只是孤立的 ---
+    if (/^---+\s*$/.test(segment)) continue
+
+    const headerEnd = segment.indexOf("\n---\n")
+    let documentName = "引用来源"
+    let content = segment
+
+    if (headerEnd >= 0) {
+      const header = segment.slice(0, headerEnd).trim()
+      const firstLine = header.split("\n")[0]?.replace(/^---+\s*/, "").trim()
+      if (firstLine) documentName = firstLine
+      content = segment.slice(headerEnd + "\n---\n".length).trim()
+    } else {
+      const firstLine = segment.split("\n")[0]?.replace(/^---+\s*/, "").trim()
+      if (firstLine) {
+        documentName = firstLine
+        content = segment.slice(firstLine.length).replace(/^\n+/, "").trim()
+      }
+    }
+
+    if (!content && documentName === "引用来源") continue
+    resources.push({
+      document_name: documentName,
+      content: content || segment,
+    })
+  }
+
+  return resources
+}
+
+function extractContextFromNodeFinished(event: any): string {
+  const inputs = event?.data?.inputs
+  if (!inputs || typeof inputs !== "object") return ""
+  const context = inputs["#context#"] ?? inputs.context
+  return typeof context === "string" ? context : ""
+}
+
 function normalizeResources(rawResources: string): ResourceItem[] {
   console.log('rawResources123:', rawResources)
-  if (!rawResources || !rawResources.startsWith("data: ")) return []
+  if (!rawResources) return []
+
+  // 兼容：直接是 context 原文
+  if (!rawResources.startsWith("data: ") && rawResources.includes("\nsource:")) {
+    return parseContextToResources(rawResources)
+  }
+
+  if (!rawResources.startsWith("data: ")) return []
   try {
     const event = JSON.parse(rawResources.slice(6).trim())
-    const resources = event?.metadata?.retriever_resources || []
-    return dedupeResourcesBySegmentId(resources)
+    // 优先 message_end 的 retriever_resources
+    const fromMeta = event?.metadata?.retriever_resources
+    if (Array.isArray(fromMeta) && fromMeta.length > 0) {
+      return dedupeResourcesBySegmentId(fromMeta)
+    }
+    // 否则回退 node_finished 的 context
+    const context = extractContextFromNodeFinished(event)
+    if (context) {
+      return parseContextToResources(context)
+    }
+    return []
   } catch (e) {
     return []
   }
@@ -754,6 +817,7 @@ export default function Page() {
       let newDifyConversationId: string | null = null
       let assistantDifyMessageId: string | undefined
       let resourcesList: any = []
+      let nodeFinishedResourcesList: ResourceItem[] = []
       const assistantAttachments: MessageFileAttachment[] = []
       const aiTime = new Date().toLocaleTimeString("zh-CN", { hour: "2-digit", minute: "2-digit" })
       // 重置当前 task_id 和 workflow 标志（新一轮请求）
@@ -877,6 +941,20 @@ export default function Page() {
                   currentTaskIdRef.current = event.task_id
                 }
                 currentWorkflowProgress = handleNodeFinished(currentWorkflowProgress, event)
+                {
+                  // 从 inputs.#context# / context 解析引用来源（按 \nsource: 分割）
+                  const context = extractContextFromNodeFinished(event)
+                  if (context) {
+                    const parsed = parseContextToResources(context)
+                    if (parsed.length > 0) {
+                      nodeFinishedResourcesList = parsed
+                      // message_end 尚未到来时先展示 node_finished 数据
+                      if (!resourcesList || resourcesList.length === 0) {
+                        resourcesList = parsed
+                      }
+                    }
+                  }
+                }
                 chunkHasUpdates = true
                 break
 
@@ -952,9 +1030,14 @@ export default function Page() {
                   currentTaskIdRef.current = event.task_id
                 }
                 chunkHasUpdates = true
-                resourcesList = dedupeResourcesBySegmentId(
-                  event.metadata.retriever_resources || [],
-                )
+                {
+                  // 优先 message_end.metadata.retriever_resources，否则用 node_finished 解析结果
+                  const fromEnd = dedupeResourcesBySegmentId(
+                    event.metadata?.retriever_resources || [],
+                  )
+                  resourcesList =
+                    fromEnd.length > 0 ? fromEnd : nodeFinishedResourcesList
+                }
                 break
 
               case "error":
