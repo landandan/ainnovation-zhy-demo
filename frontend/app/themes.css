@@ -257,6 +257,16 @@
   --input-box-padding-x: 20px;
   --input-box-padding-y: 16px;
   --input-box-min-height: 120px;
+  --input-box-drag-border: #1A85FF;
+  --input-box-drag-bg: #F5F9FF;
+  --input-box-drag-shadow: 0 0 0 2px rgba(26, 133, 255, 0.15);
+  --input-box-drag-hint-color: #1A85FF;
+  --upload-preview-file-bg: #F5F5F5;
+  --upload-preview-file-icon-color: #8C8C8C;
+  --upload-preview-file-name-color: #333333;
+  --upload-preview-file-sub-color: #8C8C8C;
+  --upload-preview-image-border: #E5E5E5;
+  --upload-preview-image-bg: #F5F5F5;
   --input-textarea-min-height: 48px;
   --input-textarea-font-size: 15px;
   --input-textarea-line-height: 1.6;

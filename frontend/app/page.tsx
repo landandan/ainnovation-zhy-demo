@@ -18,6 +18,8 @@ import {
   deleteConversationApi,
   getMessages,
   addMessage,
+  uploadFileSingle,
+  extractOssIdFromUpload,
   type AgentDefApi,
   type ConversationApi,
   type MessageApi,
@@ -26,7 +28,6 @@ import { loadTheme, saveTheme } from "@/lib/settings-store"
 import {
   callDifyChatStream,
   getAgentInputs,
-  uploadFilesToDify,
   stopDifyTask,
 } from '@/lib/dify-api'
 import {
@@ -421,6 +422,9 @@ export default function Page() {
   /* 原始 File 对象，用于上传到 Dify */
   const [rawImageFiles, setRawImageFiles] = useState<File[]>([])
   const [rawDocFiles, setRawDocFiles] = useState<File[]>([])
+  /** 上传接口返回的 ossId（与图片/文档预览一一对应） */
+  const [imageOssIds, setImageOssIds] = useState<Array<string | number>>([])
+  const [docOssIds, setDocOssIds] = useState<Array<string | number>>([])
   const [isRecording, setIsRecording] = useState(false)
   const [isStreaming, setIsStreaming] = useState(false)
   const [resourceSidebarOpen, setResourceSidebarOpen] = useState(false)
@@ -453,8 +457,8 @@ export default function Page() {
   /** 保存当前请求的上下文，用于重试 */
   const lastRequestRef = useRef<{
     userText: string
-    files?: Array<{ type: string; transfer_method: string; upload_file_id: string }>
     userAttachments?: MessageFileAttachment[]
+    inputFiles?: Array<{ ossId: string | number }>
   } | null>(null)
 
   /* ───── Toast hook ───── */
@@ -686,6 +690,8 @@ export default function Page() {
     setUploadedFiles([])
     setRawImageFiles([])
     setRawDocFiles([])
+    setImageOssIds([])
+    setDocOssIds([])
     refreshConversations()
   }
 
@@ -782,8 +788,8 @@ export default function Page() {
   const callDifyAPI = async (
     userText: string,
     allMessages: Message[],
-    files?: Array<{ type: string; transfer_method: string; upload_file_id: string }>,
     userAttachments?: MessageFileAttachment[],
+    inputFiles?: Array<{ ossId: string | number }>,
   ) => {
     // 创建新的 AbortController 用于中断
     const controller = new AbortController()
@@ -799,8 +805,8 @@ export default function Page() {
         inputs: getAgentInputs(currentAgentId, agentDefs),
         agentId: currentAgentId,
         signal: controller.signal,
-        files,
         sessionId: sessionId,
+        inputFiles,
       })
 
       const reader = response.body?.getReader()
@@ -1242,8 +1248,12 @@ export default function Page() {
     })
     setMessages(newMessages)
 
-    // 重新调用 API
-    callDifyAPI(lastRequest.userText, newMessages, lastRequest.files, lastRequest.userAttachments)
+    callDifyAPI(
+      lastRequest.userText,
+      newMessages,
+      lastRequest.userAttachments,
+      lastRequest.inputFiles,
+    )
   }
 
   /* ───── 重试指定 AI 回复 ───── */
@@ -1287,8 +1297,8 @@ export default function Page() {
       callDifyAPI(
         lastRequestRef.current.userText,
         newMessages,
-        lastRequestRef.current.files,
         lastRequestRef.current.userAttachments,
+        lastRequestRef.current.inputFiles,
       )
       return
     }
@@ -1303,7 +1313,7 @@ export default function Page() {
       userText,
       userAttachments: userMsg.files,
     }
-    callDifyAPI(userText, newMessages, undefined, userMsg.files)
+    callDifyAPI(userText, newMessages, userMsg.files)
   }
 
   /* ───── 发送消息（异步：先上传文件，再合并到 chat 请求） ───── */
@@ -1325,8 +1335,11 @@ export default function Page() {
       time,
     })
 
-    // 先收集所有原始 File 对象，然后清空 UI 状态
+    // 先收集所有原始 File 对象与 ossId，然后清空 UI 状态
     const allRawFiles = [...rawImageFiles, ...rawDocFiles]
+    const inputFiles = [...imageOssIds, ...docOssIds]
+      .filter((id) => id != null && id !== "")
+      .map((ossId) => ({ ossId }))
     const userAttachments: MessageFileAttachment[] = allRawFiles.map((file) => ({
       name: file.name,
       size: file.size,
@@ -1337,6 +1350,8 @@ export default function Page() {
     setUploadedFiles([])
     setRawImageFiles([])
     setRawDocFiles([])
+    setImageOssIds([])
+    setDocOssIds([])
 
     newMessages.push({ 
       role: "ai", 
@@ -1349,56 +1364,58 @@ export default function Page() {
     })
     setMessages(newMessages)
 
-    // 如果有附件，先上传到 Dify 获取 upload_file_id，再合并到 chat 请求
-    let difyFiles: Array<{ type: string; transfer_method: string; upload_file_id: string }> | undefined
-
-    if (allRawFiles.length > 0) {
-      try {
-        const uploadedRefs = await uploadFilesToDify(
-          allRawFiles,
-          user?.username || "anonymous",
-          currentAgentId,
-        )
-        difyFiles = uploadedRefs.map((ref) => ({
-          type: ref.type,
-          transfer_method: "local_file",
-          upload_file_id: ref.upload_file_id,
-        }))
-      } catch (uploadErr) {
-        const errMsg = uploadErr instanceof Error ? uploadErr.message : "附件上传失败"
-        error(`附件上传失败: ${errMsg}`)
-        // 上传失败时仍然发送文本消息，不带 files
-      }
-    }
-
-    // 保存请求上下文，用于重试
+    // 保存请求上下文，用于重试（附件已在选择时上传，这里只传 inputFiles）
     lastRequestRef.current = {
       userText: text || "请分析我上传的文件",
-      files: difyFiles,
       userAttachments,
+      inputFiles,
     }
 
-    callDifyAPI(text || "请分析我上传的文件", newMessages, difyFiles, userAttachments)
+    callDifyAPI(text || "请分析我上传的文件", newMessages, userAttachments, inputFiles)
   }
 
-  const handleImageUpload = (dataUrl: string, rawFile: File) => {
-    setUploadedImages((prev) => [...prev, dataUrl])
-    setRawImageFiles((prev) => [...prev, rawFile])
+  const handleImageUpload = async (dataUrl: string, rawFile: File) => {
+    try {
+      const uploadRes = await uploadFileSingle(rawFile)
+      const ossId = extractOssIdFromUpload(uploadRes)
+      if (ossId == null) {
+        throw new Error("上传成功但未返回 ossId")
+      }
+      setUploadedImages((prev) => [...prev, dataUrl])
+      setRawImageFiles((prev) => [...prev, rawFile])
+      setImageOssIds((prev) => [...prev, ossId])
+    } catch (err) {
+      const errMsg = err instanceof Error ? err.message : "附件上传失败"
+      error(`附件上传失败: ${errMsg}`)
+    }
   }
 
-  const handleFileUpload = (file: { name: string; size: number }, rawFile: File) => {
-    setUploadedFiles((prev) => [...prev, file])
-    setRawDocFiles((prev) => [...prev, rawFile])
+  const handleFileUpload = async (file: { name: string; size: number }, rawFile: File) => {
+    try {
+      const uploadRes = await uploadFileSingle(rawFile)
+      const ossId = extractOssIdFromUpload(uploadRes)
+      if (ossId == null) {
+        throw new Error("上传成功但未返回 ossId")
+      }
+      setUploadedFiles((prev) => [...prev, file])
+      setRawDocFiles((prev) => [...prev, rawFile])
+      setDocOssIds((prev) => [...prev, ossId])
+    } catch (err) {
+      const errMsg = err instanceof Error ? err.message : "附件上传失败"
+      error(`附件上传失败: ${errMsg}`)
+    }
   }
 
   const handleRemoveImage = (idx: number) => {
     setUploadedImages((prev) => prev.filter((_, i) => i !== idx))
     setRawImageFiles((prev) => prev.filter((_, i) => i !== idx))
+    setImageOssIds((prev) => prev.filter((_, i) => i !== idx))
   }
 
   const handleRemoveFile = (idx: number) => {
     setUploadedFiles((prev) => prev.filter((_, i) => i !== idx))
     setRawDocFiles((prev) => prev.filter((_, i) => i !== idx))
+    setDocOssIds((prev) => prev.filter((_, i) => i !== idx))
   }
 
   const handleVoiceToggle = () => {
@@ -1643,6 +1660,7 @@ export default function Page() {
           <InputArea
             uploadedImages={uploadedImages}
             uploadedFiles={uploadedFiles}
+            rawDocFiles={rawDocFiles}
             onSendMessage={handleSendMessage}
             onImageUpload={handleImageUpload}
             onFileUpload={handleFileUpload}
