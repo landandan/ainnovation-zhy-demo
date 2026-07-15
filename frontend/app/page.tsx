@@ -321,6 +321,10 @@ export default function Page() {
   const [agentDefs, setAgentDefs] = useState<AgentDef[]>([])
   const [conversations, setConversations] = useState<ConversationApi[]>([])
   const [loadingData, setLoadingData] = useState(true)
+  const [conversationsPage, setConversationsPage] = useState(1)
+  const [conversationsHasMore, setConversationsHasMore] = useState(false)
+  const [loadingMoreConversations, setLoadingMoreConversations] = useState(false)
+  const CONVERSATIONS_PAGE_SIZE = 10
 
   /** agent_id 字符串 → 数据库 id 映射 */
   const agentIdToDbId = useRef<Map<string, number>>(new Map())
@@ -349,6 +353,19 @@ export default function Page() {
   const currentTaskIdRef = useRef<string | null>(null)
   /** 当前任务是否为 Workflow 类型（由 SSE 事件判定），用于选择正确的停止端点 */
   const isWorkflowTaskRef = useRef<boolean>(false)
+  /**
+   * 暂停时传给 /h5/chat/stop：
+   * answer ← 页面已拼接的完整答案
+   * localMessageId ← 外层 localMessageId
+   * messageId ← 内层 message_id
+   * sessionId ← 内层 conversation_id
+   */
+  const stopStreamPayloadRef = useRef<{
+    answer: string
+    localMessageId: string
+    messageId: string
+    sessionId: string
+  } | null>(null)
   /** 保存当前请求的上下文，用于重试 */
   const lastRequestRef = useRef<{
     userText: string
@@ -380,7 +397,7 @@ export default function Page() {
         // 并行加载 agents 和 conversations
         const [agentsRes, convsRes] = await Promise.all([
           getAgents(),
-          getConversations(),
+          getConversations({ pageNum: 1, pageSize: CONVERSATIONS_PAGE_SIZE }),
         ])
         //const convsRes = cRes.data
         console.log('agentsRes123:', agentsRes)
@@ -402,9 +419,15 @@ export default function Page() {
           }
         }
 
-        if (convsRes?.data?.rows?.length > 0) {
-          setConversations(convsRes?.data?.rows)
-        }
+        const rows = convsRes?.data?.rows ?? []
+        setConversations(rows)
+        setConversationsPage(1)
+        const total = convsRes?.data?.total
+        setConversationsHasMore(
+          typeof total === "number"
+            ? rows.length < total
+            : rows.length >= CONVERSATIONS_PAGE_SIZE,
+        )
       } catch (err) {
         console.error("加载数据失败:", err)
       } finally {
@@ -518,15 +541,53 @@ export default function Page() {
 
   const refreshConversations = useCallback(async () => {
     try {
-      const convsRes = await getConversations()
-      if (convsRes?.data?.rows?.length > 0) {
-        setConversations(convsRes?.data?.rows)
-      }
+      const convsRes = await getConversations({ pageNum: 1, pageSize: CONVERSATIONS_PAGE_SIZE })
+      const rows = convsRes?.data?.rows ?? []
+      setConversations(rows)
+      setConversationsPage(1)
+      const total = convsRes?.data?.total
+      setConversationsHasMore(
+        typeof total === "number"
+          ? rows.length < total
+          : rows.length >= CONVERSATIONS_PAGE_SIZE,
+      )
       console.log('convsRes123:', convsRes)
     } catch (err) {
       console.error("刷新会话列表失败:", err)
     }
   }, [])
+
+  const handleLoadMoreConversations = useCallback(async () => {
+    if (loadingMoreConversations || !conversationsHasMore) return
+    setLoadingMoreConversations(true)
+    try {
+      const nextPage = conversationsPage + 1
+      const convsRes = await getConversations({
+        pageNum: nextPage,
+        pageSize: CONVERSATIONS_PAGE_SIZE,
+      })
+      const rows = convsRes?.data?.rows ?? []
+      let mergedLength = 0
+      setConversations((prev) => {
+        const seen = new Set(prev.map((c) => c.sessionId || String(c.messageId)))
+        const appended = rows.filter((r) => !seen.has(r.sessionId || String(r.messageId)))
+        const next = [...prev, ...appended]
+        mergedLength = next.length
+        return next
+      })
+      setConversationsPage(nextPage)
+      const total = convsRes?.data?.total
+      setConversationsHasMore(
+        typeof total === "number"
+          ? mergedLength < total
+          : rows.length >= CONVERSATIONS_PAGE_SIZE,
+      )
+    } catch (err) {
+      console.error("加载更多会话失败:", err)
+    } finally {
+      setLoadingMoreConversations(false)
+    }
+  }, [conversationsHasMore, conversationsPage, loadingMoreConversations])
 
   const handleNewChat = () => {
     setMessages([])
@@ -677,16 +738,44 @@ export default function Page() {
       // 重置当前 task_id 和 workflow 标志（新一轮请求）
       currentTaskIdRef.current = null
       isWorkflowTaskRef.current = false
+      stopStreamPayloadRef.current = null
 
       const messageIndex = allMessages.length - 1
+
+      const syncStopPayload = (outJson: Record<string, unknown>, event: Record<string, unknown>) => {
+        const prev = stopStreamPayloadRef.current
+        const localMessageId =
+          (typeof outJson.localMessageId === "string" && outJson.localMessageId.trim()) ||
+          prev?.localMessageId ||
+          ""
+        const messageId =
+          (typeof event.message_id === "string" && event.message_id.trim()) ||
+          prev?.messageId ||
+          ""
+        const conversationId =
+          (typeof event.conversation_id === "string" && event.conversation_id.trim()) ||
+          prev?.sessionId ||
+          ""
+        // answer 用页面已拼接内容（优先完整原文，其次展示用主文）
+        const answer = rawAssistantContent || fullAnswer || prev?.answer || ""
+        if (!answer && !localMessageId && !messageId && !conversationId) return
+        stopStreamPayloadRef.current = {
+          answer,
+          localMessageId,
+          messageId,
+          sessionId: conversationId,
+        }
+      }
 
       while (true) {
         const { done, value } = await reader.read()
         if (done) break
 
         buffer += decoder.decode(value, { stream: true })
+        console.log('buffer123:', buffer)
         //console.log('buffer123:', buffer)
         const lines = buffer.split("\n")
+        console.log('lines123:', lines)
         buffer = lines.pop() || ""
 
         let chunkHasUpdates = false
@@ -785,6 +874,7 @@ export default function Page() {
                     ? parsedContent.mainText.length > 0
                     : true
                   chunkHasUpdates = true
+                  syncStopPayload(outJson as Record<string, unknown>, event as Record<string, unknown>)
                 }
                 if (event.task_id && !currentTaskIdRef.current) {
                   currentTaskIdRef.current = event.task_id
@@ -950,19 +1040,35 @@ export default function Page() {
 
   /* ───── 停止流式生成 ───── */
   const handleStopStreaming = useCallback(() => {
-    // 1. 先中止前端流读取
+    // 先取暂停快照（页面已拼接答案 + ids），再中止流
+    const payload = stopStreamPayloadRef.current
+    const pageAnswer =
+      payload?.answer ||
+      [...messages].reverse().find((m) => m.role === "ai")?.text ||
+      ""
+
     if (abortControllerRef.current) {
       abortControllerRef.current.abort()
       abortControllerRef.current = null
     }
-    // 2. 通知 Dify 服务端停止任务（best-effort，不阻塞 UI）
+
     const taskId = currentTaskIdRef.current
     const agentId = currentAgentId
     const isWorkflow = isWorkflowTaskRef.current
-    if (taskId && agentId && user?.id) {
+    if (agentId && user?.id && (payload || taskId || pageAnswer)) {
       currentTaskIdRef.current = null
       isWorkflowTaskRef.current = false
-      stopDifyTask({ agentId, taskId, userId: user.id, isWorkflow })
+      stopStreamPayloadRef.current = null
+      stopDifyTask({
+        agentId,
+        taskId: taskId || undefined,
+        userId: user.id,
+        isWorkflow,
+        answer: pageAnswer,
+        localMessageId: payload?.localMessageId ?? "",
+        messageId: payload?.messageId ?? "",
+        sessionId: payload?.sessionId ?? "",
+      })
     }
     setMessages((prev) =>
       prev.map((m) =>
@@ -980,8 +1086,7 @@ export default function Page() {
       ),
     )
     setIsStreaming(false)
-    // 静默处理，不显示提示
-  }, [currentAgentId, user])
+  }, [currentAgentId, messages, user])
 
   /* ───── 重试工作流请求 ───── */
   const handleRetryWorkflow = async () => {
@@ -1371,6 +1476,9 @@ export default function Page() {
           collapsed={sidebarCollapsed && !sidebarHovered}
           onToggleCollapse={() => setSidebarCollapsed(!sidebarCollapsed)}
           searchQuery={historySearch}
+          hasMoreHistory={conversationsHasMore}
+          loadingMoreHistory={loadingMoreConversations}
+          onLoadMoreHistory={handleLoadMoreConversations}
         />
       </div>
 

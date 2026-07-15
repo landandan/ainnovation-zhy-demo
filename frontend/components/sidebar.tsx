@@ -48,6 +48,10 @@ interface SidebarProps {
   /** 切换折叠状态 */
   onToggleCollapse?: () => void
   searchQuery?: string
+  /** 历史会话是否还有下一页 */
+  hasMoreHistory?: boolean
+  loadingMoreHistory?: boolean
+  onLoadMoreHistory?: () => void | Promise<void>
 }
 
 export function Sidebar({
@@ -70,6 +74,9 @@ export function Sidebar({
   collapsed = false,
   onToggleCollapse,
   searchQuery = "",
+  hasMoreHistory = false,
+  loadingMoreHistory = false,
+  onLoadMoreHistory,
 }: SidebarProps) {
   const displayName = user?.display_name || user?.username || "用户"
   const userInitial = displayName.charAt(0).toUpperCase()
@@ -516,6 +523,24 @@ export function Sidebar({
                     </div>
                   )
                 })}
+                {hasMoreHistory && onLoadMoreHistory && (
+                  <button
+                    type="button"
+                    className="sidebar-load-more w-full mt-2 py-2.5 rounded-lg text-[12px] transition-colors disabled:opacity-50"
+                    style={{
+                      color: "var(--text-muted)",
+                      background: "transparent",
+                      border: "1px dashed var(--border)",
+                    }}
+                    disabled={loadingMoreHistory}
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      onLoadMoreHistory()
+                    }}
+                  >
+                    {loadingMoreHistory ? "加载中..." : "加载更多"}
+                  </button>
+                )}
               </div>
             )}
             {bulkMode && (
@@ -596,7 +621,7 @@ export function Sidebar({
                 </div>
               </div>
               <div className="flex items-center gap-1">
-                <button
+                {/* <button
                   onClick={onOpenSettings}
                   className="flex h-[36px] w-[36px] items-center justify-center rounded-xl transition-all flex-shrink-0 cursor-pointer"
                   style={{ color: "var(--text-muted)" }}
@@ -607,7 +632,7 @@ export function Sidebar({
                     <circle cx="12" cy="12" r="3" />
                     <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
                   </svg>
-                </button>
+                </button> */}
                 <button
                   onClick={handleLogout}
                   className="flex h-[36px] w-[36px] items-center justify-center rounded-xl transition-all flex-shrink-0 cursor-pointer"
