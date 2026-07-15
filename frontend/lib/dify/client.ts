@@ -358,15 +358,31 @@ export async function uploadFilesToDify(
  */
 export async function stopDifyTask(params: {
   agentId: string
-  taskId: string
+  taskId?: string
   userId?: number
   user?: string
   isWorkflow?: boolean
+  /** 流中最后一条带 answer 的分片字段 */
+  answer?: string
+  localMessageId?: string
+  messageId?: string
+  sessionId?: string
 }): Promise<void> {
-  const { agentId, taskId, userId, user = "anonymous", isWorkflow = false } = params
+  const {
+    agentId,
+    taskId,
+    userId,
+    user = "anonymous",
+    isWorkflow = false,
+    answer,
+    localMessageId,
+    messageId,
+    sessionId,
+  } = params
 
   try {
     if (isMockMode()) {
+      if (!taskId) return
       const { dify_base_url, dify_api_key } = getMockDifyApiConfigForAgent(agentId)
       const stopPath = isWorkflow
         ? `/workflows/run/${taskId}/stop`
@@ -395,8 +411,12 @@ export async function stopDifyTask(params: {
       },
       body: JSON.stringify({
         agentId,
-        taskId,
+        ...(taskId ? { taskId } : {}),
         userId,
+        answer: answer ?? "",
+        localMessageId: localMessageId ?? "",
+        messageId: messageId ?? "",
+        sessionId: sessionId ?? "",
       }),
     })
   } catch (err) {

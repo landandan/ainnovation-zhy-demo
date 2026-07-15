@@ -418,6 +418,17 @@
   --sidebar-border: #1E2D3F;
   --sidebar-ring: #38BDF8;
 
+  /* 新建会话 / 提问框（仅深海） */
+  --sidebar-new-chat-bg: #43454a;
+  --sidebar-new-chat-border: transparent;
+  --input-box-bg: #2c2c2e;
+  --input-box-border: transparent;
+  --input-box-border-focus: transparent;
+
+  /* 空会话引导文案（仅深海，避免继承默认深色字） */
+  --chat-empty-title-color: #F0F4F7;
+  --chat-empty-subtitle-color: #94A3B8;
+
   /* 图表色 */
   --chart-1: #38BDF8;
   --chart-2: #34D399;

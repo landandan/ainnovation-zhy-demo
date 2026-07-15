@@ -199,11 +199,15 @@ export interface ConversationApi {
 // }
 
 export interface ConversationsListResponse {
-  conversations: ConversationApi[]
-  total: number
-  page: number
-  per_page: number
-  pages: number
+  data?: {
+    rows?: ConversationApi[]
+    total?: number
+  }
+  conversations?: ConversationApi[]
+  total?: number
+  page?: number
+  per_page?: number
+  pages?: number
 }
 
 export interface MessageApi {
@@ -241,6 +245,8 @@ export interface MessagesListResponse {
 
 export async function getConversations(params?: {
   agent_id?: number
+  pageNum?: number
+  pageSize?: number
   page?: number
   per_page?: number
 }): Promise<ConversationsListResponse> {
@@ -248,13 +254,12 @@ export async function getConversations(params?: {
   //   await mockDelay()
   //   return getMockConversations(params)
   // }
-  // const qs = new URLSearchParams()
-  // if (params?.agent_id) qs.set("agent_id", String(params.agent_id))
-  // if (params?.page) qs.set("page", String(params.page))
-  // if (params?.per_page) qs.set("per_page", String(params.per_page))
-  // const query = qs.toString()
-  return request<ConversationsListResponse>("POST", `/h5/chat/messages/page?pageNum=1&pageSize=10`)
-  // return request<ConversationsListResponse>("GET", `/conversations${query ? `?${query}` : ""}`)
+  const pageNum = params?.pageNum ?? params?.page ?? 1
+  const pageSize = params?.pageSize ?? params?.per_page ?? 10
+  return request<ConversationsListResponse>(
+    "POST",
+    `/h5/chat/messages/page?pageNum=${pageNum}&pageSize=${pageSize}`,
+  )
 }
 
 export async function createConversation(data: {
@@ -305,6 +310,9 @@ export async function submitMessageFeedback(data: {
   messageId: string
   userId: number
   rating?: "like" | "dislike" | null
+  /** 选中的理由标签，逗号拼接，如 "回答不准确,完成任务能力强" */
+  tags?: string
+  /** 用户自由输入的反馈文案 */
   content?: string
 }): Promise<{ code?: number; msg?: string }> {
   if (isMockMode()) {
