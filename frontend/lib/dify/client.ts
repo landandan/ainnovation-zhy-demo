@@ -5,7 +5,7 @@
  * Mock 模式下直连 Dify 标准 API（不依赖后端），API Key 从 localStorage 读取。
  */
 
-import { getToken } from "../auth/token"
+import { getToken, getClientId } from "../auth/token"
 import {
   API_BASE_URL,
   DIFY_FILE_UPLOAD_BASE_URL,
@@ -211,19 +211,25 @@ export async function callDifyChatStream(params: {
     throw new Error("未登录，无法调用 AI")
   }
 
+  const clientid = getClientId() || ""
+  const headers: Record<string, string> = {
+    "Content-Type": "application/json;charset=UTF-8",
+    Authorization: `Bearer ${token}`,
+    "Cache-Control": "no-cache",
+    Connection: "keep-alive",
+    Accept: "text/event-stream",
+  }
+  if (clientid) {
+    headers.clientid = clientid
+  }
+  console.log("chat/stream headers:", headers)
+
   // /manage/dify/chat/streaming    /h5/chat/stream
   const response = await fetch(`${API_BASE_URL}/h5/chat/stream`, {
     method: "POST",
-    headers: {
-      "Content-Type": "application/json;charset=UTF-8",
-      Authorization: `Bearer ${token}`,
-      "Cache-Control": "no-cache",
-      "Connection": "keep-alive",
-      'Accept': 'text/event-stream',
-      // "transfer-encoding": "chunked", 
-    },
+    headers,
     body: JSON.stringify(body),
-    // cache: 'no-store', // 关键：禁止 Next.js 缓存该请求
+    // cache: 'no-store', // 注意：禁止 Next.js 缓存该请求
     signal,
   })
 //   {
@@ -403,11 +409,13 @@ export async function stopDifyTask(params: {
     const token = getToken()
     if (!token) return
 
+    const clientid = getClientId() || "0d4c873ff6146ecd7f38e2e45526ab1b"
     await fetch(`${API_BASE_URL}/h5/chat/stop`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
         Authorization: `Bearer ${token}`,
+        clientid,
       },
       body: JSON.stringify({
         agentId,

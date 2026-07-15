@@ -62,12 +62,13 @@ export interface UserInfo {
 
 export interface LoginData {
   token?: string
-  // user: UserInfo
-  access_token: string
-  client_id: string
+  access_token?: string
+  client_id?: string
   user: UserInfo
 }
 export interface LoginResponse {
+  code?: number | string
+  msg?: string
   data: LoginData
 }
 export interface logoutData {
@@ -115,7 +116,13 @@ export async function getMe(): Promise<{ user: UserInfo }> {
     await mockDelay()
     return { user: getMockUser() }
   }
-  return request<{ user: UserInfo }>("GET", "/auth/me")
+  const res = await request<any>("GET", "/auth/me")
+  // 兼容多种后端返回结构
+  const user = res?.user ?? res?.data?.user ?? res?.data
+  if (!user || typeof user !== "object") {
+    throw new Error("无法解析当前用户信息")
+  }
+  return { user: user as UserInfo }
 }
 
 /* ───── Agents API ───── */

@@ -54,6 +54,8 @@ export interface MessageFileAttachment {
 export interface ResourceItem {
   document_name: string
   content: string
+  segment_id?: string
+  document_id?: string
 }
 
 export interface Message {
@@ -222,12 +224,31 @@ function extractThinkingFromContent(content: string): {
   }
 }
 
+function dedupeResourcesBySegmentId(resources: ResourceItem[]): ResourceItem[] {
+  if (!Array.isArray(resources) || resources.length === 0) return []
+  const seen = new Set<string>()
+  const result: ResourceItem[] = []
+  for (const item of resources) {
+    const key =
+      typeof item?.segment_id === "string" && item.segment_id.trim()
+        ? item.segment_id.trim()
+        : ""
+    // 无 segment_id 时保留（用下标兜底，避免误删）
+    const dedupeKey = key || `__idx_${result.length}`
+    if (seen.has(dedupeKey)) continue
+    seen.add(dedupeKey)
+    result.push(item)
+  }
+  return result
+}
+
 function normalizeResources(rawResources: string): ResourceItem[] {
   console.log('rawResources123:', rawResources)
   if (!rawResources || !rawResources.startsWith("data: ")) return []
   try {
     const event = JSON.parse(rawResources.slice(6).trim())
-    return event?.metadata?.retriever_resources || []
+    const resources = event?.metadata?.retriever_resources || []
+    return dedupeResourcesBySegmentId(resources)
   } catch (e) {
     return []
   }
@@ -931,7 +952,9 @@ export default function Page() {
                   currentTaskIdRef.current = event.task_id
                 }
                 chunkHasUpdates = true
-                resourcesList = event.metadata.retriever_resources || []
+                resourcesList = dedupeResourcesBySegmentId(
+                  event.metadata.retriever_resources || [],
+                )
                 break
 
               case "error":
