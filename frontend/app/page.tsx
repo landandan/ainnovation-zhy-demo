@@ -789,9 +789,31 @@ export default function Page() {
           console.log('outJson123:', outJson)
           if (outJson.code !== 200) {
             fullAnswer = `哎呀，服务暂时开小差了 😅，请稍后重试。`
-            outJson.message = `data: ${JSON.stringify({
-              event: 'workflow_started',
-            })}`
+            // 业务失败：立即结束流式态，隐藏「停止生成」按钮
+            setIsStreaming(false)
+            currentTaskIdRef.current = null
+            isWorkflowTaskRef.current = false
+            stopStreamPayloadRef.current = null
+            setMessages((prev) => {
+              const updated = [...prev]
+              if (messageIndex >= 0 && updated[messageIndex]) {
+                updated[messageIndex] = {
+                  ...updated[messageIndex],
+                  text: fullAnswer,
+                  waiting: false,
+                  loading: false,
+                  time: aiTime,
+                }
+              }
+              return updated
+            })
+            try {
+              await reader.cancel()
+            } catch {
+              /* ignore */
+            }
+            isError = true
+            break
           }
           // if (!trimmed.startsWith("data:{code=200, message=data: ")) continue
           // console.log('trimmed123:', line)
@@ -921,6 +943,8 @@ export default function Page() {
             throw parseError
           }
         }
+
+        if (isError) break
 
         if (chunkHasUpdates) {
           setMessages((prev) => {
