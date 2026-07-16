@@ -32,6 +32,8 @@ import {
   mockDelay,
 } from "../mock/config"
 import { ApiError, request } from "../http/client"
+import { getToken, getClientId } from "../auth/token"
+import { API_BASE_URL } from "../http/routes"
 
 export { ApiError } from "../http/client"
 export { getToken, setToken, removeToken, isAuthenticated } from "../auth/token"
@@ -62,12 +64,13 @@ export interface UserInfo {
 
 export interface LoginData {
   token?: string
-  // user: UserInfo
-  access_token: string
-  client_id: string
+  access_token?: string
+  client_id?: string
   user: UserInfo
 }
 export interface LoginResponse {
+  code?: number | string
+  msg?: string
   data: LoginData
 }
 export interface logoutData {
@@ -115,7 +118,13 @@ export async function getMe(): Promise<{ user: UserInfo }> {
     await mockDelay()
     return { user: getMockUser() }
   }
-  return request<{ user: UserInfo }>("GET", "/auth/me")
+  const res = await request<any>("GET", "/auth/me")
+  // 兼容多种后端返回结构
+  const user = res?.user ?? res?.data?.user ?? res?.data
+  if (!user || typeof user !== "object") {
+    throw new Error("无法解析当前用户信息")
+  }
+  return { user: user as UserInfo }
 }
 
 /* ───── Agents API ───── */
@@ -210,14 +219,22 @@ export interface ConversationsListResponse {
   pages?: number
 }
 
+export interface InputFileItem {
+  fileName?: string
+  fileUrl?: string
+  fileType?: string
+  ossId?: string | number
+  size?: number
+}
+
 export interface MessageApi {
   messageId: string
   role: "user" | "assistant" | "system"
   messageType: string
   query: string
-  inputFileList: unknown[]
+  inputFileList?: InputFileItem[]
   answer: string
-  outputFileList: unknown[]
+  outputFileList?: InputFileItem[]
   queryTokens: number
   answerTokens: number
   totalTokens: number
@@ -225,15 +242,6 @@ export interface MessageApi {
   createTime: string
   retrieverResources: string
   rating?: "like" | "dislike" | null | string
-  // id: number
-  // conversation_id: number
-  // role: "user" | "assistant" | "system"
-  // content: string
-  // attachments: unknown[]
-  // metadata: Record<string, unknown>
-  // dify_message_id: string
-  // is_error: boolean
-  // created_at: string
 }
 
 export interface MessagesListResponse {
@@ -303,6 +311,67 @@ export async function deleteConversationApi(sessionId: string): Promise<{ messag
     return deleteMockConversationBySessionId(sessionId)
   }
   return request<{ message: string }>("POST", `/h5/chat/messages/del?sessionId=${encodeURIComponent(sessionId)}`)
+}
+
+/** 从单文件上传响应中提取 ossId */
+export function extractOssIdFromUpload(res: unknown): string | number | null {
+  if (!res || typeof res !== "object") return null
+  const obj = res as Record<string, any>
+  const raw = obj?.data?.ossId ?? obj?.ossId ?? obj?.data?.data?.ossId
+  if (raw == null || raw === "") return null
+  if (typeof raw === "number") return raw
+  const asNum = Number(raw)
+  if (typeof raw === "string" && Number.isFinite(asNum) && String(asNum) === raw.trim()) {
+    return asNum
+  }
+  return raw as string | number
+}
+
+/** 单文件上传：POST /h5/file/upload/single，form field = files */
+export async function uploadFileSingle(file: File): Promise<any> {
+  const token = getToken()
+  if (!token) {
+    throw new Error("未登录，无法上传文件")
+  }
+
+  const formData = new FormData()
+  formData.append("file", file)
+
+  const headers: Record<string, string> = {
+    Authorization: `Bearer ${token}`,
+    clientid: getClientId() || "0d4c873ff6146ecd7f38e2e45526ab1b",
+  }
+
+  const controller = new AbortController()
+  const timeoutId = setTimeout(() => controller.abort(), 60000)
+
+  let res: Response
+  try {
+    res = await fetch(`${API_BASE_URL}/h5/file/upload/single`, {
+      method: "POST",
+      headers,
+      body: formData,
+      signal: controller.signal,
+    })
+  } catch (err: unknown) {
+    clearTimeout(timeoutId)
+    if (err instanceof DOMException && err.name === "AbortError") {
+      throw new Error("上传超时，请稍后重试")
+    }
+    throw new Error(err instanceof Error ? err.message : "上传失败")
+  }
+  clearTimeout(timeoutId)
+
+  if (!res.ok) {
+    const errText = await res.text().catch(() => res.statusText)
+    throw new Error(`上传失败 (${res.status}): ${errText}`)
+  }
+
+  const contentType = res.headers.get("content-type") || ""
+  if (contentType.includes("application/json")) {
+    return res.json()
+  }
+  return res.text()
 }
 
 export async function submitMessageFeedback(data: {

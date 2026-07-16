@@ -1,5 +1,7 @@
-import { getToken, removeToken } from "@/lib/auth/token"
+import { getToken, getClientId, removeToken } from "@/lib/auth/token"
 import { API_BASE_URL } from "./routes"
+
+const DEFAULT_CLIENT_ID = "0d4c873ff6146ecd7f38e2e45526ab1b"
 
 export class ApiError extends Error {
   constructor(
@@ -28,6 +30,9 @@ export async function request<T>(
   if (token) {
     headers.Authorization = `Bearer ${token}`
   }
+
+  // 网关鉴权所需 clientid（优先用登录返回的 client_id）
+  headers.clientid = getClientId() || DEFAULT_CLIENT_ID
 
   const controller = new AbortController()
   const timeoutId = setTimeout(() => controller.abort(), 15000)
@@ -68,4 +73,3 @@ export async function request<T>(
 
   return res.json() as Promise<T>
 }
-

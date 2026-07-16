@@ -5,7 +5,6 @@ import {
   logout as apiLogout,
   register as apiRegister,
   getMe,
-  getToken,
   setToken,
   removeToken,
   isAuthenticated as checkAuth,
@@ -13,7 +12,9 @@ import {
   type RegisterRequest,
   type UserInfo,
 } from "../api-client"
-import { isMockMode, getMockToken, getMockUser, clearMockData, disableMockMode, enableMockMode } from "../mock/config"
+import { getCachedUser, setCachedUser, setClientId } from "./token"
+import { isMockMode, getMockToken, getMockUser, clearMockData, disableMockMode } from "../mock/config"
+import { ApiError } from "../http/client"
 
 interface AuthContextType {
   user: UserInfo | null
@@ -27,12 +28,16 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | null>(null)
 
+function isLoginSuccess(code: unknown): boolean {
+  return code === undefined || code === null || code === 200 || code === "200"
+}
+
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<UserInfo | null>(null)
   const [loading, setLoading] = useState(false)
   const [initialized, setInitialized] = useState(false)
 
-  // 首次加载时验证 token
+  // 首次加载时恢复会话
   useEffect(() => {
     // Mock 模式：自动注入 mock 用户，跳过后端验证
     if (isMockMode()) {
@@ -42,54 +47,59 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       return
     }
 
-    if (checkAuth()) {
-      getMe()
-        .then((res) => setUser(res.user))
-        .catch(() => {
+    if (!checkAuth()) {
+      setInitialized(true)
+      return
+    }
+
+    const cached = getCachedUser<UserInfo>()
+    // 先恢复本地缓存，避免刷新闪退登录页
+    if (cached) {
+      setUser(cached)
+    }
+
+    getMe()
+      .then((res) => {
+        setUser(res.user)
+        setCachedUser(res.user)
+      })
+      .catch((err) => {
+        // 仅 token 明确失效时清登录态；网络/接口不存在时保留本地会话
+        const status = err instanceof ApiError ? err.status : 0
+        if (status === 401 || status === 403) {
           removeToken()
           setUser(null)
-        })
-        .finally(() => setInitialized(true))
-    } else {
-      setInitialized(true)
-    }
+        } else if (!cached) {
+          removeToken()
+          setUser(null)
+        }
+      })
+      .finally(() => setInitialized(true))
   }, [])
 
   const login = useCallback(async (data: LoginRequest): Promise<UserInfo> => {
     setLoading(true)
-    const mockRes = {
-      "access_token": "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJsb2dpblR5cGUiOiJsb2dpbiIsImxvZ2luSWQiOiJzeXNfdXNlcjoxIiwicm5TdHIiOiJMUFJ3bmhDSHV2QTJyS1ZJaDlIVDN0UFczZFBtMExHWCIsImNsaWVudGlkIjoiMGQ0Yzg3M2ZmNjE0NmVjZDdmMzhlMmU0NTUyNmFiMWIiLCJ0ZW5hbnRJZCI6IjAwMDAwMCIsInVzZXJJZCI6MSwidXNlck5hbWUiOiJhZG1pbiIsImRlcHRJZCI6MTAzLCJkZXB0TmFtZSI6IueglOWPkemDqOmXqCIsImRlcHRDYXRlZ29yeSI6IiJ9.xBCf7A8PtOB1QobpBrbZ3p0cgvD8-WG6oXeC4QoL0wI",
-      "expire_in": "604800",
-      "client_id": "0d4c873ff6146ecd7f38e2e45526ab1b",
-      "user": {
-          "id": "1",
-          "username": "admin",
-          "display_name": "admin",
-          "email": "ageerle@163.com",
-          "is_active": true,
-          "roles": [
-              "superadmin"
-          ],
-          "created_at": "2026-02-05 09:22:12"
-      }
-    }
     try {
       const res = await apiLogin(data)
-      console.log('res123:', res)
-      setToken(res?.data?.access_token)
-      //setUser(res.user)
-      setUser(res?.data?.user)
-      if (!res || res.code != '200') {
-        setToken(mockRes.access_token)
-        //setUser(res.user)
-        setUser(mockRes.user)
-        return mockRes.user
+      console.log("res123:", res)
+
+      const accessToken = res?.data?.access_token || res?.data?.token
+      const nextUser = res?.data?.user
+
+      if (accessToken && nextUser && isLoginSuccess(res?.code)) {
+        setToken(accessToken)
+        setCachedUser(nextUser)
+        if (res?.data?.client_id) {
+          setClientId(res.data.client_id)
+        }
+        setUser(nextUser)
+        if (!isMockMode()) {
+          clearMockData()
+        }
+        return nextUser
       }
-      // 正常登录（非 mock 模式）后清除 mock 残留数据
-      if (!isMockMode()) {
-        clearMockData()
-      }
-      return res?.data?.user
+
+      throw new Error((res as { msg?: string })?.msg || "登录失败，请检查账号密码")
     } finally {
       setLoading(false)
     }
@@ -100,8 +110,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     try {
       const res = await apiRegister(data)
       setToken(res.token)
+      setCachedUser(res.user)
       setUser(res.user)
-      // 正常注册（非 mock 模式）后清除 mock 残留数据
       if (!isMockMode()) {
         clearMockData()
       }
@@ -112,33 +122,29 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [])
 
   const logout = useCallback(async () => {
-    // 记录是否为 mock 模式（在清除前判断），用于决定跳转目标
     const wasMockMode = isMockMode()
+    // 先调退出接口（此时 header 仍带 Authorization + clientid），再清本地登录态
+    try {
+      const res = await apiLogout()
+      console.log("logout123:", res)
+    } catch (err) {
+      console.warn("退出登录接口失败:", err)
+    }
     removeToken()
     setUser(null)
-    // 关闭 mock 模式标志，避免页面刷新后 AuthProvider 自动重新注入 mock 用户
     if (wasMockMode) {
       disableMockMode()
     }
-    const res = await apiLogout()
-    console.log('logout123:', res)
-    if (res?.data?.code == '200') {
-      // 退出后跳转登录页，mock 模式携带 ?mock=true 以便登录页重新开启 mock 模式
-      const target = wasMockMode ? "/login?mock=true" : "/login"
-      window.location.href = target
-    }
+    const target = wasMockMode ? "/login?mock=true" : "/login"
+    window.location.href = target
   }, [])
 
   const enableMockLogin = useCallback(async () => {
-      await login({
-        username: 'admin',
-        password: 'admin123',
-      })
-    // enableMockMode()
-    // setToken(getMockToken())
-    // setUser(getMockUser())
-    // setInitialized(true)
-  }, [])
+    await login({
+      username: "admin",
+      password: "admin123",
+    })
+  }, [login])
 
   return (
     <AuthContext.Provider value={{ user, loading, initialized, login, register, logout, enableMockLogin }}>

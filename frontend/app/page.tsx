@@ -18,6 +18,8 @@ import {
   deleteConversationApi,
   getMessages,
   addMessage,
+  uploadFileSingle,
+  extractOssIdFromUpload,
   type AgentDefApi,
   type ConversationApi,
   type MessageApi,
@@ -26,7 +28,6 @@ import { loadTheme, saveTheme } from "@/lib/settings-store"
 import {
   callDifyChatStream,
   getAgentInputs,
-  uploadFilesToDify,
   stopDifyTask,
 } from '@/lib/dify-api'
 import {
@@ -54,11 +55,15 @@ export interface MessageFileAttachment {
 export interface ResourceItem {
   document_name: string
   content: string
+  segment_id?: string
+  document_id?: string
 }
 
 export interface Message {
   role: "user" | "ai"
   text: string
+  /** 原始用户提问（历史消息回填） */
+  query?: string
   images?: string[]
   files?: MessageFileAttachment[]
   workflowProgress?: WorkflowProgress
@@ -148,16 +153,29 @@ function normalizeMessageAttachments(rawAttachments: unknown[]): MessageFileAtta
     const record = item as Record<string, unknown>
     const originalUrl = typeof record.original_url === "string"
       ? record.original_url.trim()
-      : typeof record.url === "string"
-        ? record.url.trim()
-        : ""
+      : typeof record.fileUrl === "string"
+        ? record.fileUrl.trim()
+        : typeof record.url === "string"
+          ? record.url.trim()
+          : ""
     const fileId = typeof record.file_id === "string"
       ? record.file_id.trim()
-      : typeof record.id === "string"
-        ? record.id.trim()
+      : typeof record.ossId === "string" || typeof record.ossId === "number"
+        ? String(record.ossId)
+        : typeof record.id === "string"
+          ? record.id.trim()
+          : ""
+    const rawName = typeof record.name === "string"
+      ? record.name.trim()
+      : typeof record.fileName === "string"
+        ? record.fileName.trim()
         : ""
-    const rawName = typeof record.name === "string" ? record.name.trim() : ""
     const name = rawName || (originalUrl ? fileNameFromUrl(originalUrl) : fileId || "附件")
+    const fileType = typeof record.fileType === "string"
+      ? record.fileType
+      : typeof record.type === "string"
+        ? record.type
+        : undefined
 
     return [{
       name,
@@ -165,9 +183,50 @@ function normalizeMessageAttachments(rawAttachments: unknown[]): MessageFileAtta
       original_url: originalUrl || undefined,
       file_id: fileId || undefined,
       mime_type: typeof record.mime_type === "string" ? record.mime_type : undefined,
-      type: typeof record.type === "string" ? record.type : undefined,
+      type: fileType,
     }]
   })
+}
+
+/** 从历史消息 inputFileList 拆出图片 URL 与文档附件 */
+function splitInputFileList(rawList: unknown[] | undefined): {
+  images: string[]
+  files: MessageFileAttachment[]
+} {
+  if (!Array.isArray(rawList) || rawList.length === 0) {
+    return { images: [], files: [] }
+  }
+
+  const images: string[] = []
+  const docs: unknown[] = []
+
+  for (const item of rawList) {
+    if (!item || typeof item !== "object") continue
+    const record = item as Record<string, unknown>
+    const fileType = String(record.fileType || record.type || "").toLowerCase()
+    const url =
+      (typeof record.fileUrl === "string" && record.fileUrl.trim()) ||
+      (typeof record.original_url === "string" && record.original_url.trim()) ||
+      (typeof record.url === "string" && record.url.trim()) ||
+      ""
+
+    const isImage =
+      fileType === "image" ||
+      fileType.startsWith("image/") ||
+      /\.(png|jpe?g|gif|webp|bmp|svg)(\?|$)/i.test(url) ||
+      /\.(png|jpe?g|gif|webp|bmp|svg)(\?|$)/i.test(String(record.fileName || record.name || ""))
+
+    if (isImage && url) {
+      images.push(url)
+    } else {
+      docs.push(item)
+    }
+  }
+
+  return {
+    images,
+    files: normalizeMessageAttachments(docs),
+  }
 }
 
 function convertToMarkdown(text: string) {
@@ -222,12 +281,94 @@ function extractThinkingFromContent(content: string): {
   }
 }
 
+function dedupeResourcesBySegmentId(resources: ResourceItem[]): ResourceItem[] {
+  if (!Array.isArray(resources) || resources.length === 0) return []
+  const seen = new Set<string>()
+  const result: ResourceItem[] = []
+  for (const item of resources) {
+    const key =
+      typeof item?.segment_id === "string" && item.segment_id.trim()
+        ? item.segment_id.trim()
+        : ""
+    // 无 segment_id 时保留（用下标兜底，避免误删）
+    const dedupeKey = key || `__idx_${result.length}`
+    if (seen.has(dedupeKey)) continue
+    seen.add(dedupeKey)
+    result.push(item)
+  }
+  return result
+}
+
+/**
+ * 将 node_finished.inputs.#context# 按 `\nsource:` 分割为引用来源列表
+ */
+function parseContextToResources(context: string): ResourceItem[] {
+  if (!context || typeof context !== "string" || !context.trim()) return []
+
+  const segments = context.split(/\nsource:\s*/).map((s) => s.trim()).filter(Boolean)
+  const resources: ResourceItem[] = []
+
+  for (const segment of segments) {
+    // 首段可能只是孤立的 ---
+    if (/^---+\s*$/.test(segment)) continue
+
+    const headerEnd = segment.indexOf("\n---\n")
+    let documentName = "引用来源"
+    let content = segment
+
+    if (headerEnd >= 0) {
+      const header = segment.slice(0, headerEnd).trim()
+      const firstLine = header.split("\n")[0]?.replace(/^---+\s*/, "").trim()
+      if (firstLine) documentName = firstLine
+      content = segment.slice(headerEnd + "\n---\n".length).trim()
+    } else {
+      const firstLine = segment.split("\n")[0]?.replace(/^---+\s*/, "").trim()
+      if (firstLine) {
+        documentName = firstLine
+        content = segment.slice(firstLine.length).replace(/^\n+/, "").trim()
+      }
+    }
+
+    if (!content && documentName === "引用来源") continue
+    resources.push({
+      document_name: documentName,
+      content: content || segment,
+    })
+  }
+
+  return resources
+}
+
+function extractContextFromNodeFinished(event: any): string {
+  const inputs = event?.data?.inputs
+  if (!inputs || typeof inputs !== "object") return ""
+  const context = inputs["#context#"] ?? inputs.context
+  return typeof context === "string" ? context : ""
+}
+
 function normalizeResources(rawResources: string): ResourceItem[] {
   console.log('rawResources123:', rawResources)
-  if (!rawResources || !rawResources.startsWith("data: ")) return []
+  if (!rawResources) return []
+
+  // 兼容：直接是 context 原文
+  if (!rawResources.startsWith("data: ") && rawResources.includes("\nsource:")) {
+    return parseContextToResources(rawResources)
+  }
+
+  if (!rawResources.startsWith("data: ")) return []
   try {
     const event = JSON.parse(rawResources.slice(6).trim())
-    return event?.metadata?.retriever_resources || []
+    // 优先 message_end 的 retriever_resources
+    const fromMeta = event?.metadata?.retriever_resources
+    if (Array.isArray(fromMeta) && fromMeta.length > 0) {
+      return dedupeResourcesBySegmentId(fromMeta)
+    }
+    // 否则回退 node_finished 的 context
+    const context = extractContextFromNodeFinished(event)
+    if (context) {
+      return parseContextToResources(context)
+    }
+    return []
   } catch (e) {
     return []
   }
@@ -243,15 +384,18 @@ function mapMessage(m: MessageApi): Message[] {
   const result: Message[] = []
   const baseTime = new Date(m.createTime).toLocaleTimeString("zh-CN", { hour: "2-digit", minute: "2-digit" })
   const resourcesList = normalizeResources(m.retrieverResources)
+  const { images, files } = splitInputFileList(m.inputFileList)
   
-  if (m.query) {
-    const { thinking: userThinking, mainText: userText } = extractThinkingFromContent(m.query)
+  if (m.query || images.length > 0 || files.length > 0) {
+    const { mainText: userText } = extractThinkingFromContent(m.query || "")
     result.push({
       role: "user",
       text: userText,
+      query: m.query,
+      images: images.length > 0 ? images : undefined,
+      files: files.length > 0 ? files : undefined,
       thinking: undefined,
       thinkingComplete: true,
-      query: m.query,
       resourcesList: [],
       time: baseTime,
     })
@@ -264,9 +408,9 @@ function mapMessage(m: MessageApi): Message[] {
     result.push({
       role: "ai",
       text: aiText,
+      query: m.query,
       thinking: aiThinking || undefined,
       thinkingComplete: true,
-      query: m.query,
       resourcesList,
       time: baseTime,
       messageId: m.messageId,
@@ -275,15 +419,6 @@ function mapMessage(m: MessageApi): Message[] {
   }
   
   return result
-  // return {
-  //   role: m.role === "assistant" ? "ai" : m.role as "user" | "ai",
-  //   text: mainText,
-  //   thinking,
-  //   thinkingComplete: true, // 历史消息中的思考肯定是完成的
-  //   files: normalizeMessageAttachments(m.attachments),
-  //   resourcesList: normalizeResources((m as any).resources_list),
-  //   time: new Date(m.created_at).toLocaleTimeString("zh-CN", { hour: "2-digit", minute: "2-digit" }),
-  // }
 }
 
 export default function Page() {
@@ -337,6 +472,9 @@ export default function Page() {
   /* 原始 File 对象，用于上传到 Dify */
   const [rawImageFiles, setRawImageFiles] = useState<File[]>([])
   const [rawDocFiles, setRawDocFiles] = useState<File[]>([])
+  /** 上传接口返回的 ossId（与图片/文档预览一一对应） */
+  const [imageOssIds, setImageOssIds] = useState<Array<string | number>>([])
+  const [docOssIds, setDocOssIds] = useState<Array<string | number>>([])
   const [isRecording, setIsRecording] = useState(false)
   const [isStreaming, setIsStreaming] = useState(false)
   const [resourceSidebarOpen, setResourceSidebarOpen] = useState(false)
@@ -369,8 +507,8 @@ export default function Page() {
   /** 保存当前请求的上下文，用于重试 */
   const lastRequestRef = useRef<{
     userText: string
-    files?: Array<{ type: string; transfer_method: string; upload_file_id: string }>
     userAttachments?: MessageFileAttachment[]
+    inputFiles?: Array<{ ossId: string | number }>
   } | null>(null)
 
   /* ───── Toast hook ───── */
@@ -602,6 +740,8 @@ export default function Page() {
     setUploadedFiles([])
     setRawImageFiles([])
     setRawDocFiles([])
+    setImageOssIds([])
+    setDocOssIds([])
     refreshConversations()
   }
 
@@ -698,8 +838,8 @@ export default function Page() {
   const callDifyAPI = async (
     userText: string,
     allMessages: Message[],
-    files?: Array<{ type: string; transfer_method: string; upload_file_id: string }>,
     userAttachments?: MessageFileAttachment[],
+    inputFiles?: Array<{ ossId: string | number }>,
   ) => {
     // 创建新的 AbortController 用于中断
     const controller = new AbortController()
@@ -715,8 +855,8 @@ export default function Page() {
         inputs: getAgentInputs(currentAgentId, agentDefs),
         agentId: currentAgentId,
         signal: controller.signal,
-        files,
         sessionId: sessionId,
+        inputFiles,
       })
 
       const reader = response.body?.getReader()
@@ -733,6 +873,7 @@ export default function Page() {
       let newDifyConversationId: string | null = null
       let assistantDifyMessageId: string | undefined
       let resourcesList: any = []
+      let nodeFinishedResourcesList: ResourceItem[] = []
       const assistantAttachments: MessageFileAttachment[] = []
       const aiTime = new Date().toLocaleTimeString("zh-CN", { hour: "2-digit", minute: "2-digit" })
       // 重置当前 task_id 和 workflow 标志（新一轮请求）
@@ -856,6 +997,20 @@ export default function Page() {
                   currentTaskIdRef.current = event.task_id
                 }
                 currentWorkflowProgress = handleNodeFinished(currentWorkflowProgress, event)
+                {
+                  // 从 inputs.#context# / context 解析引用来源（按 \nsource: 分割）
+                  const context = extractContextFromNodeFinished(event)
+                  if (context) {
+                    const parsed = parseContextToResources(context)
+                    if (parsed.length > 0) {
+                      nodeFinishedResourcesList = parsed
+                      // message_end 尚未到来时先展示 node_finished 数据
+                      if (!resourcesList || resourcesList.length === 0) {
+                        resourcesList = parsed
+                      }
+                    }
+                  }
+                }
                 chunkHasUpdates = true
                 break
 
@@ -931,7 +1086,14 @@ export default function Page() {
                   currentTaskIdRef.current = event.task_id
                 }
                 chunkHasUpdates = true
-                resourcesList = event.metadata.retriever_resources || []
+                {
+                  // 优先 message_end.metadata.retriever_resources，否则用 node_finished 解析结果
+                  const fromEnd = dedupeResourcesBySegmentId(
+                    event.metadata?.retriever_resources || [],
+                  )
+                  resourcesList =
+                    fromEnd.length > 0 ? fromEnd : nodeFinishedResourcesList
+                }
                 break
 
               case "error":
@@ -1136,8 +1298,12 @@ export default function Page() {
     })
     setMessages(newMessages)
 
-    // 重新调用 API
-    callDifyAPI(lastRequest.userText, newMessages, lastRequest.files, lastRequest.userAttachments)
+    callDifyAPI(
+      lastRequest.userText,
+      newMessages,
+      lastRequest.userAttachments,
+      lastRequest.inputFiles,
+    )
   }
 
   /* ───── 重试指定 AI 回复 ───── */
@@ -1181,8 +1347,8 @@ export default function Page() {
       callDifyAPI(
         lastRequestRef.current.userText,
         newMessages,
-        lastRequestRef.current.files,
         lastRequestRef.current.userAttachments,
+        lastRequestRef.current.inputFiles,
       )
       return
     }
@@ -1197,7 +1363,7 @@ export default function Page() {
       userText,
       userAttachments: userMsg.files,
     }
-    callDifyAPI(userText, newMessages, undefined, userMsg.files)
+    callDifyAPI(userText, newMessages, userMsg.files)
   }
 
   /* ───── 发送消息（异步：先上传文件，再合并到 chat 请求） ───── */
@@ -1219,8 +1385,11 @@ export default function Page() {
       time,
     })
 
-    // 先收集所有原始 File 对象，然后清空 UI 状态
+    // 先收集所有原始 File 对象与 ossId，然后清空 UI 状态
     const allRawFiles = [...rawImageFiles, ...rawDocFiles]
+    const inputFiles = [...imageOssIds, ...docOssIds]
+      .filter((id) => id != null && id !== "")
+      .map((ossId) => ({ ossId }))
     const userAttachments: MessageFileAttachment[] = allRawFiles.map((file) => ({
       name: file.name,
       size: file.size,
@@ -1231,6 +1400,8 @@ export default function Page() {
     setUploadedFiles([])
     setRawImageFiles([])
     setRawDocFiles([])
+    setImageOssIds([])
+    setDocOssIds([])
 
     newMessages.push({ 
       role: "ai", 
@@ -1243,56 +1414,58 @@ export default function Page() {
     })
     setMessages(newMessages)
 
-    // 如果有附件，先上传到 Dify 获取 upload_file_id，再合并到 chat 请求
-    let difyFiles: Array<{ type: string; transfer_method: string; upload_file_id: string }> | undefined
-
-    if (allRawFiles.length > 0) {
-      try {
-        const uploadedRefs = await uploadFilesToDify(
-          allRawFiles,
-          user?.username || "anonymous",
-          currentAgentId,
-        )
-        difyFiles = uploadedRefs.map((ref) => ({
-          type: ref.type,
-          transfer_method: "local_file",
-          upload_file_id: ref.upload_file_id,
-        }))
-      } catch (uploadErr) {
-        const errMsg = uploadErr instanceof Error ? uploadErr.message : "附件上传失败"
-        error(`附件上传失败: ${errMsg}`)
-        // 上传失败时仍然发送文本消息，不带 files
-      }
-    }
-
-    // 保存请求上下文，用于重试
+    // 保存请求上下文，用于重试（附件已在选择时上传，这里只传 inputFiles）
     lastRequestRef.current = {
       userText: text || "请分析我上传的文件",
-      files: difyFiles,
       userAttachments,
+      inputFiles,
     }
 
-    callDifyAPI(text || "请分析我上传的文件", newMessages, difyFiles, userAttachments)
+    callDifyAPI(text || "请分析我上传的文件", newMessages, userAttachments, inputFiles)
   }
 
-  const handleImageUpload = (dataUrl: string, rawFile: File) => {
-    setUploadedImages((prev) => [...prev, dataUrl])
-    setRawImageFiles((prev) => [...prev, rawFile])
+  const handleImageUpload = async (dataUrl: string, rawFile: File) => {
+    try {
+      const uploadRes = await uploadFileSingle(rawFile)
+      const ossId = extractOssIdFromUpload(uploadRes)
+      if (ossId == null) {
+        throw new Error("上传成功但未返回 ossId")
+      }
+      setUploadedImages((prev) => [...prev, dataUrl])
+      setRawImageFiles((prev) => [...prev, rawFile])
+      setImageOssIds((prev) => [...prev, ossId])
+    } catch (err) {
+      const errMsg = err instanceof Error ? err.message : "附件上传失败"
+      error(`附件上传失败: ${errMsg}`)
+    }
   }
 
-  const handleFileUpload = (file: { name: string; size: number }, rawFile: File) => {
-    setUploadedFiles((prev) => [...prev, file])
-    setRawDocFiles((prev) => [...prev, rawFile])
+  const handleFileUpload = async (file: { name: string; size: number }, rawFile: File) => {
+    try {
+      const uploadRes = await uploadFileSingle(rawFile)
+      const ossId = extractOssIdFromUpload(uploadRes)
+      if (ossId == null) {
+        throw new Error("上传成功但未返回 ossId")
+      }
+      setUploadedFiles((prev) => [...prev, file])
+      setRawDocFiles((prev) => [...prev, rawFile])
+      setDocOssIds((prev) => [...prev, ossId])
+    } catch (err) {
+      const errMsg = err instanceof Error ? err.message : "附件上传失败"
+      error(`附件上传失败: ${errMsg}`)
+    }
   }
 
   const handleRemoveImage = (idx: number) => {
     setUploadedImages((prev) => prev.filter((_, i) => i !== idx))
     setRawImageFiles((prev) => prev.filter((_, i) => i !== idx))
+    setImageOssIds((prev) => prev.filter((_, i) => i !== idx))
   }
 
   const handleRemoveFile = (idx: number) => {
     setUploadedFiles((prev) => prev.filter((_, i) => i !== idx))
     setRawDocFiles((prev) => prev.filter((_, i) => i !== idx))
+    setDocOssIds((prev) => prev.filter((_, i) => i !== idx))
   }
 
   const handleVoiceToggle = () => {
@@ -1537,6 +1710,7 @@ export default function Page() {
           <InputArea
             uploadedImages={uploadedImages}
             uploadedFiles={uploadedFiles}
+            rawDocFiles={rawDocFiles}
             onSendMessage={handleSendMessage}
             onImageUpload={handleImageUpload}
             onFileUpload={handleFileUpload}
