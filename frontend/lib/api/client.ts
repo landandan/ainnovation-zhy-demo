@@ -114,7 +114,7 @@ export async function logout(): Promise<LogoutResponse> {
   //   // Mock 模式下注册直接返回 admin 用户
   //   return { token: "mock-jwt-token-admin-1234567890", user: getMockUser() }
   // }
-  return request<LogoutResponse>("POST", "/auth/logout", {})
+  return request<LogoutResponse>("POST", "/h5/auth/logout", {})
 }
 
 export async function register(data: RegisterRequest): Promise<LoginResponse> {

@@ -46,6 +46,7 @@ export default forwardRef<LoginModalRef>((_, ref) => {
                 await login({ username: username.trim(), password })
             }
             router.replace("/")
+            setModalOpen(false)
         } catch (err: unknown) {
             const msg = err instanceof Error ? err.message : "操作失败"
             setError(msg)

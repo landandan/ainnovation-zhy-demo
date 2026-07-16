@@ -168,8 +168,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (wasMockMode) {
       disableMockMode()
     }
-    const target = wasMockMode ? "/login?mock=true" : "/login"
-    window.location.href = target
+    // const target = wasMockMode ? "/login?mock=true" : "/login"
+    // window.location.href =
+    await guestLogin()
   }, [])
 
   const enableMockLogin = useCallback(async () => {
