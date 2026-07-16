@@ -30,8 +30,8 @@ export function Header({ onMenuToggle, currentTheme, onThemeChange, searchQuery,
 
   const currentThemeData = THEMES.find((t) => t.id === currentTheme)
 
-  // 直接点击循环切换：默认 → 深海 → 极光 → 默认
-  const THEME_CYCLE_ORDER: ThemeId[] = ["", "deep-ocean", "aurora-blue"]
+  // 直接点击循环切换：默认 → 深海 → 极光 → 默认  , "aurora-blue" 极光蓝暂时先去掉
+  const THEME_CYCLE_ORDER: ThemeId[] = ["", "deep-ocean"]
   const handleCycleTheme = () => {
     const currentIndex = THEME_CYCLE_ORDER.indexOf(currentTheme)
     const nextIndex = (currentIndex + 1) % THEME_CYCLE_ORDER.length
