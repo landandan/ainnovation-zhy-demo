@@ -62,6 +62,8 @@ export interface ResourceItem {
 export interface Message {
   role: "user" | "ai"
   text: string
+  /** 原始用户提问（历史消息回填） */
+  query?: string
   images?: string[]
   files?: MessageFileAttachment[]
   workflowProgress?: WorkflowProgress
@@ -151,16 +153,29 @@ function normalizeMessageAttachments(rawAttachments: unknown[]): MessageFileAtta
     const record = item as Record<string, unknown>
     const originalUrl = typeof record.original_url === "string"
       ? record.original_url.trim()
-      : typeof record.url === "string"
-        ? record.url.trim()
-        : ""
+      : typeof record.fileUrl === "string"
+        ? record.fileUrl.trim()
+        : typeof record.url === "string"
+          ? record.url.trim()
+          : ""
     const fileId = typeof record.file_id === "string"
       ? record.file_id.trim()
-      : typeof record.id === "string"
-        ? record.id.trim()
+      : typeof record.ossId === "string" || typeof record.ossId === "number"
+        ? String(record.ossId)
+        : typeof record.id === "string"
+          ? record.id.trim()
+          : ""
+    const rawName = typeof record.name === "string"
+      ? record.name.trim()
+      : typeof record.fileName === "string"
+        ? record.fileName.trim()
         : ""
-    const rawName = typeof record.name === "string" ? record.name.trim() : ""
     const name = rawName || (originalUrl ? fileNameFromUrl(originalUrl) : fileId || "附件")
+    const fileType = typeof record.fileType === "string"
+      ? record.fileType
+      : typeof record.type === "string"
+        ? record.type
+        : undefined
 
     return [{
       name,
@@ -168,9 +183,50 @@ function normalizeMessageAttachments(rawAttachments: unknown[]): MessageFileAtta
       original_url: originalUrl || undefined,
       file_id: fileId || undefined,
       mime_type: typeof record.mime_type === "string" ? record.mime_type : undefined,
-      type: typeof record.type === "string" ? record.type : undefined,
+      type: fileType,
     }]
   })
+}
+
+/** 从历史消息 inputFileList 拆出图片 URL 与文档附件 */
+function splitInputFileList(rawList: unknown[] | undefined): {
+  images: string[]
+  files: MessageFileAttachment[]
+} {
+  if (!Array.isArray(rawList) || rawList.length === 0) {
+    return { images: [], files: [] }
+  }
+
+  const images: string[] = []
+  const docs: unknown[] = []
+
+  for (const item of rawList) {
+    if (!item || typeof item !== "object") continue
+    const record = item as Record<string, unknown>
+    const fileType = String(record.fileType || record.type || "").toLowerCase()
+    const url =
+      (typeof record.fileUrl === "string" && record.fileUrl.trim()) ||
+      (typeof record.original_url === "string" && record.original_url.trim()) ||
+      (typeof record.url === "string" && record.url.trim()) ||
+      ""
+
+    const isImage =
+      fileType === "image" ||
+      fileType.startsWith("image/") ||
+      /\.(png|jpe?g|gif|webp|bmp|svg)(\?|$)/i.test(url) ||
+      /\.(png|jpe?g|gif|webp|bmp|svg)(\?|$)/i.test(String(record.fileName || record.name || ""))
+
+    if (isImage && url) {
+      images.push(url)
+    } else {
+      docs.push(item)
+    }
+  }
+
+  return {
+    images,
+    files: normalizeMessageAttachments(docs),
+  }
 }
 
 function convertToMarkdown(text: string) {
@@ -328,15 +384,18 @@ function mapMessage(m: MessageApi): Message[] {
   const result: Message[] = []
   const baseTime = new Date(m.createTime).toLocaleTimeString("zh-CN", { hour: "2-digit", minute: "2-digit" })
   const resourcesList = normalizeResources(m.retrieverResources)
+  const { images, files } = splitInputFileList(m.inputFileList)
   
-  if (m.query) {
-    const { thinking: userThinking, mainText: userText } = extractThinkingFromContent(m.query)
+  if (m.query || images.length > 0 || files.length > 0) {
+    const { mainText: userText } = extractThinkingFromContent(m.query || "")
     result.push({
       role: "user",
       text: userText,
+      query: m.query,
+      images: images.length > 0 ? images : undefined,
+      files: files.length > 0 ? files : undefined,
       thinking: undefined,
       thinkingComplete: true,
-      query: m.query,
       resourcesList: [],
       time: baseTime,
     })
@@ -349,9 +408,9 @@ function mapMessage(m: MessageApi): Message[] {
     result.push({
       role: "ai",
       text: aiText,
+      query: m.query,
       thinking: aiThinking || undefined,
       thinkingComplete: true,
-      query: m.query,
       resourcesList,
       time: baseTime,
       messageId: m.messageId,
@@ -360,15 +419,6 @@ function mapMessage(m: MessageApi): Message[] {
   }
   
   return result
-  // return {
-  //   role: m.role === "assistant" ? "ai" : m.role as "user" | "ai",
-  //   text: mainText,
-  //   thinking,
-  //   thinkingComplete: true, // 历史消息中的思考肯定是完成的
-  //   files: normalizeMessageAttachments(m.attachments),
-  //   resourcesList: normalizeResources((m as any).resources_list),
-  //   time: new Date(m.created_at).toLocaleTimeString("zh-CN", { hour: "2-digit", minute: "2-digit" }),
-  // }
 }
 
 export default function Page() {

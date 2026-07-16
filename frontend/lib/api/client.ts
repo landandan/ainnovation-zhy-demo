@@ -219,14 +219,22 @@ export interface ConversationsListResponse {
   pages?: number
 }
 
+export interface InputFileItem {
+  fileName?: string
+  fileUrl?: string
+  fileType?: string
+  ossId?: string | number
+  size?: number
+}
+
 export interface MessageApi {
   messageId: string
   role: "user" | "assistant" | "system"
   messageType: string
   query: string
-  inputFileList: unknown[]
+  inputFileList?: InputFileItem[]
   answer: string
-  outputFileList: unknown[]
+  outputFileList?: InputFileItem[]
   queryTokens: number
   answerTokens: number
   totalTokens: number
@@ -234,15 +242,6 @@ export interface MessageApi {
   createTime: string
   retrieverResources: string
   rating?: "like" | "dislike" | null | string
-  // id: number
-  // conversation_id: number
-  // role: "user" | "assistant" | "system"
-  // content: string
-  // attachments: unknown[]
-  // metadata: Record<string, unknown>
-  // dify_message_id: string
-  // is_error: boolean
-  // created_at: string
 }
 
 export interface MessagesListResponse {
