@@ -387,28 +387,28 @@ export function Sidebar({
                 {filteredChatHistory.map((item) => {
                   const hovered = hoveredHistoryId === item.id
                   const activeStyle = {
-                    background: "var(--sidebar-history-active-bg, var(--card))",
+                    background: "var(--card)",
                     color: "var(--foreground)",
+                    border: "1px solid var(--border)",
                     borderRadius: "8px",
                     padding: "8px 10px",
-                    border: "1px solid var(--sidebar-history-active-border-color, var(--border))",
                     outline: "none",
-                    boxShadow: "var(--sidebar-history-active-shadow, var(--shadow-sm))",
+                    boxShadow: "var(--shadow-sm)",
                   } as React.CSSProperties
                   const hoverStyle = {
-                    background: "var(--sidebar-history-hover-bg, var(--hover))",
+                    background: "var(--hover)",
                     color: "var(--foreground)",
+                    border: "1px solid transparent",
                     borderRadius: "8px",
                     padding: "8px 10px",
-                    border: "1px solid transparent",
                     outline: "none",
                   } as React.CSSProperties
                   const baseStyle = {
                     background: "transparent",
                     color: "var(--foreground)",
+                    border: "1px solid transparent",
                     borderRadius: "8px",
                     padding: "8px 10px",
-                    border: "1px solid transparent",
                     outline: "none",
                   } as React.CSSProperties
                   return (
@@ -663,7 +663,7 @@ export function Sidebar({
               zIndex: 1001,
             }}
           >
-            <button
+            {/* <button
               type="button"
               className="sidebar-history-dropdown-item"
               onClick={(e) => {
@@ -678,7 +678,7 @@ export function Sidebar({
                 <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
               </svg>
               <span>重命名</span>
-            </button>
+            </button> */}
             <button
               type="button"
               className="sidebar-history-dropdown-item sidebar-history-dropdown-item--danger"
