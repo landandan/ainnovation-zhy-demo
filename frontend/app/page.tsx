@@ -85,6 +85,9 @@ export interface ChatHistoryItem {
   time: string
   active: boolean
   sessionId: string
+  query?: string
+  /** 会话所属智能体 id，对应智能助手列表的 agent.id */
+  appId?: string
 }
 
 export interface AgentDef {
@@ -109,15 +112,21 @@ export type ThemeId = (typeof THEMES)[number]["id"]
 
 /** 将后端 AgentDefApi 转为前端 AgentDef */
 function mapAgentDef(a: AgentDefApi): AgentDef {
+  const status = a.status
+  const isActive =
+    typeof a.is_active === "boolean"
+      ? a.is_active
+      : status === true || status === 1 || status === "1" || status === "0" // 接口 status=0 表示可用
+
   return {
-    id: a.id,
-    label: a.appName,
-    icon: a.icon,
-    desc: a.desc,
-    gradient: a.appType,
-    sortOrder: a.sort_order,
-    isActive: a.status,
-    quickQuestions: a.quick_questions,
+    id: String(a.id),
+    label: a.appName || a.label || "",
+    icon: a.icon || "🤖",
+    desc: a.appDesc || a.desc || "",
+    gradient: a.appType || a.gradient || "var(--gradient-1)",
+    sortOrder: a.sort_order ?? 0,
+    isActive,
+    quickQuestions: a.quick_questions || [],
   }
   // return {
   //   id: a.agent_id,
@@ -300,10 +309,12 @@ function dedupeResourcesBySegmentId(resources: ResourceItem[]): ResourceItem[] {
 }
 
 /**
- * 将 node_finished.inputs.#context# 按 `\nsource:` 分割为引用来源列表
+ * 将 node_finished.inputs.#context# 按 `\nsource:` 分割为引用来源列表。
+ * 无 `\nsource:` 标记时不解析（避免把用户提问等原文误当成引用）。
  */
 function parseContextToResources(context: string): ResourceItem[] {
   if (!context || typeof context !== "string" || !context.trim()) return []
+  if (!/\nsource:\s*/.test(context)) return []
 
   const segments = context.split(/\nsource:\s*/).map((s) => s.trim()).filter(Boolean)
   const resources: ResourceItem[] = []
@@ -543,10 +554,13 @@ export default function Page() {
         if (agentsRes?.rows?.length > 0) {
           const mapped = agentsRes.rows.map(mapAgentDef)
           setAgentDefs(mapped)
-          // 建立 agent_id → db_id 映射
+          // 建立 agent id → db id 映射（当前接口 id 即 appId）
           const idMap = new Map<string, number>()
           for (const a of agentsRes.rows) {
-            idMap.set(a.agent_id, a.id)
+            const key = String(a.id)
+            const numericId = Number(a.id)
+            if (key) idMap.set(key, Number.isFinite(numericId) ? numericId : 0)
+            if (a.agent_id) idMap.set(String(a.agent_id), Number.isFinite(numericId) ? numericId : 0)
           }
           agentIdToDbId.current = idMap
           const activeMapped = mapped.filter((a) => a.isActive)
@@ -599,7 +613,7 @@ export default function Page() {
   /* ───── 衍生：build chatHistory from conversations ───── */
   const buildChatHistory = useCallback((): ChatHistoryItem[] => {
     return conversations.map((c) => ({
-      id: c.messageId,
+      id: c.messageId as unknown as number,
       title: c.title,
       agent: c.agent_id_str,
       preview: c.last_message_at ? "最近活跃" : "新对话",
@@ -607,11 +621,13 @@ export default function Page() {
         hour: "2-digit",
         minute: "2-digit",
       }),
-      active: c.id === activeConversationId,
+      // 用 sessionId 判断选中（item.id 是 messageId，与 c.id 不一致会导致永远不高亮）
+      active: Boolean(sessionId) && c.sessionId === sessionId,
       sessionId: c.sessionId || "",
       query: c.query || "",
+      appId: c.appId ? String(c.appId) : undefined,
     }))
-  }, [conversations, activeConversationId])
+  }, [conversations, sessionId])
 
   const [chatHistory, setChatHistory] = useState<ChatHistoryItem[]>([])
   useEffect(() => {
@@ -745,7 +761,7 @@ export default function Page() {
     refreshConversations()
   }
 
-  const handleSelectHistory = async (item: any) => {
+  const handleSelectHistory = async (item: ChatHistoryItem) => {
     try {
       refreshConversations()
       const id = item.id
@@ -757,8 +773,9 @@ export default function Page() {
       console.log('msgsRes123:', msgsRes)
       
       // 确保消息按正序排列（旧的在前，新的在后）
-      // 使用 id 进行排序最可靠，因为 id 是自增的，能准确反映插入顺序
-      const sortedMsgs = [...msgsRes?.data?.messageList].sort((a, b) => new Date(a.createTime).getTime() - new Date(b.createTime).getTime());
+      const sortedMsgs = [...(msgsRes?.data?.messageList ?? [])].sort(
+        (a, b) => new Date(a.createTime).getTime() - new Date(b.createTime).getTime(),
+      )
 
       console.log('sortedMsgs123:', sortedMsgs)
       const mappedMsgs = sortedMsgs.flatMap(mapMessage)
@@ -766,12 +783,21 @@ export default function Page() {
       setMessages(mappedMsgs)
       setActiveConversationId(id)
       setSessionId(item.sessionId)
-      // 切换到该对话所属的智能体
-      const conv = conversations.find((c) => c.id === item.appId)
-      if (conv) setCurrentAgentId(conv.agent_id_str)
+
+      // 用历史会话的 appId 匹配智能助手列表 id，选中对应智能体（不新建会话）
+      const appId = item.appId ? String(item.appId) : ""
+      if (appId) {
+        const matchedAgent = agentDefs.find((a) => String(a.id) === appId)
+        if (matchedAgent) {
+          setCurrentAgentId(matchedAgent.id)
+        } else {
+          // 列表里暂时没有时也先写入，避免继续沿用上一个智能体
+          setCurrentAgentId(appId)
+        }
+      }
+
       difyConversationIdRef.current = null
       maybeCloseSidebar()
-      // 静默切换，不显示提示
     } catch (err) {
       console.error("加载对话消息失败:", err)
       error("加载对话失败")

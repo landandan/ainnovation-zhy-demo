@@ -130,16 +130,24 @@ export async function getMe(): Promise<{ user: UserInfo }> {
 /* ───── Agents API ───── */
 
 export interface AgentDefApi {
-  id: number
-  agent_id: string
-  label: string
-  icon: string
-  desc: string
-  quick_questions: string[]
-  gradient: string
-  sort_order: number
-  is_active: boolean
+  id: string | number
+  agent_id?: string
+  label?: string
+  appName?: string
+  icon?: string
+  desc?: string
+  appDesc?: string
+  appType?: string
+  quick_questions?: string[]
+  gradient?: string
+  sort_order?: number
+  is_active?: boolean
+  status?: string | number | boolean
   dify_configs?: DifyConfigApi[]
+  difyAppId?: string
+  appUrl?: string
+  visible?: string
+  createTime?: string
 }
 
 export interface DifyConfigApi {
@@ -152,7 +160,11 @@ export interface DifyConfigApi {
 }
 
 export interface AgentsListResponse {
-  agents: AgentDefApi[]
+  agents?: AgentDefApi[]
+  rows?: AgentDefApi[]
+  total?: number
+  code?: number
+  msg?: string
 }
 
 export async function getAgents(): Promise<AgentsListResponse> {

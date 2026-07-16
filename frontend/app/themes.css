@@ -441,6 +441,12 @@
   --input-box-border: transparent;
   --input-box-border-focus: transparent;
 
+  /* 历史会话选中高亮（强调色浅底，更易辨认） */
+  --sidebar-history-active-bg: rgba(56, 189, 248, 0.18);
+  --sidebar-history-active-border-color: rgba(56, 189, 248, 0.55);
+  --sidebar-history-active-shadow: 0 0 0 1px rgba(56, 189, 248, 0.12);
+  --sidebar-history-hover-bg: rgba(56, 189, 248, 0.08);
+
   /* 用户气泡 / 附件卡片（对齐 Kimi 深色） */
   --chat-user-bg: #2c2c2e;
   --chat-user-color: #F5F5F5;
