@@ -32,6 +32,8 @@ import {
   mockDelay,
 } from "../mock/config"
 import { ApiError, request } from "../http/client"
+import { getToken, getClientId } from "../auth/token"
+import { API_BASE_URL } from "../http/routes"
 
 export { ApiError } from "../http/client"
 export { getToken, setToken, removeToken, isAuthenticated } from "../auth/token"
@@ -62,12 +64,13 @@ export interface UserInfo {
 
 export interface LoginData {
   token?: string
-  // user: UserInfo
-  access_token: string
-  client_id: string
+  access_token?: string
+  client_id?: string
   user: UserInfo
 }
 export interface LoginResponse {
+  code?: number | string
+  msg?: string
   data: LoginData
 }
 export interface logoutData {
@@ -115,7 +118,13 @@ export async function getMe(): Promise<{ user: UserInfo }> {
     await mockDelay()
     return { user: getMockUser() }
   }
-  return request<{ user: UserInfo }>("GET", "/auth/me")
+  const res = await request<any>("GET", "/auth/me")
+  // 兼容多种后端返回结构
+  const user = res?.user ?? res?.data?.user ?? res?.data
+  if (!user || typeof user !== "object") {
+    throw new Error("无法解析当前用户信息")
+  }
+  return { user: user as UserInfo }
 }
 
 /* ───── Agents API ───── */
@@ -199,11 +208,23 @@ export interface ConversationApi {
 // }
 
 export interface ConversationsListResponse {
-  conversations: ConversationApi[]
-  total: number
-  page: number
-  per_page: number
-  pages: number
+  data?: {
+    rows?: ConversationApi[]
+    total?: number
+  }
+  conversations?: ConversationApi[]
+  total?: number
+  page?: number
+  per_page?: number
+  pages?: number
+}
+
+export interface InputFileItem {
+  fileName?: string
+  fileUrl?: string
+  fileType?: string
+  ossId?: string | number
+  size?: number
 }
 
 export interface MessageApi {
@@ -211,9 +232,9 @@ export interface MessageApi {
   role: "user" | "assistant" | "system"
   messageType: string
   query: string
-  inputFileList: unknown[]
+  inputFileList?: InputFileItem[]
   answer: string
-  outputFileList: unknown[]
+  outputFileList?: InputFileItem[]
   queryTokens: number
   answerTokens: number
   totalTokens: number
@@ -221,15 +242,6 @@ export interface MessageApi {
   createTime: string
   retrieverResources: string
   rating?: "like" | "dislike" | null | string
-  // id: number
-  // conversation_id: number
-  // role: "user" | "assistant" | "system"
-  // content: string
-  // attachments: unknown[]
-  // metadata: Record<string, unknown>
-  // dify_message_id: string
-  // is_error: boolean
-  // created_at: string
 }
 
 export interface MessagesListResponse {
@@ -241,6 +253,8 @@ export interface MessagesListResponse {
 
 export async function getConversations(params?: {
   agent_id?: number
+  pageNum?: number
+  pageSize?: number
   page?: number
   per_page?: number
 }): Promise<ConversationsListResponse> {
@@ -248,13 +262,12 @@ export async function getConversations(params?: {
   //   await mockDelay()
   //   return getMockConversations(params)
   // }
-  // const qs = new URLSearchParams()
-  // if (params?.agent_id) qs.set("agent_id", String(params.agent_id))
-  // if (params?.page) qs.set("page", String(params.page))
-  // if (params?.per_page) qs.set("per_page", String(params.per_page))
-  // const query = qs.toString()
-  return request<ConversationsListResponse>("POST", `/h5/chat/messages/page?pageNum=1&pageSize=10`)
-  // return request<ConversationsListResponse>("GET", `/conversations${query ? `?${query}` : ""}`)
+  const pageNum = params?.pageNum ?? params?.page ?? 1
+  const pageSize = params?.pageSize ?? params?.per_page ?? 10
+  return request<ConversationsListResponse>(
+    "POST",
+    `/h5/chat/messages/page?pageNum=${pageNum}&pageSize=${pageSize}`,
+  )
 }
 
 export async function createConversation(data: {
@@ -300,11 +313,75 @@ export async function deleteConversationApi(sessionId: string): Promise<{ messag
   return request<{ message: string }>("POST", `/h5/chat/messages/del?sessionId=${encodeURIComponent(sessionId)}`)
 }
 
+/** 从单文件上传响应中提取 ossId */
+export function extractOssIdFromUpload(res: unknown): string | number | null {
+  if (!res || typeof res !== "object") return null
+  const obj = res as Record<string, any>
+  const raw = obj?.data?.ossId ?? obj?.ossId ?? obj?.data?.data?.ossId
+  if (raw == null || raw === "") return null
+  if (typeof raw === "number") return raw
+  const asNum = Number(raw)
+  if (typeof raw === "string" && Number.isFinite(asNum) && String(asNum) === raw.trim()) {
+    return asNum
+  }
+  return raw as string | number
+}
+
+/** 单文件上传：POST /h5/file/upload/single，form field = files */
+export async function uploadFileSingle(file: File): Promise<any> {
+  const token = getToken()
+  if (!token) {
+    throw new Error("未登录，无法上传文件")
+  }
+
+  const formData = new FormData()
+  formData.append("file", file)
+
+  const headers: Record<string, string> = {
+    Authorization: `Bearer ${token}`,
+    clientid: getClientId() || "0d4c873ff6146ecd7f38e2e45526ab1b",
+  }
+
+  const controller = new AbortController()
+  const timeoutId = setTimeout(() => controller.abort(), 60000)
+
+  let res: Response
+  try {
+    res = await fetch(`${API_BASE_URL}/h5/file/upload/single`, {
+      method: "POST",
+      headers,
+      body: formData,
+      signal: controller.signal,
+    })
+  } catch (err: unknown) {
+    clearTimeout(timeoutId)
+    if (err instanceof DOMException && err.name === "AbortError") {
+      throw new Error("上传超时，请稍后重试")
+    }
+    throw new Error(err instanceof Error ? err.message : "上传失败")
+  }
+  clearTimeout(timeoutId)
+
+  if (!res.ok) {
+    const errText = await res.text().catch(() => res.statusText)
+    throw new Error(`上传失败 (${res.status}): ${errText}`)
+  }
+
+  const contentType = res.headers.get("content-type") || ""
+  if (contentType.includes("application/json")) {
+    return res.json()
+  }
+  return res.text()
+}
+
 export async function submitMessageFeedback(data: {
   agentId: string
   messageId: string
   userId: number
   rating?: "like" | "dislike" | null
+  /** 选中的理由标签，逗号拼接，如 "回答不准确,完成任务能力强" */
+  tags?: string
+  /** 用户自由输入的反馈文案 */
   content?: string
 }): Promise<{ code?: number; msg?: string }> {
   if (isMockMode()) {

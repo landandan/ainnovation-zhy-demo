@@ -243,6 +243,12 @@
   --chat-user-line-height: 1.8;
   --chat-user-font-weight: 400;
   --chat-user-shadow: none;
+  --chat-user-file-bg: #F5F5F5;
+  --chat-user-file-color: #1A1A1A;
+  --chat-user-file-icon-bg: #FFFFFF;
+  --chat-user-file-icon-color: #8C8C8C;
+  --chat-user-attach-bg: #F5F5F5;
+  --chat-user-attach-border: #E5E5E5;
 
   /* 提问区 — Kimi 风格（仅默认主题，其他主题走 fallback） */
   --input-area-max-width: 960px;
@@ -257,6 +263,16 @@
   --input-box-padding-x: 20px;
   --input-box-padding-y: 16px;
   --input-box-min-height: 120px;
+  --input-box-drag-border: #1A85FF;
+  --input-box-drag-bg: #F5F9FF;
+  --input-box-drag-shadow: 0 0 0 2px rgba(26, 133, 255, 0.15);
+  --input-box-drag-hint-color: #1A85FF;
+  --upload-preview-file-bg: #F5F5F5;
+  --upload-preview-file-icon-color: #8C8C8C;
+  --upload-preview-file-name-color: #333333;
+  --upload-preview-file-sub-color: #8C8C8C;
+  --upload-preview-image-border: #E5E5E5;
+  --upload-preview-image-bg: #F5F5F5;
   --input-textarea-min-height: 48px;
   --input-textarea-font-size: 15px;
   --input-textarea-line-height: 1.6;
@@ -417,6 +433,27 @@
   --sidebar-accent-foreground: #E8EEF2;
   --sidebar-border: #1E2D3F;
   --sidebar-ring: #38BDF8;
+
+  /* 新建会话 / 提问框（仅深海） */
+  --sidebar-new-chat-bg: #43454a;
+  --sidebar-new-chat-border: transparent;
+  --input-box-bg: #2c2c2e;
+  --input-box-border: transparent;
+  --input-box-border-focus: transparent;
+
+  /* 用户气泡 / 附件卡片（对齐 Kimi 深色） */
+  --chat-user-bg: #2c2c2e;
+  --chat-user-color: #F5F5F5;
+  --chat-user-shadow: none;
+  --chat-user-file-bg: #2c2c2e;
+  --chat-user-file-color: #F5F5F5;
+  --chat-user-file-icon-bg: rgba(255, 255, 255, 0.08);
+  --chat-user-attach-bg: #1c1c1e;
+  --chat-user-attach-border: transparent;
+
+  /* 空会话引导文案（仅深海，避免继承默认深色字） */
+  --chat-empty-title-color: #F0F4F7;
+  --chat-empty-subtitle-color: #94A3B8;
 
   /* 图表色 */
   --chart-1: #38BDF8;

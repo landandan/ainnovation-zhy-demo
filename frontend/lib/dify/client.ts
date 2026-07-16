@@ -5,10 +5,9 @@
  * Mock 模式下直连 Dify 标准 API（不依赖后端），API Key 从 localStorage 读取。
  */
 
-import { getToken } from "../auth/token"
+import { getToken, getClientId } from "../auth/token"
 import {
   API_BASE_URL,
-  DIFY_FILE_UPLOAD_BASE_URL,
 } from "../http/routes"
 import { isMockMode, getMockDifyApiConfigForAgent, generateMockStream } from "../mock/config"
 import { getMockResponse } from "../mock/api"
@@ -22,12 +21,8 @@ export interface DifyChatProxyRequest {
   query: string
   conversation_id?: string | null
   inputs?: Record<string, unknown>
-  files?: Array<{
-    type: string
-    transfer_method: string
-    url?: string
-    upload_file_id?: string
-  }>
+  /** 本地上传接口返回的 ossId 列表 */
+  inputFiles?: Array<{ ossId: string | number }>
 }
 
 /* ───── 流式响应事件（Dify 原始 SSE 格式） ───── */
@@ -66,17 +61,6 @@ export interface DifyStreamEvent {
   }
 }
 
-/* ───── 文件上传响应 ───── */
-
-export interface DifyFileUploadResponse {
-  id: string
-  name: string
-  size: number
-  extension: string
-  mime_type: string
-  created_by: string
-  created_at: number
-}
 
 /* ───── 获取 Dify 配置（已废弃，由后端管理） ───── */
 
@@ -116,14 +100,10 @@ export async function callDifyChatStream(params: {
   inputs?: Record<string, unknown>
   agentId?: string
   signal?: AbortSignal
-  files?: Array<{
-    type: string
-    transfer_method: string
-    upload_file_id: string
-  }>
   sessionId?: string
+  inputFiles?: Array<{ ossId: string | number }>
 }): Promise<Response> {
-  const { query, userId, user, conversationId, inputs, agentId, signal, files, sessionId } = params
+  const { query, userId, user, conversationId, inputs, agentId, signal, sessionId, inputFiles } = params
 
   // --- Help 智能体：直接返回 Mock 数据，完全绕过 Dify ---
   // if (agentId === "help") {
@@ -202,8 +182,8 @@ export async function callDifyChatStream(params: {
   //   body.conversation_id = conversationId
   // }
 
-  if (files && files.length > 0) {
-    body.files = files
+  if (inputFiles && inputFiles.length > 0) {
+    body.inputFiles = inputFiles
   }
 
   const token = getToken()
@@ -211,19 +191,25 @@ export async function callDifyChatStream(params: {
     throw new Error("未登录，无法调用 AI")
   }
 
+  const clientid = getClientId() || ""
+  const headers: Record<string, string> = {
+    "Content-Type": "application/json;charset=UTF-8",
+    Authorization: `Bearer ${token}`,
+    "Cache-Control": "no-cache",
+    Connection: "keep-alive",
+    Accept: "text/event-stream",
+  }
+  if (clientid) {
+    headers.clientid = clientid
+  }
+  console.log("chat/stream headers:", headers)
+
   // /manage/dify/chat/streaming    /h5/chat/stream
   const response = await fetch(`${API_BASE_URL}/h5/chat/stream`, {
     method: "POST",
-    headers: {
-      "Content-Type": "application/json;charset=UTF-8",
-      Authorization: `Bearer ${token}`,
-      "Cache-Control": "no-cache",
-      "Connection": "keep-alive",
-      'Accept': 'text/event-stream',
-      // "transfer-encoding": "chunked", 
-    },
+    headers,
     body: JSON.stringify(body),
-    // cache: 'no-store', // 关键：禁止 Next.js 缓存该请求
+    // cache: 'no-store', // 注意：禁止 Next.js 缓存该请求
     signal,
   })
 //   {
@@ -257,97 +243,6 @@ export async function callDifyChatStream(params: {
   return response
 }
 
-/* ───── 上传文件到 Dify ───── */
-
-export async function uploadFileToDify(
-  file: File,
-  user: string,
-  agentId?: string,
-): Promise<DifyFileUploadResponse> {
-  if (!agentId) {
-    throw new Error("agent_id 未指定")
-  }
-
-  const formData = new FormData()
-  formData.append("file", file)
-  formData.append("user", user)
-
-  // Mock 模式：直连 Dify 文件上传接口（不走后端代理）
-  if (isMockMode()) {
-    const { dify_base_url, dify_api_key } = getMockDifyApiConfigForAgent(agentId)
-
-    const response = await fetch(`${dify_base_url}/files/upload`, {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${dify_api_key}`,
-      },
-      body: formData,
-    })
-
-    if (!response.ok) {
-      const errorText = await response.text()
-      throw new Error(`Dify 文件上传失败 (${response.status}): ${errorText}`)
-    }
-
-    return response.json()
-  }
-
-  // 非 Mock 模式：走后端代理
-  const token = getToken()
-  if (!token) {
-    throw new Error("未登录，无法上传文件")
-  }
-
-  formData.append("agent_id", agentId)
-
-  const response = await fetch(`${DIFY_FILE_UPLOAD_BASE_URL}/dify/files/upload`, {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${token}`,
-    },
-    body: formData,
-  })
-
-  if (!response.ok) {
-    const errorText = await response.text()
-    throw new Error(`文件上传失败 (${response.status}): ${errorText}`)
-  }
-
-  return response.json()
-}
-
-/* ───── 批量上传文件到 Dify ───── */
-
-export interface UploadedFileRef {
-  file: File
-  type: "image" | "document"
-  upload_file_id: string
-}
-
-/**
- * 批量上传文件到 Dify，返回每个文件的 upload_file_id。
- * 图片类型自动判定为 "image"，其余为 "document"。
- */
-export async function uploadFilesToDify(
-  files: File[],
-  user: string,
-  agentId: string,
-): Promise<UploadedFileRef[]> {
-  const results: UploadedFileRef[] = []
-
-  for (const file of files) {
-    const resp = await uploadFileToDify(file, user, agentId)
-    const fileType = file.type.startsWith("image/") ? "image" : "document"
-    results.push({
-      file,
-      type: fileType,
-      upload_file_id: resp.id,
-    })
-  }
-
-  return results
-}
-
 /* ───── 停止 Dify 任务 ───── */
 
 /**
@@ -358,15 +253,31 @@ export async function uploadFilesToDify(
  */
 export async function stopDifyTask(params: {
   agentId: string
-  taskId: string
+  taskId?: string
   userId?: number
   user?: string
   isWorkflow?: boolean
+  /** 流中最后一条带 answer 的分片字段 */
+  answer?: string
+  localMessageId?: string
+  messageId?: string
+  sessionId?: string
 }): Promise<void> {
-  const { agentId, taskId, userId, user = "anonymous", isWorkflow = false } = params
+  const {
+    agentId,
+    taskId,
+    userId,
+    user = "anonymous",
+    isWorkflow = false,
+    answer,
+    localMessageId,
+    messageId,
+    sessionId,
+  } = params
 
   try {
     if (isMockMode()) {
+      if (!taskId) return
       const { dify_base_url, dify_api_key } = getMockDifyApiConfigForAgent(agentId)
       const stopPath = isWorkflow
         ? `/workflows/run/${taskId}/stop`
@@ -387,16 +298,22 @@ export async function stopDifyTask(params: {
     const token = getToken()
     if (!token) return
 
+    const clientid = getClientId() || "0d4c873ff6146ecd7f38e2e45526ab1b"
     await fetch(`${API_BASE_URL}/h5/chat/stop`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
         Authorization: `Bearer ${token}`,
+        clientid,
       },
       body: JSON.stringify({
         agentId,
-        taskId,
+        ...(taskId ? { taskId } : {}),
         userId,
+        answer: answer ?? "",
+        localMessageId: localMessageId ?? "",
+        messageId: messageId ?? "",
+        sessionId: sessionId ?? "",
       }),
     })
   } catch (err) {

@@ -106,64 +106,93 @@ export const ChatArea = forwardRef<HTMLDivElement, ChatAreaProps>(
 
     const suggestions = quickQuestions?.map((text) => ({ text, label: "" })) || []
 
-    const formatFileSize = (bytes: number) => {
-      if (bytes < 1024) return bytes + " B"
-      if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + " KB"
-      return (bytes / (1024 * 1024)).toFixed(1) + " MB"
+    const formatFileSize = (bytes?: number) => {
+      if (bytes == null || Number.isNaN(bytes)) return ""
+      if (bytes < 1024) return `${bytes} B`
+      if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(2)} KB`
+      return `${(bytes / (1024 * 1024)).toFixed(2)} MB`
     }
 
-    /** 渲染用户消息中的附件缩略图行 */
-    const renderAttachments = (msg: Message) => {
-      const hasImages = msg.images && msg.images.length > 0
-      const hasFiles = msg.files && msg.files.length > 0
+    const getFileExtLabel = (file: { name: string; mime_type?: string }) => {
+      const fromName = file.name.includes(".")
+        ? file.name.split(".").pop()?.toUpperCase()
+        : ""
+      if (fromName) return fromName
+      if (file.mime_type?.includes("word")) return "DOCX"
+      if (file.mime_type?.includes("pdf")) return "PDF"
+      if (file.mime_type?.includes("sheet") || file.mime_type?.includes("excel")) return "XLSX"
+      return "FILE"
+    }
+
+    /** 用户消息附件：Kimi 风格 — 图片缩略图 + 文件卡片，与文字气泡分离、右对齐 */
+    const renderUserAttachments = (msg: Message) => {
+      const hasImages = !!(msg.images && msg.images.length > 0)
+      const hasFiles = !!(msg.files && msg.files.length > 0)
       if (!hasImages && !hasFiles) return null
 
       return (
-        <div
-          className="flex flex-wrap gap-2 mb-2"
-          style={{
-            padding: "8px 8px 4px 8px",
-          }}
-        >
-          {msg.images?.map((img, idx) => (
-            <div
-              key={`img-${idx}`}
-              className="h-16 w-16 overflow-hidden rounded-xl border shadow-sm"
-              style={{
-                borderColor: "var(--border)",
-              }}
-            >
-              <img src={img} alt="上传图片" className="h-full w-full object-cover" />
+        <div className="chat-user-attachments">
+          {hasImages && (
+            <div className="chat-user-images">
+              {msg.images!.map((img, idx) => (
+                <button
+                  key={`img-${idx}`}
+                  type="button"
+                  className="chat-user-image-thumb"
+                  onClick={() => window.open(img, "_blank")}
+                  title="查看原图"
+                >
+                  <img src={img} alt={`上传图片 ${idx + 1}`} />
+                </button>
+              ))}
             </div>
-          ))}
-          {msg.files?.map((file, idx) => (
-            <div
-              key={`file-${idx}`}
-              className="flex h-16 flex-col items-center justify-center gap-0.5 rounded-xl border min-w-[64px] px-2 shadow-sm"
-              style={{
-                background: "rgba(255,255,255,0.08)",
-                borderColor: "var(--border)",
-              }}
-            >
-              <div
-                className="flex h-7 w-7 items-center justify-center rounded-lg"
-                style={{ background: "var(--secondary)", color: "var(--text-secondary)" }}
-              >
-                <svg width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-                  <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
-                  <polyline points="14 2 14 8 20 8" />
-                  <line x1="8" y1="13" x2="16" y2="13" />
-                  <line x1="8" y1="17" x2="13" y2="17" />
-                </svg>
-              </div>
-              <span
-                className="max-w-[56px] truncate text-[9px] font-medium"
-                style={{ color: "inherit", opacity: 0.9 }}
-              >
-                {file.name}
-              </span>
+          )}
+          {hasFiles && (
+            <div className="chat-user-files">
+              {msg.files!.map((file, idx) => {
+                const ext = getFileExtLabel(file)
+                const sizeLabel = formatFileSize(file.size)
+                const meta = (
+                  <>
+                    <div className="chat-user-file-icon" aria-hidden>
+                      <svg width="18" height="18" fill="none" stroke="currentColor" strokeWidth="1.8" viewBox="0 0 24 24">
+                        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                        <polyline points="14 2 14 8 20 8" />
+                        <line x1="8" y1="13" x2="16" y2="13" />
+                        <line x1="8" y1="17" x2="13" y2="17" />
+                      </svg>
+                    </div>
+                    <div className="chat-user-file-meta">
+                      <div className="chat-user-file-name" title={file.name}>
+                        {file.name}
+                      </div>
+                      <div className="chat-user-file-sub">
+                        {[ext, sizeLabel].filter(Boolean).join(" ")}
+                      </div>
+                    </div>
+                  </>
+                )
+                if (file.original_url) {
+                  return (
+                    <a
+                      key={`file-${idx}`}
+                      className="chat-user-file-card"
+                      href={file.original_url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                    >
+                      {meta}
+                    </a>
+                  )
+                }
+                return (
+                  <div key={`file-${idx}`} className="chat-user-file-card">
+                    {meta}
+                  </div>
+                )
+              })}
             </div>
-          ))}
+          )}
         </div>
       )
     }
@@ -395,7 +424,7 @@ export const ChatArea = forwardRef<HTMLDivElement, ChatAreaProps>(
                   </div>
                 )}
 
-                <div className="flex flex-col gap-1.5 min-w-0">
+                <div className={`flex flex-col gap-1.5 min-w-0 ${isUser ? "items-end" : ""}`}>
                   {visibleWorkflowProgress && (
                     <WorkflowProgressComponent
                       progress={visibleWorkflowProgress}
@@ -413,18 +442,17 @@ export const ChatArea = forwardRef<HTMLDivElement, ChatAreaProps>(
                     />
                   )}
 
-                  {/* ── 用户消息：附件+文字合并在一个气泡 ── */}
+                  {/* ── 用户消息：附件与文字分离，整体右对齐（Kimi 风格） ── */}
                   {isUser && (msg.text || hasAttachments) && (
-                    <div className="chat-user-bubble relative group overflow-hidden">
-                      {/* 附件缩略图行（文字上方） */}
-                      {hasAttachments && renderAttachments(msg)}
-
-                      {/* 文字内容 */}
-                      {msg.text && (
-                        <div className="chat-text-body px-4 py-3.5">
-                          {msg.text}
+                    <div className="chat-user-message">
+                      {hasAttachments && renderUserAttachments(msg)}
+                      {msg.text ? (
+                        <div className="chat-user-bubble relative group">
+                          <div className="chat-text-body px-4 py-2.5">
+                            {msg.text}
+                          </div>
                         </div>
-                      )}
+                      ) : null}
                     </div>
                   )}
 

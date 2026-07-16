@@ -63,7 +63,7 @@ export function Header({ onMenuToggle, currentTheme, onThemeChange, searchQuery,
       <div className="flex-1" />
 
       {/* 搜索按钮 */}
-      <div className={`flex items-center gap-2 transition-all duration-300 ${searchOpen ? "w-[240px]" : "w-auto"}`}>
+      {/* <div className={`flex items-center gap-2 transition-all duration-300 ${searchOpen ? "w-[240px]" : "w-auto"}`}>
         <button
           onClick={() => {
             if (searchOpen && !searchQuery) {
@@ -125,7 +125,7 @@ export function Header({ onMenuToggle, currentTheme, onThemeChange, searchQuery,
             )}
           </div>
         )}
-      </div>
+      </div> */}
 
       {/* 主题切换 - 直接点击循环 */}
       <button

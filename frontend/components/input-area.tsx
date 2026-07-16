@@ -1,10 +1,11 @@
 "use client"
 
-import { useState, useRef, useCallback } from "react"
+import { useState, useRef, useCallback, useEffect } from "react"
 
 interface InputAreaProps {
   uploadedImages: string[]
   uploadedFiles: { name: string; size: number }[]
+  rawDocFiles?: File[]
   onSendMessage: (text: string) => void
   onImageUpload: (dataUrl: string, rawFile: File) => void
   onFileUpload: (file: { name: string; size: number }, rawFile: File) => void
@@ -19,9 +20,21 @@ interface InputAreaProps {
   onOpenSettings?: () => void
 }
 
+type LightboxPreview =
+  | { kind: "image"; src: string; name: string }
+  | { kind: "pdf"; url: string; name: string }
+  | { kind: "text"; content: string; name: string }
+  | { kind: "unsupported"; name: string; message: string }
+
+function getExt(name: string) {
+  const match = name.toLowerCase().match(/\.([a-z0-9]+)$/)
+  return match?.[1] || ""
+}
+
 export function InputArea({
   uploadedImages,
   uploadedFiles,
+  rawDocFiles = [],
   onSendMessage,
   onImageUpload,
   onFileUpload,
@@ -36,11 +49,42 @@ export function InputArea({
   onOpenSettings,
 }: InputAreaProps) {
   const [text, setText] = useState("")
+  const [lightbox, setLightbox] = useState<LightboxPreview | null>(null)
+  const [lightboxLoading, setLightboxLoading] = useState(false)
+  const [isDragging, setIsDragging] = useState(false)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const imageInputRef = useRef<HTMLInputElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
+  const objectUrlRef = useRef<string | null>(null)
+  const dragDepthRef = useRef(0)
 
   const hasContent = text.trim() || uploadedImages.length > 0 || uploadedFiles.length > 0
+
+  const revokeObjectUrl = useCallback(() => {
+    if (objectUrlRef.current) {
+      URL.revokeObjectURL(objectUrlRef.current)
+      objectUrlRef.current = null
+    }
+  }, [])
+
+  const closeLightbox = useCallback(() => {
+    revokeObjectUrl()
+    setLightbox(null)
+    setLightboxLoading(false)
+  }, [revokeObjectUrl])
+
+  useEffect(() => {
+    return () => revokeObjectUrl()
+  }, [revokeObjectUrl])
+
+  useEffect(() => {
+    if (!lightbox && !lightboxLoading) return
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") closeLightbox()
+    }
+    window.addEventListener("keydown", onKeyDown)
+    return () => window.removeEventListener("keydown", onKeyDown)
+  }, [lightbox, lightboxLoading, closeLightbox])
 
   const handleSend = useCallback(() => {
     if (!hasContent) return
@@ -58,6 +102,91 @@ export function InputArea({
     }
   }
 
+  const addImageFile = useCallback(
+    (file: File) => {
+      const reader = new FileReader()
+      reader.onload = (event) => {
+        if (event.target?.result) {
+          onImageUpload(event.target.result as string, file)
+        }
+      }
+      reader.readAsDataURL(file)
+    },
+    [onImageUpload],
+  )
+
+  const handlePaste = useCallback(
+    (e: React.ClipboardEvent) => {
+      const items = e.clipboardData?.items
+      if (!items?.length) return
+
+      let pastedImage = false
+      for (const item of Array.from(items)) {
+        if (!item.type.startsWith("image/")) continue
+        const blob = item.getAsFile()
+        if (!blob) continue
+
+        pastedImage = true
+        const ext = blob.type.split("/")[1] || "png"
+        const file =
+          blob instanceof File && blob.name
+            ? blob
+            : new File([blob], `截图-${Date.now()}.${ext}`, { type: blob.type || "image/png" })
+
+        addImageFile(file)
+      }
+
+      if (pastedImage) {
+        e.preventDefault()
+      }
+    },
+    [addImageFile],
+  )
+
+  const handleDragEnter = (e: React.DragEvent) => {
+    e.preventDefault()
+    e.stopPropagation()
+    if (!e.dataTransfer.types.includes("Files")) return
+    dragDepthRef.current += 1
+    setIsDragging(true)
+  }
+
+  const handleDragLeave = (e: React.DragEvent) => {
+    e.preventDefault()
+    e.stopPropagation()
+    dragDepthRef.current -= 1
+    if (dragDepthRef.current <= 0) {
+      dragDepthRef.current = 0
+      setIsDragging(false)
+    }
+  }
+
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault()
+    e.stopPropagation()
+    if (e.dataTransfer.types.includes("Files")) {
+      e.dataTransfer.dropEffect = "copy"
+    }
+  }
+
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault()
+    e.stopPropagation()
+    dragDepthRef.current = 0
+    setIsDragging(false)
+
+    const files = Array.from(e.dataTransfer.files || [])
+    if (!files.length) return
+
+    for (const file of files) {
+      if (file.type.startsWith("image/")) {
+        addImageFile(file)
+      } else {
+        onFileUpload({ name: file.name, size: file.size }, file)
+      }
+    }
+  }
+
   const autoResize = (el: HTMLTextAreaElement) => {
     el.style.height = "auto"
     el.style.height = Math.min(el.scrollHeight, 300) + "px"
@@ -66,14 +195,7 @@ export function InputArea({
   const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
     if (!file) return
-
-    const reader = new FileReader()
-    reader.onload = (event) => {
-      if (event.target?.result) {
-        onImageUpload(event.target.result as string, file)
-      }
-    }
-    reader.readAsDataURL(file)
+    addImageFile(file)
     e.target.value = ""
   }
 
@@ -81,75 +203,168 @@ export function InputArea({
     const file = e.target.files?.[0]
     if (!file) return
 
-    onFileUpload({ name: file.name, size: file.size }, file)
+    if (file.type.startsWith("image/")) {
+      addImageFile(file)
+    } else {
+      onFileUpload({ name: file.name, size: file.size }, file)
+    }
     e.target.value = ""
+  }
+
+  const openImageLightbox = (src: string, index: number) => {
+    revokeObjectUrl()
+    setLightbox({ kind: "image", src, name: `图片${index + 1}` })
+  }
+
+  const openFileLightbox = async (index: number) => {
+    const meta = uploadedFiles[index]
+    const file = rawDocFiles[index]
+    if (!meta) return
+
+    const ext = getExt(meta.name)
+    revokeObjectUrl()
+
+    if (!file) {
+      setLightbox({
+        kind: "unsupported",
+        name: meta.name,
+        message: "无法预览该附件",
+      })
+      return
+    }
+
+    setLightboxLoading(true)
+    try {
+      if (file.type === "application/pdf" || ext === "pdf") {
+        const url = URL.createObjectURL(file)
+        objectUrlRef.current = url
+        setLightbox({ kind: "pdf", url, name: meta.name })
+        return
+      }
+
+      if (
+        file.type.startsWith("text/") ||
+        ["txt", "md", "json", "csv", "tsv", "log", "xml", "html", "css", "js", "ts"].includes(ext)
+      ) {
+        const content = await file.text()
+        setLightbox({
+          kind: "text",
+          content: content.slice(0, 200000),
+          name: meta.name,
+        })
+        return
+      }
+
+      setLightbox({
+        kind: "unsupported",
+        name: meta.name,
+        message: "该文件类型暂不支持在线预览",
+      })
+    } catch {
+      setLightbox({
+        kind: "unsupported",
+        name: meta.name,
+        message: "预览失败，请稍后重试",
+      })
+    } finally {
+      setLightboxLoading(false)
+    }
   }
 
   return (
     <div className="input-area-container pt-4">
       <div className="input-area-inner">
-        {/* Upload preview */}
-        {(uploadedImages.length > 0 || uploadedFiles.length > 0) && (
-          <div className="flex flex-wrap gap-2">
-            {uploadedImages.map((img, idx) => (
-              <div
-                key={`img-${idx}`}
-                className="group relative h-16 w-16 overflow-hidden rounded-xl border-2 shadow-sm"
-                style={{
-                  borderColor: "var(--accent)",
-                  animation: "fadeSlideUp 0.25s ease",
-                }}
-              >
-                <img src={img} alt="预览" className="h-full w-full object-cover" />
-                <div className="absolute inset-0 bg-gradient-to-t from-black/50 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
-                <button
-                  onClick={() => onRemoveImage(idx)}
-                  className="absolute right-1.5 top-1.5 flex h-[20px] w-[20px] items-center justify-center rounded-full bg-black/70 text-[11px] text-white opacity-0 group-hover:opacity-100 transition-all hover:bg-red-500 hover:scale-110"
-                >
-                  ✕
-                </button>
-              </div>
-            ))}
-            {uploadedFiles.map((file, idx) => (
-              <div
-                key={`file-${idx}`}
-                className="group relative flex h-16 flex-col items-center justify-center gap-0.5 rounded-xl border-2 min-w-[64px] px-2 shadow-sm"
-                style={{
-                  background: "var(--card)",
-                  borderColor: "var(--accent)",
-                  animation: "fadeSlideUp 0.25s ease",
-                }}
-              >
-                <div
-                  className="flex h-7 w-7 items-center justify-center rounded-lg"
-                  style={{ background: "var(--secondary)", color: "var(--text-secondary)" }}
-                >
-                  <svg width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
-                    <polyline points="14 2 14 8 20 8" />
-                    <line x1="8" y1="13" x2="16" y2="13" />
-                    <line x1="8" y1="17" x2="13" y2="17" />
-                  </svg>
-                </div>
-                <span
-                  className="max-w-[56px] truncate text-[9px] font-medium"
-                  style={{ color: "var(--foreground)" }}
-                >
-                  {file.name}
-                </span>
-                <button
-                  onClick={() => onRemoveFile(idx)}
-                  className="absolute -right-1.5 -top-1.5 flex h-[18px] w-[18px] items-center justify-center rounded-full bg-red-500 text-[10px] text-white opacity-0 group-hover:opacity-100 transition-all hover:scale-110 shadow"
-                >
-                  ✕
-                </button>
-              </div>
-            ))}
-          </div>
-        )}
+        <div
+          className={`input-box${isDragging ? " is-dragging" : ""}`}
+          onDragEnter={handleDragEnter}
+          onDragLeave={handleDragLeave}
+          onDragOver={handleDragOver}
+          onDrop={handleDrop}
+        >
+          {isDragging && (
+            <div className="input-box-drop-hint" aria-hidden="true">
+              松开以上传图片或文件
+            </div>
+          )}
 
-        {/* 输入框 — Kimi 样式，原有文案与结构 */}
-        <div className="input-box">
+          {(uploadedImages.length > 0 || uploadedFiles.length > 0) && (
+            <div className="upload-preview-list">
+              {uploadedFiles.map((file, idx) => {
+                const ext = (file.name.split(".").pop() || "FILE").toUpperCase()
+                const sizeKb = (file.size / 1024).toFixed(2)
+                return (
+                  <div
+                    key={`file-${idx}`}
+                    className="upload-preview-file group"
+                    role="button"
+                    tabIndex={0}
+                    onClick={() => openFileLightbox(idx)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" || e.key === " ") {
+                        e.preventDefault()
+                        openFileLightbox(idx)
+                      }
+                    }}
+                  >
+                    <div className="upload-preview-file-icon" aria-hidden="true">
+                      <svg width="20" height="20" fill="none" stroke="currentColor" strokeWidth="1.5" viewBox="0 0 24 24">
+                        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                        <polyline points="14 2 14 8 20 8" />
+                        <line x1="8" y1="13" x2="16" y2="13" />
+                        <line x1="8" y1="17" x2="13" y2="17" />
+                      </svg>
+                    </div>
+                    <div className="upload-preview-file-meta">
+                      <span className="upload-preview-file-name" title={file.name}>{file.name}</span>
+                      <span className="upload-preview-file-sub">{ext} {sizeKb} KB</span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        onRemoveFile(idx)
+                      }}
+                      className="upload-preview-remove"
+                      title="移除"
+                      aria-label="移除附件"
+                    >
+                      ✕
+                    </button>
+                  </div>
+                )
+              })}
+              {uploadedImages.map((img, idx) => (
+                <div
+                  key={`img-${idx}`}
+                  className="upload-preview-image group"
+                  role="button"
+                  tabIndex={0}
+                  onClick={() => openImageLightbox(img, idx)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" || e.key === " ") {
+                      e.preventDefault()
+                      openImageLightbox(img, idx)
+                    }
+                  }}
+                >
+                  <img src={img} alt="预览" />
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      onRemoveImage(idx)
+                    }}
+                    className="upload-preview-remove"
+                    title="移除"
+                    aria-label="移除图片"
+                  >
+                    ✕
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+
           <textarea
             ref={textareaRef}
             className="input-box-textarea"
@@ -161,6 +376,7 @@ export function InputArea({
               autoResize(e.target)
             }}
             onKeyDown={handleKeydown}
+            onPaste={handlePaste}
           />
 
           <div className="input-box-toolbar">
@@ -179,7 +395,7 @@ export function InputArea({
             </div>
 
             <div className="input-box-actions">
-              <button
+              {/* <button
                 type="button"
                 onClick={onOpenSettings}
                 className="input-box-icon-btn"
@@ -189,7 +405,7 @@ export function InputArea({
                   <path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z" />
                   <circle cx="12" cy="12" r="3" />
                 </svg>
-              </button>
+              </button> */}
               <button
                 type="button"
                 onClick={() => fileInputRef.current?.click()}
@@ -234,12 +450,6 @@ export function InputArea({
             </div>
           </div>
         </div>
-
-        <div className="input-box-hint">
-          <span>Enter 发送</span>
-          <span>Shift + Enter 换行</span>
-          <span>支持图片与文档上传</span>
-        </div>
       </div>
 
       <input
@@ -255,6 +465,52 @@ export function InputArea({
         className="hidden"
         onChange={handleFileChange}
       />
+
+      {(lightbox || lightboxLoading) && (
+        <div className="upload-lightbox" onClick={closeLightbox} role="dialog" aria-modal="true">
+          <button
+            type="button"
+            className="upload-lightbox-close"
+            onClick={closeLightbox}
+            aria-label="关闭预览"
+          >
+            <svg width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+              <line x1="18" y1="6" x2="6" y2="18" />
+              <line x1="6" y1="6" x2="18" y2="18" />
+            </svg>
+          </button>
+          <div
+            className="upload-lightbox-center"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {lightboxLoading ? (
+              <div className="upload-lightbox-message">正在加载预览...</div>
+            ) : null}
+
+            {lightbox?.kind === "image" && (
+              <img src={lightbox.src} alt={lightbox.name} className="upload-lightbox-image" />
+            )}
+
+            {lightbox?.kind === "pdf" && (
+              <iframe src={lightbox.url} title={lightbox.name} className="upload-lightbox-frame" />
+            )}
+
+            {lightbox?.kind === "text" && (
+              <div className="upload-lightbox-text">
+                <div className="upload-lightbox-text-title">{lightbox.name}</div>
+                <pre>{lightbox.content}</pre>
+              </div>
+            )}
+
+            {lightbox?.kind === "unsupported" && (
+              <div className="upload-lightbox-message">
+                <div className="upload-lightbox-text-title">{lightbox.name}</div>
+                <p>{lightbox.message}</p>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   )
 }

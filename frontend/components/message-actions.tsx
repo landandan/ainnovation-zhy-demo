@@ -135,24 +135,19 @@ export function MessageActions({
     )
   }
 
-  const buildFeedbackContent = () => {
-    const parts = [...selectedReasons]
-    const trimmed = feedbackText.trim()
-    if (trimmed) parts.push(trimmed)
-    return parts.join("；")
-  }
-
   const handleSubmitFeedback = async () => {
     if (!feedbackModal || !messageId || !agentId || !userId) return
 
     setSubmitting(true)
     try {
-      const content = buildFeedbackContent()
+      const tags = selectedReasons.join(",")
+      const content = feedbackText.trim()
       await submitMessageFeedback({
         agentId,
         messageId,
         userId,
         rating: feedbackModal,
+        ...(tags ? { tags } : {}),
         ...(content ? { content } : {}),
       })
       setFeedback(feedbackModal)
@@ -205,7 +200,7 @@ export function MessageActions({
           </button>
         )}
 
-        <button
+        {/* <button
           type="button"
           className="message-action-btn"
           onClick={handleShare}
@@ -218,7 +213,7 @@ export function MessageActions({
             <polyline points="16 6 12 2 8 6" />
             <line x1="12" y1="2" x2="12" y2="15" />
           </svg>
-        </button>
+        </button> */}
 
         <button
           type="button"
