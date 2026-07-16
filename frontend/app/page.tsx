@@ -518,6 +518,8 @@ export default function Page() {
     () => agentDefs.filter((agent) => agent.isActive),
     [agentDefs],
   )
+  console.log("🚀 ~  ~ agentDefs: ", agentDefs);
+  console.log("🚀 ~ Page ~ activeAgentDefs: ", activeAgentDefs);
 
   const currentAgentLabel =
     activeAgentDefs.find((d) => d.id === currentAgentId)?.label ?? "未知应用"
@@ -537,15 +539,15 @@ export default function Page() {
           getAgents(),
           getConversations({ pageNum: 1, pageSize: CONVERSATIONS_PAGE_SIZE }),
         ])
+        console.log("🚀 ~ loadData ~ agentsRes: ", agentsRes);
+        console.log("🚀 ~ loadData ~ convsRes: ", convsRes);
         //const convsRes = cRes.data
-        console.log('agentsRes123:', agentsRes)
-        console.log('convsRes123:', convsRes)
-        if (agentsRes?.rows?.length > 0) {
-          const mapped = agentsRes.rows.map(mapAgentDef)
+        if (agentsRes?.data?.length > 0) {
+          const mapped = agentsRes.data.map(mapAgentDef)
           setAgentDefs(mapped)
           // 建立 agent_id → db_id 映射
           const idMap = new Map<string, number>()
-          for (const a of agentsRes.rows) {
+          for (const a of agentsRes.data) {
             idMap.set(a.agent_id, a.id)
           }
           agentIdToDbId.current = idMap

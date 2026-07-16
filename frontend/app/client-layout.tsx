@@ -8,7 +8,8 @@ import { isMockMode } from "@/lib/mock-config"
 type TransitionPhase = "idle" | "cover" | "reveal"
 
 function AuthGuard({ children }: { children: React.ReactNode }) {
-  const { user, initialized } = useAuth()
+  const { user, initialized, enableMockLogin } = useAuth()
+  console.log("🚀 ~ AuthGuard ~ user: ", user);
   const pathname = usePathname()
   const router = useRouter()
 
@@ -16,6 +17,7 @@ function AuthGuard({ children }: { children: React.ReactNode }) {
     if (!initialized) return
 
     const isLoginPage = pathname === "/login"
+    console.log("🚀 ~  ~ isLoginPage: ", isLoginPage);
 
     // Mock 模式下不强制跳转登录页（auth-store 已自动注入 mock 用户）
     if (isMockMode()) {
@@ -27,12 +29,13 @@ function AuthGuard({ children }: { children: React.ReactNode }) {
     }
 
     if (!user && !isLoginPage) {
-      router.replace("/login")
-      // enableMockLogin()
+      // router.replace("/login")
+      // 未登录且不在登录页 → 启用 Guest 登录
+      enableMockLogin()
     } else if (user && isLoginPage) {
       router.replace("/")
     }
-  }, [user, initialized, pathname, router])
+  }, [user, initialized, pathname, router, enableMockLogin])
 
   if (!initialized) {
     return (

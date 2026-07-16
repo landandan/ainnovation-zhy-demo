@@ -81,6 +81,19 @@ export interface LogoutResponse {
   data: logoutData
 }
 
+export async function guestLoginApi(data: LoginRequest): Promise<LoginResponse> {
+    console.log("🚀 ~ guestLoginApi ~ data: ", data);
+  if (isMockMode()) {
+    await mockDelay()
+    const result = mockLogin(data.username, data.password)
+    return result
+  }
+  return request<LoginResponse>("POST", "/h5/auth/autoLogin", {
+    ...data,
+    "clientId": "0d4c873ff6146ecd7f38e2e45526ab1b",
+  })
+}
+
 export async function login(data: LoginRequest): Promise<LoginResponse> {
   if (isMockMode()) {
     await mockDelay()

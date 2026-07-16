@@ -1,9 +1,10 @@
 "use client"
 
-import { useEffect, useMemo, useState } from "react"
+import {useEffect, useMemo, useRef, useState} from "react"
 import type { ChatHistoryItem } from "@/app/page"
 import type { UserInfo } from "@/lib/api-client"
 import type { AgentDef } from "./agent-section"
+import LoginModal, { LoginModalRef } from "@/components/login-modal"
 
 type HistoryDeleteDialogState =
   | {
@@ -104,6 +105,8 @@ export function Sidebar({
     })
   }, [agentNames, chatHistory, normalizedSearch])
 
+  const loginModalRef = useRef<LoginModalRef>(null);
+
   useEffect(() => {
     if (!historyMenu) return
     const closeMenu = () => setHistoryMenu(null)
@@ -173,6 +176,7 @@ export function Sidebar({
         }}
       >
         {/* 顶部 */}
+        <LoginModal ref={loginModalRef} />
         <div className="sidebar-header" style={{ padding: "12px 12px" }}>
           <div className="flex items-center justify-between w-full">
             <div className="flex items-center gap-2" style={{ opacity: collapsed ? 0 : 1, transition: "opacity 0.2s ease", overflow: "hidden" }}>
@@ -613,7 +617,7 @@ export function Sidebar({
                 {userInitial}
               </div>
               <div className="min-w-0 flex-1">
-                <div className="text-[13px] font-semibold truncate" style={{ color: "var(--foreground)" }}>
+                <div className="text-[13px] font-semibold truncate" style={{ color: "var(--foreground)" }} onClick={() => loginModalRef.current?.open()}>
                   {displayName}
                 </div>
                 <div className="text-[11px] truncate" style={{ color: "var(--text-muted)" }}>
