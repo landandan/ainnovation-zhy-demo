@@ -10,11 +10,12 @@ import {
   isAuthenticated as checkAuth,
   type LoginRequest,
   type RegisterRequest,
-  type UserInfo,
+  type UserInfo, getToken, guestLoginApi,
 } from "../api-client"
 import { getCachedUser, setCachedUser, setClientId } from "./token"
 import { isMockMode, getMockToken, getMockUser, clearMockData, disableMockMode } from "../mock/config"
 import { ApiError } from "../http/client"
+import getDeviceId from "@/app/utils/fingerprintjs";
 
 interface AuthContextType {
   user: UserInfo | null
@@ -58,23 +59,55 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setUser(cached)
     }
 
-    getMe()
-      .then((res) => {
-        setUser(res.user)
-        setCachedUser(res.user)
+    // getMe()
+    //   .then((res) => {
+    //     setUser(res.user)
+    //     setCachedUser(res.user)
+    //   })
+    //   .catch((err) => {
+    //     // 仅 token 明确失效时清登录态；网络/接口不存在时保留本地会话
+    //     const status = err instanceof ApiError ? err.status : 0
+    //     if (status === 401 || status === 403) {
+    //       removeToken()
+    //       setUser(null)
+    //     } else if (!cached) {
+    //       removeToken()
+    //       setUser(null)
+    //     }
+    //   })
+    //   .finally(() => setInitialized(true))
+    setInitialized(true)
+  }, [])
+
+  const guestLogin = useCallback(async (): Promise<UserInfo> => {
+    setLoading(true)
+    try {
+      const res = await guestLoginApi({
+        token: getToken(),
+        guestId: await getDeviceId(),
       })
-      .catch((err) => {
-        // 仅 token 明确失效时清登录态；网络/接口不存在时保留本地会话
-        const status = err instanceof ApiError ? err.status : 0
-        if (status === 401 || status === 403) {
-          removeToken()
-          setUser(null)
-        } else if (!cached) {
-          removeToken()
-          setUser(null)
+      console.log("🚀 ~  ~ res: ", res);
+
+      const accessToken = res?.data?.access_token || res?.data?.token
+      const nextUser = res?.data?.user
+
+      if (accessToken && nextUser && isLoginSuccess(res?.code)) {
+        setToken(accessToken)
+        setCachedUser(nextUser)
+        if (res?.data?.client_id) {
+          setClientId(res.data.client_id)
         }
-      })
-      .finally(() => setInitialized(true))
+        setUser(nextUser)
+        if (!isMockMode()) {
+          clearMockData()
+        }
+        return nextUser
+      }
+
+      throw new Error((res as { msg?: string })?.msg || "游客登录失败！！！")
+    } finally {
+      setLoading(false)
+    }
   }, [])
 
   const login = useCallback(async (data: LoginRequest): Promise<UserInfo> => {
@@ -135,15 +168,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (wasMockMode) {
       disableMockMode()
     }
-    const target = wasMockMode ? "/login?mock=true" : "/login"
-    window.location.href = target
+    // const target = wasMockMode ? "/login?mock=true" : "/login"
+    // window.location.href =
+    await guestLogin()
   }, [])
 
   const enableMockLogin = useCallback(async () => {
-    await login({
-      username: "admin",
-      password: "admin123",
-    })
+    // 使用游客登录
+    await guestLogin()
   }, [login])
 
   return (

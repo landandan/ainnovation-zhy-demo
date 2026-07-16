@@ -81,6 +81,19 @@ export interface LogoutResponse {
   data: logoutData
 }
 
+export async function guestLoginApi(data: LoginRequest): Promise<LoginResponse> {
+    console.log("🚀 ~ guestLoginApi ~ data: ", data);
+  if (isMockMode()) {
+    await mockDelay()
+    const result = mockLogin(data.username, data.password)
+    return result
+  }
+  return request<LoginResponse>("POST", "/h5/auth/autoLogin", {
+    ...data,
+    "clientId": "0d4c873ff6146ecd7f38e2e45526ab1b",
+  })
+}
+
 export async function login(data: LoginRequest): Promise<LoginResponse> {
   if (isMockMode()) {
     await mockDelay()
@@ -101,7 +114,7 @@ export async function logout(): Promise<LogoutResponse> {
   //   // Mock 模式下注册直接返回 admin 用户
   //   return { token: "mock-jwt-token-admin-1234567890", user: getMockUser() }
   // }
-  return request<LogoutResponse>("POST", "/auth/logout", {})
+  return request<LogoutResponse>("POST", "/h5/auth/logout", {})
 }
 
 export async function register(data: RegisterRequest): Promise<LoginResponse> {

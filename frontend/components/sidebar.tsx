@@ -1,9 +1,11 @@
 "use client"
 
-import { useEffect, useMemo, useState } from "react"
+import {useEffect, useMemo, useRef, useState} from "react"
 import type { ChatHistoryItem } from "@/app/page"
 import type { UserInfo } from "@/lib/api-client"
 import type { AgentDef } from "./agent-section"
+import LoginModal, { LoginModalRef } from "@/components/login-modal"
+import {isGuestUser} from "@/lib/auth";
 
 type HistoryDeleteDialogState =
   | {
@@ -104,6 +106,8 @@ export function Sidebar({
     })
   }, [agentNames, chatHistory, normalizedSearch])
 
+  const loginModalRef = useRef<LoginModalRef>(null);
+
   useEffect(() => {
     if (!historyMenu) return
     const closeMenu = () => setHistoryMenu(null)
@@ -173,6 +177,7 @@ export function Sidebar({
         }}
       >
         {/* 顶部 */}
+        <LoginModal ref={loginModalRef} />
         <div className="sidebar-header" style={{ padding: "12px 12px" }}>
           <div className="flex items-center justify-between w-full">
             <div className="flex items-center gap-2" style={{ opacity: collapsed ? 0 : 1, transition: "opacity 0.2s ease", overflow: "hidden" }}>
@@ -612,12 +617,12 @@ export function Sidebar({
               >
                 {userInitial}
               </div>
-              <div className="min-w-0 flex-1">
-                <div className="text-[13px] font-semibold truncate" style={{ color: "var(--foreground)" }}>
+              <div className="min-w-0 flex-1" onClick={() => loginModalRef.current?.open()}>
+                <div className="text-[13px] font-semibold truncate" style={{ color: "var(--foreground)" }} >
                   {displayName}
                 </div>
                 <div className="text-[11px] truncate" style={{ color: "var(--text-muted)" }}>
-                  {user?.roles?.includes("admin") ? "管理员" : "普通用户"}
+                  {isGuestUser() ? "点击登录" : user?.roles?.includes("admin") ? "管理员" : "普通用户"}
                 </div>
               </div>
               <div className="flex items-center gap-1">
@@ -633,19 +638,38 @@ export function Sidebar({
                     <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
                   </svg>
                 </button> */}
-                <button
-                  onClick={handleLogout}
-                  className="flex h-[36px] w-[36px] items-center justify-center rounded-xl transition-all flex-shrink-0 cursor-pointer"
-                  style={{ color: "var(--text-muted)" }}
-                  aria-label="登出"
-                  title="登出"
-                >
-                  <svg width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-                    <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
-                    <polyline points="16 17 21 12 16 7" />
-                    <line x1="21" y1="12" x2="9" y2="12" />
-                  </svg>
-                </button>
+                {
+                  isGuestUser() &&
+                    <button
+                        onClick={() => loginModalRef.current?.open()}
+                        className="flex h-[36px] w-[36px] items-center justify-center rounded-xl transition-all flex-shrink-0 cursor-pointer"
+                        style={{ color: "var(--text-muted)" }}
+                        aria-label="登录"
+                        title="登录"
+                    >
+                      <svg width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                        <path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4" />
+                        <polyline points="10 17 15 12 10 7" />
+                        <line x1="15" y1="12" x2="3" y2="12" />
+                      </svg>
+                    </button>
+                }
+                {
+                  !isGuestUser() &&
+                    <button
+                        onClick={handleLogout}
+                        className="flex h-[36px] w-[36px] items-center justify-center rounded-xl transition-all flex-shrink-0 cursor-pointer"
+                        style={{ color: "var(--text-muted)" }}
+                        aria-label="登出"
+                        title="登出"
+                    >
+                      <svg width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                        <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
+                        <polyline points="16 17 21 12 16 7" />
+                        <line x1="21" y1="12" x2="9" y2="12" />
+                      </svg>
+                    </button>
+                }
               </div>
             </div>
             </div>

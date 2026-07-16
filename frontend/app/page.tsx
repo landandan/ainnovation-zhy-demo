@@ -548,15 +548,15 @@ export default function Page() {
           getAgents(),
           getConversations({ pageNum: 1, pageSize: CONVERSATIONS_PAGE_SIZE }),
         ])
+        console.log("🚀 ~ loadData ~ agentsRes: ", agentsRes);
+        console.log("🚀 ~ loadData ~ convsRes: ", convsRes);
         //const convsRes = cRes.data
-        console.log('agentsRes123:', agentsRes)
-        console.log('convsRes123:', convsRes)
-        if (agentsRes?.rows?.length > 0) {
-          const mapped = agentsRes.rows.map(mapAgentDef)
+        if (agentsRes?.data?.length > 0) {
+          const mapped = agentsRes.data.map(mapAgentDef)
           setAgentDefs(mapped)
           // 建立 agent id → db id 映射（当前接口 id 即 appId）
           const idMap = new Map<string, number>()
-          for (const a of agentsRes.rows) {
+          for (const a of agentsRes.data) {
             const key = String(a.id)
             const numericId = Number(a.id)
             if (key) idMap.set(key, Number.isFinite(numericId) ? numericId : 0)

@@ -37,6 +37,13 @@ export function getCachedUser<T = unknown>(): T | null {
   }
 }
 
+/**
+ * 检查当前用户是否为游客用户
+ */
+export function isGuestUser(): boolean {
+  return getCachedUser() === null || getCachedUser<{ display_name: string }>().display_name === '游客'
+}
+
 export function setCachedUser(user: unknown): void {
   if (typeof window === "undefined") return
   if (!user) return
