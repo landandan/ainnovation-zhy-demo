@@ -13,11 +13,11 @@ import { useAuth } from "@/lib/auth-store"
 import {
   getAgents,
   getConversations,
-  createConversation,
-  updateConversation,
+  // createConversation,
+  // updateConversation,
   deleteConversationApi,
   getMessages,
-  addMessage,
+  // addMessage,
   uploadFileSingle,
   extractOssIdFromUpload,
   type AgentDefApi,
@@ -634,30 +634,30 @@ export default function Page() {
     setChatHistory(buildChatHistory())
   }, [buildChatHistory])
 
-  /* ───── 保存消息到后端 ───── */
-  const persistMessage = useCallback(
-    async (
-      convId: number,
-      role: string,
-      content: string,
-      options?: {
-        attachments?: MessageFileAttachment[]
-        difyMessageId?: string
-      },
-    ) => {
-      try {
-        await addMessage(convId, {
-          role,
-          content,
-          attachments: options?.attachments?.length ? JSON.stringify(options.attachments) : undefined,
-          dify_message_id: options?.difyMessageId,
-        })
-      } catch (err) {
-        console.error("保存消息失败:", err)
-      }
-    },
-    [],
-  )
+  /* ───── 保存消息到后端（已废弃：旧 /conversations/:id/messages） ───── */
+  // const persistMessage = useCallback(
+  //   async (
+  //     convId: number,
+  //     role: string,
+  //     content: string,
+  //     options?: {
+  //       attachments?: MessageFileAttachment[]
+  //       difyMessageId?: string
+  //     },
+  //   ) => {
+  //     try {
+  //       await addMessage(convId, {
+  //         role,
+  //         content,
+  //         attachments: options?.attachments?.length ? JSON.stringify(options.attachments) : undefined,
+  //         dify_message_id: options?.difyMessageId,
+  //       })
+  //     } catch (err) {
+  //       console.error("保存消息失败:", err)
+  //     }
+  //   },
+  //   [],
+  // )
 
   /* ───── 主题切换 ───── */
   useEffect(() => {
@@ -843,7 +843,8 @@ export default function Page() {
 
   const handleRenameHistory = async (id: number, newTitle: string) => {
     try {
-      await updateConversation(id, { title: newTitle })
+      // 已废弃：旧 /conversations 重命名接口
+      // await updateConversation(id, { title: newTitle })
       setConversations((prev) =>
         prev.map((c) => (c.id === id ? { ...c, title: newTitle } : c))
       )
@@ -1163,43 +1164,38 @@ export default function Page() {
         }
       }
 
-      // 如果是新对话（无 activeConversationId），创建后端 conversation
-      if (newDifyConversationId && !activeConversationId) {
-        try {
-          const dbAgentId = agentIdToDbId.current.get(currentAgentId)
-          if (dbAgentId) {
-            const convRes = await createConversation({
-              agent_id: dbAgentId,
-              title: userText.slice(0, 20) || "新对话",
-            })
-            const newConv = convRes.conversation
-            setActiveConversationId(newConv.id)
-
-            // 刷新 conversations 列表
-            setConversations((prev) => [newConv, ...prev])
-
-            // 保存用户消息和 AI 回复到后端
-            await persistMessage(newConv.id, "user", userText, {
-              attachments: userAttachments,
-            })
-            await persistMessage(newConv.id, "assistant", rawAssistantContent || fullAnswer, {
-              attachments: assistantAttachments,
-              difyMessageId: assistantDifyMessageId,
-            })
-          }
-        } catch (err) {
-          console.error("创建后端对话失败:", err)
-        }
-      } else if (activeConversationId) {
-        // 已有对话，追加消息
-        await persistMessage(activeConversationId, "user", userText, {
-          attachments: userAttachments,
-        })
-        await persistMessage(activeConversationId, "assistant", rawAssistantContent || fullAnswer, {
-          attachments: assistantAttachments,
-          difyMessageId: assistantDifyMessageId,
-        })
-      }
+      // 已废弃：旧 /conversations 创建与消息落库（会话由 /h5/chat/* 管理）
+      // if (newDifyConversationId && !activeConversationId) {
+      //   try {
+      //     const dbAgentId = agentIdToDbId.current.get(currentAgentId)
+      //     if (dbAgentId) {
+      //       const convRes = await createConversation({
+      //         agent_id: dbAgentId,
+      //         title: userText.slice(0, 20) || "新对话",
+      //       })
+      //       const newConv = convRes.conversation
+      //       setActiveConversationId(newConv.id)
+      //       setConversations((prev) => [newConv, ...prev])
+      //       await persistMessage(newConv.id, "user", userText, {
+      //         attachments: userAttachments,
+      //       })
+      //       await persistMessage(newConv.id, "assistant", rawAssistantContent || fullAnswer, {
+      //         attachments: assistantAttachments,
+      //         difyMessageId: assistantDifyMessageId,
+      //       })
+      //     }
+      //   } catch (err) {
+      //     console.error("创建后端对话失败:", err)
+      //   }
+      // } else if (activeConversationId) {
+      //   await persistMessage(activeConversationId, "user", userText, {
+      //     attachments: userAttachments,
+      //   })
+      //   await persistMessage(activeConversationId, "assistant", rawAssistantContent || fullAnswer, {
+      //     attachments: assistantAttachments,
+      //     difyMessageId: assistantDifyMessageId,
+      //   })
+      // }
     } catch (err: unknown) {
       // 如果是用户主动取消（AbortError），静默处理，不显示错误
       if (err instanceof DOMException && err.name === "AbortError") {

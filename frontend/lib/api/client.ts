@@ -20,13 +20,13 @@ import {
   createMockDifyConfig,
   updateMockDifyConfig,
   deleteMockDifyConfig,
-  getMockConversations,
-  createMockConversation,
-  updateMockConversation,
-  deleteMockConversation,
+  // getMockConversations,
+  // createMockConversation,
+  // updateMockConversation,
+  // deleteMockConversation,
   deleteMockConversationBySessionId,
   getMockMessages,
-  addMockMessage,
+  // addMockMessage,
   getMockUserSettings,
   updateMockUserSettings,
   mockDelay,
@@ -282,40 +282,41 @@ export async function getConversations(params?: {
   )
 }
 
-export async function createConversation(data: {
-  agent_id: number
-  title?: string
-}): Promise<{ conversation: ConversationApi }> {
-  if (isMockMode()) {
-    await mockDelay()
-    return createMockConversation(data)
-  }
-  return request<{ conversation: ConversationApi }>("POST", "/conversations", data)
-}
+// 已废弃：旧 /conversations 接口不再使用（会话由 /h5/chat/* 管理）
+// export async function createConversation(data: {
+//   agent_id: number
+//   title?: string
+// }): Promise<{ conversation: ConversationApi }> {
+//   if (isMockMode()) {
+//     await mockDelay()
+//     return createMockConversation(data)
+//   }
+//   return request<{ conversation: ConversationApi }>("POST", "/conversations", data)
+// }
 
-export async function getConversation(
-  convId: number,
-): Promise<{ conversation: ConversationApi }> {
-  if (isMockMode()) {
-    await mockDelay()
-    const res = getMockConversations()
-    const conv = res.conversations.find((c) => c.id === convId)
-    if (!conv) throw new ApiError("Mock: 对话不存在", 404)
-    return { conversation: conv }
-  }
-  return request<{ conversation: ConversationApi }>("GET", `/conversations/${convId}`)
-}
+// export async function getConversation(
+//   convId: number,
+// ): Promise<{ conversation: ConversationApi }> {
+//   if (isMockMode()) {
+//     await mockDelay()
+//     const res = getMockConversations()
+//     const conv = res.conversations.find((c) => c.id === convId)
+//     if (!conv) throw new ApiError("Mock: 对话不存在", 404)
+//     return { conversation: conv }
+//   }
+//   return request<{ conversation: ConversationApi }>("GET", `/conversations/${convId}`)
+// }
 
-export async function updateConversation(
-  convId: number,
-  data: { title?: string; is_pinned?: boolean; is_archived?: boolean },
-): Promise<{ conversation: ConversationApi }> {
-  if (isMockMode()) {
-    await mockDelay()
-    return updateMockConversation(convId, data)
-  }
-  return request<{ conversation: ConversationApi }>("PUT", `/conversations/${convId}`, data)
-}
+// export async function updateConversation(
+//   convId: number,
+//   data: { title?: string; is_pinned?: boolean; is_archived?: boolean },
+// ): Promise<{ conversation: ConversationApi }> {
+//   if (isMockMode()) {
+//     await mockDelay()
+//     return updateMockConversation(convId, data)
+//   }
+//   return request<{ conversation: ConversationApi }>("PUT", `/conversations/${convId}`, data)
+// }
 
 export async function deleteConversationApi(sessionId: string): Promise<{ message: string }> {
   if (isMockMode()) {
@@ -418,23 +419,24 @@ export async function getMessages(
   return request<MessagesListResponse>("POST", `/h5/chat/messages?sessionId=${sessionId}`)
 }
 
-export async function addMessage(
-  convId: number,
-  data: {
-    role: string
-    content: string
-    attachments?: string
-    metadata?: string
-    dify_message_id?: string
-    is_error?: boolean
-  },
-): Promise<{ message: MessageApi }> {
-  if (isMockMode()) {
-    await mockDelay()
-    return addMockMessage(convId, data)
-  }
-  return request<{ message: MessageApi }>("POST", `/conversations/${convId}/messages`, data)
-}
+// 已废弃：旧 /conversations/:id/messages 接口不再使用
+// export async function addMessage(
+//   convId: number,
+//   data: {
+//     role: string
+//     content: string
+//     attachments?: string
+//     metadata?: string
+//     dify_message_id?: string
+//     is_error?: boolean
+//   },
+// ): Promise<{ message: MessageApi }> {
+//   if (isMockMode()) {
+//     await mockDelay()
+//     return addMockMessage(convId, data)
+//   }
+//   return request<{ message: MessageApi }>("POST", `/conversations/${convId}/messages`, data)
+// }
 
 /* ───── Settings API ───── */
 
