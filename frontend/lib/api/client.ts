@@ -361,6 +361,14 @@ export async function deleteConversationApi(sessionId: string): Promise<{ messag
   return request<{ message: string }>("POST", `/h5/chat/messages/del?sessionId=${encodeURIComponent(sessionId)}`)
 }
 
+/** 重命名会话：POST /h5/chat/messages/rename */
+export async function renameConversationApi(
+  sessionId: string,
+  title: string,
+): Promise<{ message?: string; code?: number | string }> {
+  return request("POST", "/h5/chat/messages/rename", { sessionId, title })
+}
+
 /** 从单文件上传响应中提取 ossId */
 export function extractOssIdFromUpload(res: unknown): string | number | null {
   if (!res || typeof res !== "object") return null

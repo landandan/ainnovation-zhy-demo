@@ -16,6 +16,7 @@ import {
   // createConversation,
   // updateConversation,
   deleteConversationApi,
+  renameConversationApi,
   getMessages,
   // addMessage,
   uploadFileSingle,
@@ -41,7 +42,8 @@ import {
   handleWorkflowStopped,
 } from '@/lib/workflow-progress'
 import { getUserSettings, updateUserSettings } from "@/lib/api-client"
-import { isAuthenticated } from "@/lib/auth"
+import { isAuthenticated, removeToken } from "@/lib/auth"
+import notification from "@/components/ui/Notification"
 export interface MessageFileAttachment {
   name: string
   size?: number
@@ -850,13 +852,18 @@ export default function Page() {
     }
   }
 
-  const handleRenameHistory = async (id: number, newTitle: string) => {
+  const handleRenameHistory = async (sessionIdToRename: string, newTitle: string) => {
+    if (!sessionIdToRename || !newTitle.trim()) return
     try {
-      // 已废弃：旧 /conversations 重命名接口
-      // await updateConversation(id, { title: newTitle })
+      await renameConversationApi(sessionIdToRename, newTitle.trim())
       setConversations((prev) =>
-        prev.map((c) => (c.id === id ? { ...c, title: newTitle } : c))
+        prev.map((c) =>
+          c.sessionId === sessionIdToRename
+            ? { ...c, title: newTitle.trim(), query: newTitle.trim() }
+            : c,
+        ),
       )
+      await refreshConversations()
       success("重命名成功")
     } catch (err) {
       console.error("重命名对话失败:", err)
@@ -950,7 +957,35 @@ export default function Page() {
 
         buffer += decoder.decode(value, { stream: true })
         console.log('buffer123:', buffer)
-        //console.log('buffer123:', buffer)
+        // 非 SSE：整包 JSON，如 {"code":401,"msg":"登录过期，请重新登录"}
+        try {
+          const authPayload = JSON.parse(buffer.trim()) as { code?: number | string; msg?: string }
+          if (authPayload.code === 401 || authPayload.code === "401") {
+            removeToken()
+            notification.open({
+              title: "登录过期",
+              description: authPayload.msg || "请重新登录",
+              duration: 3000,
+            })
+            setIsStreaming(false)
+            setMessages((prev) =>
+              prev.map((m) =>
+                m.waiting
+                  ? {
+                      ...m,
+                      waiting: false,
+                      loading: false,
+                      text: authPayload.msg || "登录过期，请重新登录",
+                    }
+                  : m,
+              ),
+            )
+            setTimeout(() => window.location.reload(), 3000)
+            return
+          }
+        } catch {
+          // 未拼完整或仍是 SSE 文本，继续按行解析
+        }
         const lines = buffer.split("\n")
         console.log('lines123:', lines)
         buffer = lines.pop() || ""
