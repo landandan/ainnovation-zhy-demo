@@ -32,11 +32,12 @@ import {
   mockDelay,
 } from "../mock/config"
 import { ApiError, request } from "../http/client"
-import { getToken, getClientId } from "../auth/token"
+import {getToken, getClientId, setToken, setCachedUser, setClientId} from "../auth/token"
 import { API_BASE_URL } from "../http/routes"
+import getDeviceId from "@/app/utils/fingerprintjs";
+import {isLoginSuccess} from "@/lib/auth";
 
 export { ApiError } from "../http/client"
-export { getToken, setToken, removeToken, isAuthenticated } from "../auth/token"
 
 /* ───── Auth API ───── */
 
@@ -81,7 +82,7 @@ export interface LogoutResponse {
   data: logoutData
 }
 
-export async function guestLoginApi(data: LoginRequest): Promise<LoginResponse> {
+export async function guestLoginApi(data?: LoginRequest): Promise<LoginResponse> {
     console.log("🚀 ~ guestLoginApi ~ data: ", data);
   if (isMockMode()) {
     await mockDelay()
@@ -92,6 +93,27 @@ export async function guestLoginApi(data: LoginRequest): Promise<LoginResponse> 
     ...data,
     "clientId": "0d4c873ff6146ecd7f38e2e45526ab1b",
   })
+}
+
+export async function guestLoginFunc(): Promise<UserInfo> {
+  const res = await guestLoginApi({
+    token: getToken(),
+    guestId: await getDeviceId(),
+  })
+  console.log("🚀 ~  ~ res: ", res);
+
+  const accessToken = res?.data?.access_token || res?.data?.token
+  const nextUser = res?.data?.user
+
+  if (accessToken && nextUser && isLoginSuccess(res?.code)) {
+    setToken(accessToken)
+    setCachedUser(nextUser)
+    if (res?.data?.client_id) {
+      setClientId(res.data.client_id)
+    }
+    return nextUser
+  }
+  throw new Error((res as { msg?: string })?.msg || "游客登录失败！！！")
 }
 
 export async function login(data: LoginRequest): Promise<LoginResponse> {

@@ -40,9 +40,7 @@ import {
   handleWorkflowError,
   handleWorkflowStopped,
 } from '@/lib/workflow-progress'
-import { getUserSettings, updateUserSettings, isAuthenticated } from "@/lib/api-client"
-import { ChartNoAxesColumnDecreasing } from "lucide-react"
-
+import { getUserSettings, updateUserSettings } from "@/lib/api-client"
 export interface MessageFileAttachment {
   name: string
   size?: number
@@ -119,6 +117,7 @@ function mapAgentDef(a: AgentDefApi): AgentDef {
       : status === true || status === 1 || status === "1" || status === "0" // 接口 status=0 表示可用
 
   return {
+    ...a,
     id: String(a.id),
     label: a.appName || a.label || "",
     icon: a.icon || "🤖",
@@ -529,6 +528,8 @@ export default function Page() {
     () => agentDefs.filter((agent) => agent.isActive),
     [agentDefs],
   )
+  console.log("🚀 ~  ~ agentDefs: ", agentDefs);
+  console.log("🚀 ~ Page ~ activeAgentDefs: ", activeAgentDefs);
 
   const currentAgentLabel =
     activeAgentDefs.find((d) => d.id === currentAgentId)?.label ?? "未知应用"
