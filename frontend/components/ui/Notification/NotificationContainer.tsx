@@ -27,15 +27,16 @@ export default function NotificationContainer({
     return (
         <div className="notification-container">
 
-            {list.map(item => (
-
-                <NotificationItem
-                    key={item.key}
-                    {...item}
-                    onClose={() => remove(item.key)}
-                />
-
-            ))}
+            {list.map((item: any) => {
+                const { key, ...rest } = item;
+                return (
+                    <NotificationItem
+                        key={key}
+                        {...rest}
+                        onClose={() => remove(key)}
+                    />
+                );
+            })}
 
         </div>
     );
