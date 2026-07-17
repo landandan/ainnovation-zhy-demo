@@ -1,5 +1,7 @@
 import { getToken, getClientId, removeToken } from "@/lib/auth/token"
 import { API_BASE_URL } from "./routes"
+import notification from "@/components/ui/Notification";
+import { guestLoginFunc} from "@/lib/api";
 
 const DEFAULT_CLIENT_ID = "0d4c873ff6146ecd7f38e2e45526ab1b"
 
@@ -54,6 +56,7 @@ export async function request<T>(
   }
   clearTimeout(timeoutId)
 
+  console.log("🚀 ~ request ~ res: ", res);
   if (!res.ok) {
     const errData = await res.json().catch(() => ({ error: res.statusText }))
     if (res.status === 401 || res.status === 403) {
@@ -69,7 +72,19 @@ export async function request<T>(
       throw new ApiError(errData.error || "请求失败", res.status, errData)
     }
     return null as T
+  } else {
+    const data = await res.json()
+    console.log("🚀 ~ request ~ data: ", data);
+    if (data.code === 401){
+      removeToken()
+      notification.open({
+        title: "登录过期",
+        description: "请重新登录",
+        duration: 3000,
+      })
+      setTimeout(() => window.location.reload(), 3000)
+      return null as T
+    }
+    return data // res.json() as Promise<T>
   }
-
-  return res.json() as Promise<T>
 }

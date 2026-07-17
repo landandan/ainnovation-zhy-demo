@@ -146,6 +146,15 @@ export function Sidebar({
     setEditingHistoryId(null)
   }
 
+  const onSelectAgentHandle = (agent: any) => {
+      console.log("🚀 ~ onSelectAgentHandle ~ agent: ", agent);
+    if (agent.visible === '1' && isGuestUser()) {
+      loginModalRef.current?.open()
+      return
+    }
+    onSelectAgent(agent.id)
+  }
+
   const handleConfirmDelete = async () => {
     if (!deleteDialog || deletingHistory) return
 
@@ -303,7 +312,7 @@ export function Sidebar({
                     return (
                       <button
                         key={agent.id}
-                        onClick={() => onSelectAgent(agent.id)}
+                        onClick={() => onSelectAgentHandle(agent)}
                         onMouseEnter={() => setHoveredAgentId(agent.id)}
                         onMouseLeave={() => setHoveredAgentId(null)}
                         className="flex items-center gap-3 w-full text-left transition-colors cursor-pointer group"

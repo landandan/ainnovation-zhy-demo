@@ -5,17 +5,12 @@ import {
   logout as apiLogout,
   register as apiRegister,
   getMe,
-  setToken,
-  removeToken,
-  isAuthenticated as checkAuth,
   type LoginRequest,
   type RegisterRequest,
-  type UserInfo, getToken, guestLoginApi,
+  type UserInfo, guestLoginFunc,
 } from "../api-client"
-import { getCachedUser, setCachedUser, setClientId } from "./token"
+import {getCachedUser, setCachedUser, setClientId, setToken, isAuthenticated as checkAuth, removeToken} from "./token"
 import { isMockMode, getMockToken, getMockUser, clearMockData, disableMockMode } from "../mock/config"
-import { ApiError } from "../http/client"
-import getDeviceId from "@/app/utils/fingerprintjs";
 
 interface AuthContextType {
   user: UserInfo | null
@@ -29,7 +24,7 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | null>(null)
 
-function isLoginSuccess(code: unknown): boolean {
+export function isLoginSuccess(code: unknown): boolean {
   return code === undefined || code === null || code === 200 || code === "200"
 }
 
@@ -82,29 +77,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const guestLogin = useCallback(async (): Promise<UserInfo> => {
     setLoading(true)
     try {
-      const res = await guestLoginApi({
-        token: getToken(),
-        guestId: await getDeviceId(),
-      })
-      console.log("🚀 ~  ~ res: ", res);
-
-      const accessToken = res?.data?.access_token || res?.data?.token
-      const nextUser = res?.data?.user
-
-      if (accessToken && nextUser && isLoginSuccess(res?.code)) {
-        setToken(accessToken)
-        setCachedUser(nextUser)
-        if (res?.data?.client_id) {
-          setClientId(res.data.client_id)
-        }
-        setUser(nextUser)
-        if (!isMockMode()) {
-          clearMockData()
-        }
-        return nextUser
-      }
-
-      throw new Error((res as { msg?: string })?.msg || "游客登录失败！！！")
+      const nextUser = await guestLoginFunc()
+      setUser(nextUser)
     } finally {
       setLoading(false)
     }
