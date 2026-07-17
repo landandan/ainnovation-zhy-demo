@@ -41,6 +41,7 @@ import {
   handleWorkflowStopped,
 } from '@/lib/workflow-progress'
 import { getUserSettings, updateUserSettings } from "@/lib/api-client"
+import { isAuthenticated } from "@/lib/auth"
 export interface MessageFileAttachment {
   name: string
   size?: number
