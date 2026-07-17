@@ -359,7 +359,7 @@ export function Sidebar({
               {chatHistory.length > 0 && !bulkMode && (
                 <button
                   onClick={() => setBulkMode(true)}
-                  className="sidebar-text-meta transition-colors hover:text-[var(--foreground)]"
+                  className="sidebar-text-meta transition-colors hover:text-[var(--foreground)] cursor-pointer"
                   style={{ color: "var(--text-muted)" }}
                 >
                   管理
@@ -540,7 +540,7 @@ export function Sidebar({
                 {hasMoreHistory && onLoadMoreHistory && (
                   <button
                     type="button"
-                    className="sidebar-load-more w-full mt-2 py-2.5 rounded-lg text-[12px] transition-colors disabled:opacity-50"
+                    className="sidebar-load-more w-full mt-2 py-2.5 rounded-lg text-[12px] transition-colors disabled:opacity-50 cursor-pointer disabled:cursor-not-allowed"
                     style={{
                       color: "var(--text-muted)",
                       background: "transparent",
@@ -626,7 +626,10 @@ export function Sidebar({
               >
                 {userInitial}
               </div>
-              <div className="min-w-0 flex-1" onClick={() => loginModalRef.current?.open()}>
+              <div
+                className="min-w-0 flex-1 cursor-pointer"
+                onClick={() => loginModalRef.current?.open()}
+              >
                 <div className="text-[13px] font-semibold truncate" style={{ color: "var(--foreground)" }} >
                   {displayName}
                 </div>
