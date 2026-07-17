@@ -2,8 +2,8 @@
 
 import { useEffect, useMemo, useState } from "react"
 
-import { getToken } from "@/lib/api-client"
 import { isMockMode } from "@/lib/mock-config"
+ import {getToken} from "@/lib/auth";
 
  interface DownloadLinkProps {
    href: string
