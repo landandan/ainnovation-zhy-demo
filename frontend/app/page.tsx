@@ -957,7 +957,7 @@ export default function Page() {
           let outJson = JSON.parse(trimmed.slice(5).trim())
           console.log('outJson123:', outJson)
           if (outJson.code !== 200) {
-            fullAnswer = `哎呀，服务暂时开小差了 😅，请稍后重试。`
+            fullAnswer = outJson.localMessage || `哎呀，服务暂时开小差了 😅，请稍后重试。`
             // 业务失败：立即结束流式态，隐藏「停止生成」按钮
             setIsStreaming(false)
             currentTaskIdRef.current = null
@@ -965,16 +965,31 @@ export default function Page() {
             stopStreamPayloadRef.current = null
             setMessages((prev) => {
               const updated = [...prev]
-              if (messageIndex >= 0 && updated[messageIndex]) {
-                updated[messageIndex] = {
-                  ...updated[messageIndex],
+              // 优先按发起请求时的下标更新；若状态不同步则回退到最后一条 waiting 的 AI
+              let idx = messageIndex
+              if (!updated[idx] || updated[idx].role !== "ai") {
+                idx = -1
+                for (let i = updated.length - 1; i >= 0; i--) {
+                  if (updated[i].role === "ai" && (updated[i].waiting || !updated[i].text)) {
+                    idx = i
+                    break
+                  }
+                }
+              }
+              if (idx >= 0 && updated[idx]) {
+                updated[idx] = {
+                  ...updated[idx],
                   text: fullAnswer,
                   waiting: false,
                   loading: false,
+                  thinkingComplete: true,
                   time: aiTime,
                 }
               }
-              return updated
+              // 清掉其它仍卡在 waiting 的气泡，避免下一条提问时旧消息仍显示「正在思考」
+              return updated.map((m) =>
+                m.waiting ? { ...m, waiting: false, loading: false } : m,
+              )
             })
             try {
               await reader.cancel()

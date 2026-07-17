@@ -314,8 +314,8 @@ export const ChatArea = forwardRef<HTMLDivElement, ChatAreaProps>(
             )
           }
 
-          // 流式中但首 token 尚未到达：继续显示骨架屏
-          if (msg.role === "ai" && !msg.text && isStreaming) {
+          // 流式中但首 token 尚未到达：仅最新一条显示骨架屏，避免历史空回复被带上
+          if (msg.role === "ai" && !msg.text && isStreaming && isLatestMessage) {
             return (
               <div
                 key={idx}
