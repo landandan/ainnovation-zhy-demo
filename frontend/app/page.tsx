@@ -674,11 +674,16 @@ export default function Page() {
 
   const handleThemeChange = useCallback(
     (newTheme: ThemeId) => {
-      setTheme(newTheme)
       saveTheme(newTheme)
-      // 同步主题到后端 settings
       if (isAuthenticated()) {
         updateUserSettings({ theme: newTheme }).catch(() => {})
+      }
+      if (document.startViewTransition) {
+        document.startViewTransition(() => {
+          setTheme(newTheme)
+        })
+      } else {
+        setTheme(newTheme)
       }
     },
     [success],
