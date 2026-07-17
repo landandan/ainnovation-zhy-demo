@@ -26,6 +26,8 @@ interface ChatAreaProps {
 export const ChatArea = forwardRef<HTMLDivElement, ChatAreaProps>(
   function ChatArea({ messages, onUseSuggestion, isStreaming, agentLabel = "深海智航", agentDesc, quickQuestions, currentAgentId, userId, onRetryWorkflow, onRetryMessage, onStopWorkflow, onOpenResources }, ref) {
     const [showScrollButton, setShowScrollButton] = useState(false)
+    /** data:/blob: URL 用 window.open 常被浏览器拦截，改用页内预览 */
+    const [previewImage, setPreviewImage] = useState<{ src: string; name: string } | null>(null)
     const internalRef = useRef<HTMLDivElement>(null)
     const shouldFollowLatestRef = useRef(true)
     const previousMessageCountRef = useRef(messages.length)
@@ -33,6 +35,15 @@ export const ChatArea = forwardRef<HTMLDivElement, ChatAreaProps>(
     const handleResourceClick = (resources: ResourceItem[]) => {
       onOpenResources?.(resources)
     }
+
+    useEffect(() => {
+      if (!previewImage) return
+      const onKeyDown = (e: KeyboardEvent) => {
+        if (e.key === "Escape") setPreviewImage(null)
+      }
+      window.addEventListener("keydown", onKeyDown)
+      return () => window.removeEventListener("keydown", onKeyDown)
+    }, [previewImage])
 
     const setRefs = (node: HTMLDivElement | null) => {
       ;(internalRef as React.MutableRefObject<HTMLDivElement | null>).current = node
@@ -139,7 +150,7 @@ export const ChatArea = forwardRef<HTMLDivElement, ChatAreaProps>(
                   key={`img-${idx}`}
                   type="button"
                   className="chat-user-image-thumb"
-                  onClick={() => window.open(img, "_blank")}
+                  onClick={() => setPreviewImage({ src: img, name: `上传图片 ${idx + 1}` })}
                   title="查看原图"
                 >
                   <img src={img} alt={`上传图片 ${idx + 1}`} />
@@ -467,28 +478,6 @@ export const ChatArea = forwardRef<HTMLDivElement, ChatAreaProps>(
                     />
                   )}
 
-                  {!isUser &&
-                    msg.text &&
-                    !msg.waiting &&
-                    !msg.loading &&
-                    !(isStreaming && isLatestMessage) && (
-                      <MessageActions
-                        text={msg.text}
-                        messageId={msg.messageId}
-                        agentId={currentAgentId}
-                        userId={userId}
-                        initialFeedback={msg.feedback ?? null}
-                        onRetry={
-                          onRetryMessage
-                            ? () => onRetryMessage(idx)
-                            : isLatestMessage
-                              ? onRetryWorkflow
-                              : undefined
-                        }
-                        disabled={isStreaming}
-                      />
-                    )}
-
                   {!isUser && msg.resourcesList && msg.resourcesList.length > 0 && (
                     <button
                       onClick={() => handleResourceClick(msg.resourcesList!)}
@@ -526,6 +515,29 @@ export const ChatArea = forwardRef<HTMLDivElement, ChatAreaProps>(
                       </svg>
                     </button>
                   )}
+
+                  {/* ── AI 消息：MessageActions 操作按钮 ── */}
+                  {!isUser &&
+                    msg.text &&
+                    !msg.waiting &&
+                    !msg.loading &&
+                    !(isStreaming && isLatestMessage) && (
+                      <MessageActions
+                        text={msg.text}
+                        messageId={msg.messageId}
+                        agentId={currentAgentId}
+                        userId={userId}
+                        initialFeedback={msg.feedback ?? null}
+                        onRetry={
+                          onRetryMessage
+                            ? () => onRetryMessage(idx)
+                            : isLatestMessage
+                              ? onRetryWorkflow
+                              : undefined
+                        }
+                        disabled={isStreaming}
+                      />
+                    )}
 
                   {/* Timestamp hidden (Kimi style: 无时间条) */}
                 </div>
@@ -572,6 +584,31 @@ export const ChatArea = forwardRef<HTMLDivElement, ChatAreaProps>(
             </svg>
           </button>
         )}
+
+      {previewImage ? (
+        <div
+          className="upload-lightbox"
+          onClick={() => setPreviewImage(null)}
+          role="dialog"
+          aria-modal="true"
+          aria-label="查看原图"
+        >
+          <button
+            type="button"
+            className="upload-lightbox-close"
+            onClick={() => setPreviewImage(null)}
+            aria-label="关闭预览"
+          >
+            <svg width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+              <line x1="18" y1="6" x2="6" y2="18" />
+              <line x1="6" y1="6" x2="18" y2="18" />
+            </svg>
+          </button>
+          <div className="upload-lightbox-center" onClick={(e) => e.stopPropagation()}>
+            <img src={previewImage.src} alt={previewImage.name} className="upload-lightbox-image" />
+          </div>
+        </div>
+      ) : null}
       </div>
     )
   },

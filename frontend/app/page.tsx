@@ -42,8 +42,8 @@ import {
   handleWorkflowStopped,
 } from '@/lib/workflow-progress'
 import { getUserSettings, updateUserSettings } from "@/lib/api-client"
-import { isAuthenticated, removeToken } from "@/lib/auth"
-import notification from "@/components/ui/Notification"
+import { isAuthenticated } from "@/lib/auth"
+import { handleAuthExpired } from "@/lib/http/client"
 export interface MessageFileAttachment {
   name: string
   size?: number
@@ -956,17 +956,51 @@ export default function Page() {
         if (done) break
 
         buffer += decoder.decode(value, { stream: true })
-        console.log('buffer123:', buffer)
         // 非 SSE：整包 JSON，如 {"code":401,"msg":"登录过期，请重新登录"}
+        // 正常流是 SSE（data:...），JSON.parse 会失败，必须 try/catch
         try {
-          const authPayload = JSON.parse(buffer.trim()) as { code?: number | string; msg?: string }
-          if (authPayload.code === 401 || authPayload.code === "401") {
-            removeToken()
-            notification.open({
-              title: "登录过期",
-              description: authPayload.msg || "请重新登录",
-              duration: 3000,
-            })
+          const trimmed = buffer.trim()
+          if (trimmed.startsWith("{")) {
+            const authPayload = JSON.parse(trimmed) as { code?: number | string; msg?: string }
+            if (authPayload.code === 401 || authPayload.code === "401") {
+              // 游客：刷新不弹窗；非游客：弹登录框
+              handleAuthExpired(
+                typeof authPayload.msg === "string" ? authPayload.msg : undefined,
+              )
+              setIsStreaming(false)
+              setMessages((prev) =>
+                prev.map((m) =>
+                  m.waiting
+                    ? {
+                        ...m,
+                        waiting: false,
+                        loading: false,
+                        text: authPayload.msg || "登录过期，请重新登录",
+                      }
+                    : m,
+                ),
+              )
+              return
+            }
+          }
+        } catch {
+          // 未拼完整或仍是 SSE 文本，继续按行解析
+        }
+        const lines = buffer.split("\n")
+        buffer = lines.pop() || ""
+
+        let chunkHasUpdates = false
+        let isError = false
+
+        for (const line of lines) {
+          const trimmed = line.trim()
+          if (!trimmed || !trimmed.startsWith("data:")) continue
+          let outJson = JSON.parse(trimmed.slice(5).trim())
+          // SSE 里业务码 401：同样走游客刷新 / 非游客弹窗
+          if (outJson.code === 401 || outJson.code === "401") {
+            handleAuthExpired(
+              typeof outJson.msg === "string" ? outJson.msg : undefined,
+            )
             setIsStreaming(false)
             setMessages((prev) =>
               prev.map((m) =>
@@ -975,30 +1009,18 @@ export default function Page() {
                       ...m,
                       waiting: false,
                       loading: false,
-                      text: authPayload.msg || "登录过期，请重新登录",
+                      text: outJson.msg || outJson.localMessage || "登录过期，请重新登录",
                     }
                   : m,
               ),
             )
-            setTimeout(() => window.location.reload(), 3000)
+            try {
+              await reader.cancel()
+            } catch {
+              /* ignore */
+            }
             return
           }
-        } catch {
-          // 未拼完整或仍是 SSE 文本，继续按行解析
-        }
-        const lines = buffer.split("\n")
-        console.log('lines123:', lines)
-        buffer = lines.pop() || ""
-
-        let chunkHasUpdates = false
-        let isError = false
-
-        for (const line of lines) {
-          //console.log('line123:', line)
-          const trimmed = line.trim()
-          if (!trimmed || !trimmed.startsWith("data:")) continue
-          let outJson = JSON.parse(trimmed.slice(5).trim())
-          console.log('outJson123:', outJson)
           if (outJson.code !== 200) {
             fullAnswer = outJson.localMessage || `哎呀，服务暂时开小差了 😅，请稍后重试。`
             // 业务失败：立即结束流式态，隐藏「停止生成」按钮

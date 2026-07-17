@@ -6,6 +6,7 @@
  */
 
 import { getToken, getClientId } from "../auth/token"
+import { handleAuthExpired } from "../http/client"
 import {
   API_BASE_URL,
 } from "../http/routes"
@@ -236,6 +237,9 @@ export async function callDifyChatStream(params: {
 
   console.log('response123:', response)
   if (!response.ok) {
+    if (response.status === 401 || response.status === 403) {
+      handleAuthExpired()
+    }
     const errorText = await response.text()
     throw new Error(`API 错误 (${response.status}): ${errorText}`)
   }
