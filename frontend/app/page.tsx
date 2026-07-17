@@ -821,6 +821,7 @@ export default function Page() {
         setSessionId("")
         difyConversationIdRef.current = null
       }
+      await refreshConversations()
       success("对话已删除")
     } catch (err) {
       console.error("删除对话失败:", err)
@@ -841,6 +842,7 @@ export default function Page() {
         setSessionId("")
         difyConversationIdRef.current = null
       }
+      await refreshConversations()
       success(`已删除 ${uniqueSessionIds.length} 条对话`)
     } catch (err) {
       console.error("批量删除对话失败:", err)
