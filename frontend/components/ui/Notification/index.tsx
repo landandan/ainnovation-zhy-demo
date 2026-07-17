@@ -1,4 +1,5 @@
-import { createRoot, Root } from "react-dom/client";
+import { createRoot, Root } from "react-dom/client"
+import { v4 as uuidv4 } from 'uuid'
 import NotificationContainer from "./NotificationContainer";
 
 let root: Root | null = null;
@@ -38,7 +39,7 @@ const notification = {
         ensureContainer();
 
         list.push({
-            key: crypto.randomUUID(),
+            key: uuidv4(),
             duration: 3000,
             ...config,
         });
