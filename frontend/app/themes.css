@@ -71,6 +71,14 @@
   --kimi-bubble-ai: #F7F8FA;
 }
 
+* {
+  transition: color 0.25s ease, background-color 0.25s ease, border-color 0.25s ease, fill 0.25s ease, stroke 0.25s ease;
+}
+
+html, body {
+  transition: background-color 0.3s ease, color 0.3s ease;
+}
+
 /* ─── :root / 默认主题 — 干净层次风格 ─── */
 :root {
   /* 基础色彩 - 主区白底，与 Kimi 侧栏形成对比 */
