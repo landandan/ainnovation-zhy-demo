@@ -676,7 +676,7 @@ export default function Page() {
     (newTheme: ThemeId) => {
       saveTheme(newTheme)
       if (isAuthenticated()) {
-        updateUserSettings({ theme: newTheme }).catch(() => {})
+        // updateUserSettings({ theme: newTheme }).catch(() => {})
       }
       if (document.startViewTransition) {
         document.startViewTransition(() => {
