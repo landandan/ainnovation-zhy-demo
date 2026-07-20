@@ -67,6 +67,8 @@ export interface Message {
   query?: string
   images?: string[]
   files?: MessageFileAttachment[]
+  /** 发送/重试时带给 /h5/chat/stream 的 ossId 列表 */
+  inputFiles?: Array<{ ossId: string | number }>
   workflowProgress?: WorkflowProgress
   time: string
   loading?: boolean
@@ -199,17 +201,19 @@ function normalizeMessageAttachments(rawAttachments: unknown[]): MessageFileAtta
   })
 }
 
-/** 从历史消息 inputFileList 拆出图片 URL 与文档附件 */
+/** 从历史消息 inputFileList 拆出图片 URL、文档附件与 ossId */
 function splitInputFileList(rawList: unknown[] | undefined): {
   images: string[]
   files: MessageFileAttachment[]
+  inputFiles: Array<{ ossId: string | number }>
 } {
   if (!Array.isArray(rawList) || rawList.length === 0) {
-    return { images: [], files: [] }
+    return { images: [], files: [], inputFiles: [] }
   }
 
   const images: string[] = []
   const docs: unknown[] = []
+  const inputFiles: Array<{ ossId: string | number }> = []
 
   for (const item of rawList) {
     if (!item || typeof item !== "object") continue
@@ -220,6 +224,11 @@ function splitInputFileList(rawList: unknown[] | undefined): {
       (typeof record.original_url === "string" && record.original_url.trim()) ||
       (typeof record.url === "string" && record.url.trim()) ||
       ""
+
+    const ossId = record.ossId
+    if (ossId != null && ossId !== "") {
+      inputFiles.push({ ossId: ossId as string | number })
+    }
 
     const isImage =
       fileType === "image" ||
@@ -237,6 +246,7 @@ function splitInputFileList(rawList: unknown[] | undefined): {
   return {
     images,
     files: normalizeMessageAttachments(docs),
+    inputFiles,
   }
 }
 
@@ -397,7 +407,7 @@ function mapMessage(m: MessageApi): Message[] {
   const result: Message[] = []
   const baseTime = new Date(m.createTime).toLocaleTimeString("zh-CN", { hour: "2-digit", minute: "2-digit" })
   const resourcesList = normalizeResources(m.retrieverResources)
-  const { images, files } = splitInputFileList(m.inputFileList)
+  const { images, files, inputFiles } = splitInputFileList(m.inputFileList)
   
   if (m.query || images.length > 0 || files.length > 0) {
     const { mainText: userText } = extractThinkingFromContent(m.query || "")
@@ -407,6 +417,7 @@ function mapMessage(m: MessageApi): Message[] {
       query: m.query,
       images: images.length > 0 ? images : undefined,
       files: files.length > 0 ? files : undefined,
+      inputFiles: inputFiles.length > 0 ? inputFiles : undefined,
       thinking: undefined,
       thinkingComplete: true,
       resourcesList: [],
@@ -534,6 +545,8 @@ export default function Page() {
   console.log("🚀 ~  ~ agentDefs: ", agentDefs);
   console.log("🚀 ~ Page ~ activeAgentDefs: ", activeAgentDefs);
 
+  const currentAgent =
+    activeAgentDefs.find((d) => d.id === currentAgentId) ?? {}
   const currentAgentLabel =
     activeAgentDefs.find((d) => d.id === currentAgentId)?.label ?? "未知应用"
   const currentAgentDesc =
@@ -705,6 +718,7 @@ export default function Page() {
   const refreshConversations = useCallback(async () => {
     try {
       const convsRes = await getConversations({ pageNum: 1, pageSize: CONVERSATIONS_PAGE_SIZE })
+      console.log('🔍 ~ Page ~ frontend/app/page.tsx:707 ~ convsRes:', convsRes);
       const rows = convsRes?.data?.rows ?? []
       setConversations(rows)
       setConversationsPage(1)
@@ -1445,28 +1459,34 @@ export default function Page() {
     ]
     setMessages(newMessages)
 
-    const isLatestAi = messageIndex === messages.length - 1
-    if (isLatestAi && lastRequestRef.current) {
-      callDifyAPI(
-        lastRequestRef.current.userText,
-        newMessages,
-        lastRequestRef.current.userAttachments,
-        lastRequestRef.current.inputFiles,
-      )
-      return
-    }
-
-    const userText = userMsg.text || (userMsg.files?.length ? "请分析我上传的文件" : "")
+    const hasAttachments = !!(
+      userMsg.images?.length ||
+      userMsg.files?.length ||
+      userMsg.inputFiles?.length
+    )
+    const userText =
+      userMsg.text ||
+      (hasAttachments ? "请分析我上传的文件" : "")
     if (!userText) {
       warning("无法重试空问题")
       return
     }
 
+    // 优先用当时保存的 inputFiles；最新一条可回退 lastRequestRef
+    const isLatestAi = messageIndex === messages.length - 1
+    const inputFiles =
+      userMsg.inputFiles?.length
+        ? userMsg.inputFiles
+        : isLatestAi
+          ? lastRequestRef.current?.inputFiles
+          : undefined
+
     lastRequestRef.current = {
       userText,
       userAttachments: userMsg.files,
+      inputFiles,
     }
-    callDifyAPI(userText, newMessages, userMsg.files)
+    callDifyAPI(userText, newMessages, userMsg.files, inputFiles)
   }
 
   /* ───── 发送消息（异步：先上传文件，再合并到 chat 请求） ───── */
@@ -1479,20 +1499,23 @@ export default function Page() {
     const time = new Date().toLocaleTimeString("zh-CN", { hour: "2-digit", minute: "2-digit" })
     const newMessages: Message[] = [...messages]
 
+    // 先收集 ossId，写入用户消息，便于后续重试带回
+    const inputFiles = [...imageOssIds, ...docOssIds]
+      .filter((id) => id != null && id !== "")
+      .map((ossId) => ({ ossId }))
+
     // 合并文字和附件到一条用户消息
     newMessages.push({
       role: "user",
       text: text || (uploadedImages.length > 0 || uploadedFiles.length > 0 ? "" : ""),
       images: uploadedImages.length > 0 ? [...uploadedImages] : undefined,
       files: uploadedFiles.length > 0 ? [...uploadedFiles] : undefined,
+      inputFiles: inputFiles.length > 0 ? inputFiles : undefined,
       time,
     })
 
-    // 先收集所有原始 File 对象与 ossId，然后清空 UI 状态
+    // 先收集所有原始 File 对象，然后清空 UI 状态
     const allRawFiles = [...rawImageFiles, ...rawDocFiles]
-    const inputFiles = [...imageOssIds, ...docOssIds]
-      .filter((id) => id != null && id !== "")
-      .map((ossId) => ({ ossId }))
     const userAttachments: MessageFileAttachment[] = allRawFiles.map((file) => ({
       name: file.name,
       size: file.size,
@@ -1825,6 +1848,7 @@ export default function Page() {
             isStreaming={isStreaming}
             onStopStreaming={handleStopStreaming}
             agentLabel={currentAgentLabel === "未知应用" ? "深海智航" : currentAgentLabel}
+            agent={currentAgent}
             onOpenSettings={handleOpenSettings}
           />
         </div>

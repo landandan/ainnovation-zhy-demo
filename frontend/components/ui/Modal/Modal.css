@@ -12,9 +12,14 @@
     animation: maskFade .2s;
 }
 
+[data-theme="deep-ocean"] .modal-mask {
+    background: rgba(0,0,0,.65);
+}
+
 .modal-wrapper {
 
-    background: white;
+    background: var(--card);
+    color: var(--card-foreground);
 
     border-radius: 8px;
 
@@ -39,7 +44,7 @@
 
     padding: 0 24px;
 
-    border-bottom: 1px solid #eee;
+    border-bottom: 1px solid var(--border);
 
     font-size: 18px;
 
@@ -55,6 +60,8 @@
     cursor: pointer;
 
     font-size: 24px;
+
+    color: var(--muted-foreground);
 }
 
 .modal-body {
@@ -74,7 +81,7 @@
 
     gap: 10px;
 
-    border-top: 1px solid #eee;
+    border-top: 1px solid var(--border);
 }
 
 .modal-footer button {
@@ -85,16 +92,18 @@
 
     border-radius: 4px;
 
-    border: 1px solid #d9d9d9;
+    border: 1px solid var(--border);
 
-    background: white;
+    background: var(--input);
+
+    color: var(--foreground);
 }
 
 .modal-footer .primary {
 
-    background: #1677ff;
+    background: var(--accent);
 
-    color: white;
+    color: var(--accent-foreground);
 
     border: none;
 }

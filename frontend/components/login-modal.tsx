@@ -74,7 +74,7 @@ export default forwardRef<LoginModalRef>((_, ref) => {
                 style={{
                     width: "100%",
                     padding: "2.5rem",
-                    background: "rgba(255, 255, 255, 0.7)",
+                    background: "var(--card)",
                 }}
             >
                 <form onSubmit={handleSubmit} style={{ display: "flex", flexDirection: "column", gap: "1.25rem" }}>
@@ -83,7 +83,7 @@ export default forwardRef<LoginModalRef>((_, ref) => {
                             style={{
                                 display: "block",
                                 fontSize: "0.875rem",
-                                color: "#4B5563",
+                                color: "var(--muted-foreground)",
                                 marginBottom: "0.5rem",
                                 fontWeight: 500,
                             }}
@@ -100,19 +100,19 @@ export default forwardRef<LoginModalRef>((_, ref) => {
                                 width: "100%",
                                 padding: "0.875rem 1rem",
                                 borderRadius: 10,
-                                border: "1px solid rgba(209, 213, 219, 0.6)",
-                                background: "rgba(255, 255, 255, 0.85)",
-                                color: "var(--foreground, #1A1D23)",
+                                border: "1px solid var(--border)",
+                                background: "var(--input)",
+                                color: "var(--foreground)",
                                 fontSize: "0.9375rem",
                                 outline: "none",
                                 transition: "all 0.3s ease",
                             }}
                             onFocus={(e) => {
-                                e.currentTarget.style.borderColor = "#667eea"
-                                e.currentTarget.style.boxShadow = "0 0 0 3px rgba(102, 126, 234, 0.1)"
+                                e.currentTarget.style.borderColor = "var(--ring)"
+                                e.currentTarget.style.boxShadow = "0 0 0 3px var(--glow)"
                             }}
                             onBlur={(e) => {
-                                e.currentTarget.style.borderColor = "rgba(209, 213, 219, 0.6)"
+                                e.currentTarget.style.borderColor = "var(--border)"
                                 e.currentTarget.style.boxShadow = "none"
                             }}
                         />
@@ -124,7 +124,7 @@ export default forwardRef<LoginModalRef>((_, ref) => {
                                 style={{
                                     display: "block",
                                     fontSize: "0.875rem",
-                                    color: "#4B5563",
+                                    color: "var(--muted-foreground)",
                                     marginBottom: "0.5rem",
                                     fontWeight: 500,
                                 }}
@@ -140,19 +140,19 @@ export default forwardRef<LoginModalRef>((_, ref) => {
                                     width: "100%",
                                     padding: "0.875rem 1rem",
                                     borderRadius: 10,
-                                    border: "1px solid rgba(209, 213, 219, 0.6)",
-                                    background: "rgba(255, 255, 255, 0.85)",
-                                    color: "var(--foreground, #1A1D23)",
+                                    border: "1px solid var(--border)",
+                                    background: "var(--input)",
+                                    color: "var(--foreground)",
                                     fontSize: "0.9375rem",
                                     outline: "none",
                                     transition: "all 0.3s ease",
                                 }}
                                 onFocus={(e) => {
-                                    e.currentTarget.style.borderColor = "#667eea"
-                                    e.currentTarget.style.boxShadow = "0 0 0 3px rgba(102, 126, 234, 0.1)"
+                                    e.currentTarget.style.borderColor = "var(--ring)"
+                                    e.currentTarget.style.boxShadow = "0 0 0 3px var(--glow)"
                                 }}
                                 onBlur={(e) => {
-                                    e.currentTarget.style.borderColor = "rgba(209, 213, 219, 0.6)"
+                                    e.currentTarget.style.borderColor = "var(--border)"
                                     e.currentTarget.style.boxShadow = "none"
                                 }}
                             />
@@ -164,7 +164,7 @@ export default forwardRef<LoginModalRef>((_, ref) => {
                             style={{
                                 display: "block",
                                 fontSize: "0.875rem",
-                                color: "#4B5563",
+                                color: "var(--muted-foreground)",
                                 marginBottom: "0.5rem",
                                 fontWeight: 500,
                             }}
@@ -181,19 +181,19 @@ export default forwardRef<LoginModalRef>((_, ref) => {
                                 width: "100%",
                                 padding: "0.875rem 1rem",
                                 borderRadius: 10,
-                                border: "1px solid rgba(209, 213, 219, 0.6)",
-                                background: "rgba(255, 255, 255, 0.85)",
-                                color: "var(--foreground, #1A1D23)",
+                                border: "1px solid var(--border)",
+                                background: "var(--input)",
+                                color: "var(--foreground)",
                                 fontSize: "0.9375rem",
                                 outline: "none",
                                 transition: "all 0.3s ease",
                             }}
                             onFocus={(e) => {
-                                e.currentTarget.style.borderColor = "#667eea"
-                                e.currentTarget.style.boxShadow = "0 0 0 3px rgba(102, 126, 234, 0.1)"
+                                e.currentTarget.style.borderColor = "var(--ring)"
+                                e.currentTarget.style.boxShadow = "0 0 0 3px var(--glow)"
                             }}
                             onBlur={(e) => {
-                                e.currentTarget.style.borderColor = "rgba(209, 213, 219, 0.6)"
+                                e.currentTarget.style.borderColor = "var(--border)"
                                 e.currentTarget.style.boxShadow = "none"
                             }}
                         />
@@ -204,9 +204,9 @@ export default forwardRef<LoginModalRef>((_, ref) => {
                             style={{
                                 padding: "0.75rem 1rem",
                                 borderRadius: 8,
-                                background: "rgba(239, 68, 68, 0.1)",
-                                border: "1px solid rgba(239, 68, 68, 0.2)",
-                                color: "#DC2626",
+                                background: "color-mix(in srgb, var(--destructive) 10%, transparent)",
+                                border: "1px solid color-mix(in srgb, var(--destructive) 20%, transparent)",
+                                color: "var(--destructive)",
                                 fontSize: "0.8125rem",
                                 margin: 0,
                                 textAlign: "center",
@@ -226,23 +226,23 @@ export default forwardRef<LoginModalRef>((_, ref) => {
                             fontSize: "0.9375rem",
                             fontWeight: 600,
                             color: "#FFFFFF",
-                            background: "linear-gradient(135deg, #667eea 0%, #764ba2 100%)",
+                            background: "var(--gradient-1)",
                             border: "none",
                             borderRadius: 10,
                             cursor: loading ? "not-allowed" : "pointer",
-                            boxShadow: "0 4px 15px rgba(102, 126, 234, 0.4)",
+                            boxShadow: "0 4px 15px var(--glow-strong)",
                             transition: "all 0.3s ease",
                             minHeight: "44px",
                         }}
                         onMouseEnter={(e) => {
                             if (!loading) {
-                                e.currentTarget.style.boxShadow = "0 6px 20px rgba(102, 126, 234, 0.5)"
+                                e.currentTarget.style.boxShadow = "0 6px 20px var(--glow-strong)"
                                 e.currentTarget.style.transform = "translateY(-2px)"
                             }
                         }}
                         onMouseLeave={(e) => {
                             if (!loading) {
-                                e.currentTarget.style.boxShadow = "0 4px 15px rgba(102, 126, 234, 0.4)"
+                                e.currentTarget.style.boxShadow = "0 4px 15px var(--glow-strong)"
                                 e.currentTarget.style.transform = "translateY(0)"
                             }
                         }}

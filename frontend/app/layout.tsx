@@ -5,9 +5,9 @@ import { ClientLayout } from './client-layout'
 
 export const metadata: Metadata = {
   title: '深海智航 - CNOOC AI 智能助手',
-  description: '中海油AI智能助手 - 海上钻井平台安全规程查询、设备故障诊断、智能巡检、生产日报填报',
+  description: 'AI智能助手 - 海上钻井平台安全规程查询、设备故障诊断、智能巡检、生产日报填报',
   generator: 'v0.app',
-  keywords: ['CNOOC', '中海油', 'AI助手', '钻井平台', '智能巡检', '设备维修', '生产日报'],
+  keywords: ['CNOOC', '', 'AI助手', '钻井平台', '智能巡检', '设备维修', '生产日报'],
   icons: {
     icon: [
       {
