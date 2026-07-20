@@ -60,7 +60,7 @@ def _seed_default_agents():
         return
 
     defaults = [
-        {"agent_id": "knowledge", "label": "海油知识库", "icon": "📚", "desc": "标准法规 · 安全规程",
+        {"agent_id": "knowledge", "label": "知识库", "icon": "📚", "desc": "标准法规 · 安全规程",
          "gradient": "var(--gradient-1)"},
         {"agent_id": "inspection", "label": "无纸化巡检", "icon": "📸", "desc": "AI视觉 · 隐患识别",
          "gradient": "var(--gradient-2)"},

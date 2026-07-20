@@ -202,7 +202,7 @@ def ensure_default_agents():
     defaults = [
         {
             "agent_id": "knowledge",
-            "label": "海油知识库",
+            "label": "知识库",
             "icon": "📚",
             "desc": "标准法规 · 安全规程",
             "gradient": "var(--gradient-1)",
