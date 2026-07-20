@@ -534,6 +534,8 @@ export default function Page() {
   console.log("🚀 ~  ~ agentDefs: ", agentDefs);
   console.log("🚀 ~ Page ~ activeAgentDefs: ", activeAgentDefs);
 
+  const currentAgent =
+    activeAgentDefs.find((d) => d.id === currentAgentId) ?? {}
   const currentAgentLabel =
     activeAgentDefs.find((d) => d.id === currentAgentId)?.label ?? "未知应用"
   const currentAgentDesc =
@@ -705,6 +707,7 @@ export default function Page() {
   const refreshConversations = useCallback(async () => {
     try {
       const convsRes = await getConversations({ pageNum: 1, pageSize: CONVERSATIONS_PAGE_SIZE })
+      console.log('🔍 ~ Page ~ frontend/app/page.tsx:707 ~ convsRes:', convsRes);
       const rows = convsRes?.data?.rows ?? []
       setConversations(rows)
       setConversationsPage(1)
@@ -1825,6 +1828,7 @@ export default function Page() {
             isStreaming={isStreaming}
             onStopStreaming={handleStopStreaming}
             agentLabel={currentAgentLabel === "未知应用" ? "深海智航" : currentAgentLabel}
+            agent={currentAgent}
             onOpenSettings={handleOpenSettings}
           />
         </div>

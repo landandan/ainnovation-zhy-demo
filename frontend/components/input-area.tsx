@@ -1,6 +1,8 @@
 "use client"
 
+import { isGuestUser } from "@/lib/auth";
 import { useState, useRef, useCallback, useEffect } from "react"
+import LoginModal, { LoginModalRef } from "@/components/login-modal"
 
 interface InputAreaProps {
   uploadedImages: string[]
@@ -17,6 +19,7 @@ interface InputAreaProps {
   isStreaming?: boolean
   onStopStreaming?: () => void
   agentLabel?: string
+  agent?: AgentDef
   onOpenSettings?: () => void
 }
 
@@ -46,6 +49,7 @@ export function InputArea({
   isStreaming = false,
   onStopStreaming,
   agentLabel = "深海智航",
+  agent = {},
   onOpenSettings,
 }: InputAreaProps) {
   const [text, setText] = useState("")
@@ -86,8 +90,16 @@ export function InputArea({
     return () => window.removeEventListener("keydown", onKeyDown)
   }, [lightbox, lightboxLoading, closeLightbox])
 
+  const loginModalRef = useRef<LoginModalRef>(null);
+  
   const handleSend = useCallback(() => {
     if (!hasContent) return
+    if (isGuestUser() && agent.visible == '1') {
+    console.log('🔍 ~ InputArea ~ frontend/components/input-area.tsx:97 ~ isGuestUser():', isGuestUser());
+      
+      loginModalRef.current?.open()
+      return
+    }
     onSendMessage(text.trim())
     setText("")
     if (textareaRef.current) {
@@ -465,6 +477,7 @@ export function InputArea({
         className="hidden"
         onChange={handleFileChange}
       />
+      <LoginModal ref={loginModalRef} />
 
       {(lightbox || lightboxLoading) && (
         <div className="upload-lightbox" onClick={closeLightbox} role="dialog" aria-modal="true">
