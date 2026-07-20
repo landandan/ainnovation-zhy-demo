@@ -4,6 +4,7 @@ import { forwardRef, useImperativeHandle, useState, useEffect } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import { useAuth } from "@/lib/auth-store"
 import Modal from "@/components/ui/Modal"
+import { AUTH_REQUIRED_EVENT, resetAuthRequiredGate } from "@/lib/http/client"
 
 export interface LoginModalRef {
     open: (title?: string) => void;
@@ -20,15 +21,22 @@ export default forwardRef<LoginModalRef>((_, ref) => {
     const [password, setPassword] = useState("")
     const [displayName, setDisplayName] = useState("")
     const [error, setError] = useState("")
+    const [modalOpen, setModalOpen] = useState(false)
 
     useImperativeHandle(ref, () => ({
-        open(title) {
-            setModalOpen(true);
+        open() {
+            setModalOpen(true)
         },
         close() {
-            setModalOpen(false);
+            setModalOpen(false)
         },
-    }));
+    }))
+
+    useEffect(() => {
+        const onAuthRequired = () => setModalOpen(true)
+        window.addEventListener(AUTH_REQUIRED_EVENT, onAuthRequired)
+        return () => window.removeEventListener(AUTH_REQUIRED_EVENT, onAuthRequired)
+    }, [])
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault()
@@ -45,6 +53,7 @@ export default forwardRef<LoginModalRef>((_, ref) => {
             } else {
                 await login({ username: username.trim(), password })
             }
+            resetAuthRequiredGate()
             router.replace("/")
             setModalOpen(false)
         } catch (err: unknown) {
@@ -52,8 +61,6 @@ export default forwardRef<LoginModalRef>((_, ref) => {
             setError(msg)
         }
     }
-
-    const [modalOpen, setModalOpen] = useState(false);
 
     return (
         <Modal

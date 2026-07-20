@@ -16,6 +16,7 @@ import {
   // createConversation,
   // updateConversation,
   deleteConversationApi,
+  renameConversationApi,
   getMessages,
   // addMessage,
   uploadFileSingle,
@@ -42,6 +43,7 @@ import {
 } from '@/lib/workflow-progress'
 import { getUserSettings, updateUserSettings } from "@/lib/api-client"
 import { isAuthenticated } from "@/lib/auth"
+import { handleAuthExpired } from "@/lib/http/client"
 export interface MessageFileAttachment {
   name: string
   size?: number
@@ -821,6 +823,7 @@ export default function Page() {
         setSessionId("")
         difyConversationIdRef.current = null
       }
+      await refreshConversations()
       success("对话已删除")
     } catch (err) {
       console.error("删除对话失败:", err)
@@ -841,6 +844,7 @@ export default function Page() {
         setSessionId("")
         difyConversationIdRef.current = null
       }
+      await refreshConversations()
       success(`已删除 ${uniqueSessionIds.length} 条对话`)
     } catch (err) {
       console.error("批量删除对话失败:", err)
@@ -848,13 +852,18 @@ export default function Page() {
     }
   }
 
-  const handleRenameHistory = async (id: number, newTitle: string) => {
+  const handleRenameHistory = async (sessionIdToRename: string, newTitle: string) => {
+    if (!sessionIdToRename || !newTitle.trim()) return
     try {
-      // 已废弃：旧 /conversations 重命名接口
-      // await updateConversation(id, { title: newTitle })
+      await renameConversationApi(sessionIdToRename, newTitle.trim())
       setConversations((prev) =>
-        prev.map((c) => (c.id === id ? { ...c, title: newTitle } : c))
+        prev.map((c) =>
+          c.sessionId === sessionIdToRename
+            ? { ...c, title: newTitle.trim(), query: newTitle.trim() }
+            : c,
+        ),
       )
+      await refreshConversations()
       success("重命名成功")
     } catch (err) {
       console.error("重命名对话失败:", err)
@@ -947,23 +956,73 @@ export default function Page() {
         if (done) break
 
         buffer += decoder.decode(value, { stream: true })
-        console.log('buffer123:', buffer)
-        //console.log('buffer123:', buffer)
+        // 非 SSE：整包 JSON，如 {"code":401,"msg":"登录过期，请重新登录"}
+        // 正常流是 SSE（data:...），JSON.parse 会失败，必须 try/catch
+        try {
+          const trimmed = buffer.trim()
+          if (trimmed.startsWith("{")) {
+            const authPayload = JSON.parse(trimmed) as { code?: number | string; msg?: string }
+            if (authPayload.code === 401 || authPayload.code === "401") {
+              // 游客：刷新不弹窗；非游客：弹登录框
+              handleAuthExpired(
+                typeof authPayload.msg === "string" ? authPayload.msg : undefined,
+              )
+              setIsStreaming(false)
+              setMessages((prev) =>
+                prev.map((m) =>
+                  m.waiting
+                    ? {
+                        ...m,
+                        waiting: false,
+                        loading: false,
+                        text: authPayload.msg || "登录过期，请重新登录",
+                      }
+                    : m,
+                ),
+              )
+              return
+            }
+          }
+        } catch {
+          // 未拼完整或仍是 SSE 文本，继续按行解析
+        }
         const lines = buffer.split("\n")
-        console.log('lines123:', lines)
         buffer = lines.pop() || ""
 
         let chunkHasUpdates = false
         let isError = false
 
         for (const line of lines) {
-          //console.log('line123:', line)
           const trimmed = line.trim()
           if (!trimmed || !trimmed.startsWith("data:")) continue
           let outJson = JSON.parse(trimmed.slice(5).trim())
-          console.log('outJson123:', outJson)
+          // SSE 里业务码 401：同样走游客刷新 / 非游客弹窗
+          if (outJson.code === 401 || outJson.code === "401") {
+            handleAuthExpired(
+              typeof outJson.msg === "string" ? outJson.msg : undefined,
+            )
+            setIsStreaming(false)
+            setMessages((prev) =>
+              prev.map((m) =>
+                m.waiting
+                  ? {
+                      ...m,
+                      waiting: false,
+                      loading: false,
+                      text: outJson.msg || outJson.localMessage || "登录过期，请重新登录",
+                    }
+                  : m,
+              ),
+            )
+            try {
+              await reader.cancel()
+            } catch {
+              /* ignore */
+            }
+            return
+          }
           if (outJson.code !== 200) {
-            fullAnswer = `哎呀，服务暂时开小差了 😅，请稍后重试。`
+            fullAnswer = outJson.localMessage || `哎呀，服务暂时开小差了 😅，请稍后重试。`
             // 业务失败：立即结束流式态，隐藏「停止生成」按钮
             setIsStreaming(false)
             currentTaskIdRef.current = null
@@ -971,16 +1030,31 @@ export default function Page() {
             stopStreamPayloadRef.current = null
             setMessages((prev) => {
               const updated = [...prev]
-              if (messageIndex >= 0 && updated[messageIndex]) {
-                updated[messageIndex] = {
-                  ...updated[messageIndex],
+              // 优先按发起请求时的下标更新；若状态不同步则回退到最后一条 waiting 的 AI
+              let idx = messageIndex
+              if (!updated[idx] || updated[idx].role !== "ai") {
+                idx = -1
+                for (let i = updated.length - 1; i >= 0; i--) {
+                  if (updated[i].role === "ai" && (updated[i].waiting || !updated[i].text)) {
+                    idx = i
+                    break
+                  }
+                }
+              }
+              if (idx >= 0 && updated[idx]) {
+                updated[idx] = {
+                  ...updated[idx],
                   text: fullAnswer,
                   waiting: false,
                   loading: false,
+                  thinkingComplete: true,
                   time: aiTime,
                 }
               }
-              return updated
+              // 清掉其它仍卡在 waiting 的气泡，避免下一条提问时旧消息仍显示「正在思考」
+              return updated.map((m) =>
+                m.waiting ? { ...m, waiting: false, loading: false } : m,
+              )
             })
             try {
               await reader.cancel()

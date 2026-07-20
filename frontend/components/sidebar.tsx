@@ -36,7 +36,7 @@ interface SidebarProps {
   onSelectHistory: (item: any) => void
   onDeleteHistory: (sessionId: string) => void | Promise<void>
   onBulkDeleteHistory?: (sessionIds: string[]) => void | Promise<void>
-  onRenameHistory?: (id: number, newTitle: string) => void
+  onRenameHistory?: (sessionId: string, newTitle: string) => void | Promise<void>
   onOpenSettings: () => void
   activeConversationId: number | null
   user: UserInfo | null
@@ -91,9 +91,10 @@ export function Sidebar({
   const [deleteDialog, setDeleteDialog] = useState<HistoryDeleteDialogState>(null)
   const [deletingHistory, setDeletingHistory] = useState(false)
   
-  // 重命名状态
-  const [editingHistoryId, setEditingHistoryId] = useState<number | null>(null)
+  // 重命名状态（用 sessionId 对齐 /h5/chat/messages/rename）
+  const [editingHistoryId, setEditingHistoryId] = useState<string | null>(null)
   const [editTitle, setEditTitle] = useState("")
+  const [renamingHistory, setRenamingHistory] = useState(false)
 
   const normalizedSearch = searchQuery.trim().toLowerCase()
   const filteredChatHistory = useMemo(() => {
@@ -139,11 +140,18 @@ export function Sidebar({
     onClose()
   }
 
-  const handleRenameSubmit = (id: number) => {
-    if (editTitle.trim() && onRenameHistory) {
-      onRenameHistory(id, editTitle.trim())
+  const handleRenameSubmit = async (sessionId: string) => {
+    if (!editTitle.trim() || !onRenameHistory || renamingHistory) {
+      setEditingHistoryId(null)
+      return
     }
-    setEditingHistoryId(null)
+    setRenamingHistory(true)
+    try {
+      await onRenameHistory(sessionId, editTitle.trim())
+    } finally {
+      setRenamingHistory(false)
+      setEditingHistoryId(null)
+    }
   }
 
   const onSelectAgentHandle = (agent: any) => {
@@ -359,7 +367,7 @@ export function Sidebar({
               {chatHistory.length > 0 && !bulkMode && (
                 <button
                   onClick={() => setBulkMode(true)}
-                  className="sidebar-text-meta transition-colors hover:text-[var(--foreground)]"
+                  className="sidebar-text-meta transition-colors hover:text-[var(--foreground)] cursor-pointer"
                   style={{ color: "var(--text-muted)" }}
                 >
                   管理
@@ -455,7 +463,7 @@ export function Sidebar({
                       onMouseEnter={() => setHoveredHistoryId(item.id)}
                       onMouseLeave={() => setHoveredHistoryId(null)}
                       className={`sidebar-history-item ${item.active ? "active" : ""} w-full text-left group`}
-                      title={item.query}
+                      title={item.title}
                       role="button"
                       tabIndex={0}
                       style={item.active ? activeStyle : hovered ? hoverStyle : baseStyle}
@@ -489,16 +497,17 @@ export function Sidebar({
                           }}
                           aria-hidden="true"
                         />
-                        {editingHistoryId === item.id ? (
+                        {editingHistoryId === item.sessionId ? (
                           <input
                             type="text"
                             value={editTitle}
+                            disabled={renamingHistory}
                             onChange={(e) => setEditTitle(e.target.value)}
-                            onBlur={() => handleRenameSubmit(item.id)}
+                            onBlur={() => handleRenameSubmit(item.sessionId)}
                             onKeyDown={(e) => {
                               if (e.key === "Enter") {
                                 e.preventDefault()
-                                handleRenameSubmit(item.id)
+                                void handleRenameSubmit(item.sessionId)
                               } else if (e.key === "Escape") {
                                 setEditingHistoryId(null)
                               }
@@ -509,7 +518,7 @@ export function Sidebar({
                             style={{ color: "var(--foreground)" }}
                           />
                         ) : (
-                          <span className="sidebar-text-item truncate flex-1" title={item.query}>{item.query}</span>
+                          <span className="sidebar-text-item truncate flex-1" title={item.title}>{item.title}</span>
                         )}
                         <div className="relative ml-1 flex-shrink-0">
                           {!bulkMode && (
@@ -540,7 +549,7 @@ export function Sidebar({
                 {hasMoreHistory && onLoadMoreHistory && (
                   <button
                     type="button"
-                    className="sidebar-load-more w-full mt-2 py-2.5 rounded-lg text-[12px] transition-colors disabled:opacity-50"
+                    className="sidebar-load-more w-full mt-2 py-2.5 rounded-lg text-[12px] transition-colors disabled:opacity-50 cursor-pointer disabled:cursor-not-allowed"
                     style={{
                       color: "var(--text-muted)",
                       background: "transparent",
@@ -626,7 +635,10 @@ export function Sidebar({
               >
                 {userInitial}
               </div>
-              <div className="min-w-0 flex-1" onClick={() => loginModalRef.current?.open()}>
+              <div
+                className="min-w-0 flex-1 cursor-pointer"
+                onClick={() => loginModalRef.current?.open()}
+              >
                 <div className="text-[13px] font-semibold truncate" style={{ color: "var(--foreground)" }} >
                   {displayName}
                 </div>
@@ -696,14 +708,14 @@ export function Sidebar({
               zIndex: 1001,
             }}
           >
-            {/* <button
+            <button
               type="button"
               className="sidebar-history-dropdown-item"
               onClick={(e) => {
                 e.stopPropagation()
                 setHistoryMenu(null)
-                setEditingHistoryId(historyMenu.item.id)
-                setEditTitle(historyMenu.item.query || historyMenu.item.title)
+                setEditingHistoryId(historyMenu.item.sessionId)
+                setEditTitle(historyMenu.item.title || "")
               }}
             >
               <svg width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" aria-hidden="true">
@@ -711,7 +723,7 @@ export function Sidebar({
                 <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
               </svg>
               <span>重命名</span>
-            </button> */}
+            </button>
             <button
               type="button"
               className="sidebar-history-dropdown-item sidebar-history-dropdown-item--danger"
@@ -721,7 +733,7 @@ export function Sidebar({
                 setDeleteDialog({
                   mode: "single",
                   sessionIds: [historyMenu.item.sessionId],
-                  title: historyMenu.item.query || historyMenu.item.title,
+                  title: historyMenu.item.title,
                 })
               }}
             >
