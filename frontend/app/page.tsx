@@ -6,6 +6,7 @@ import { Sidebar } from "@/components/sidebar"
 import { Header } from "@/components/header"
 import { ChatArea } from "@/components/chat-area"
 import { InputArea } from "@/components/input-area"
+import { AgentSection } from "@/components/agent-section"
 import { Toast } from "@/components/toast"
 import { ResourceSidebar } from "@/components/resource-sidebar"
 import { useToast } from "@/components/toast"
@@ -1751,6 +1752,30 @@ export default function Page() {
   }
 
   /* ───── 渲染 ───── */
+  const displayAgentLabel =
+    currentAgentLabel === "未知应用" ? "深海智航" : currentAgentLabel
+  const isConversationStarted = messages.length > 0
+  const inputAreaNode = (
+    <InputArea
+      uploadedImages={uploadedImages}
+      uploadedFiles={uploadedFiles}
+      rawDocFiles={rawDocFiles}
+      onSendMessage={handleSendMessage}
+      onImageUpload={handleImageUpload}
+      onFileUpload={handleFileUpload}
+      onRemoveImage={handleRemoveImage}
+      onRemoveFile={handleRemoveFile}
+      onVoiceToggle={handleVoiceToggle}
+      isRecording={isRecording}
+      disabled={isStreaming}
+      isStreaming={isStreaming}
+      onStopStreaming={handleStopStreaming}
+      agentLabel={displayAgentLabel}
+      agent={currentAgent}
+      onOpenSettings={handleOpenSettings}
+    />
+  )
+
   return (
     <div 
       className="app" 
@@ -1815,42 +1840,57 @@ export default function Page() {
             onSearchChange={setHistorySearch}
           />
 
-          <ChatArea
-            messages={messages}
-            onUseSuggestion={(text) => handleSendMessage(text)}
-            isStreaming={isStreaming}
-            agentLabel={currentAgentLabel === "未知应用" ? "深海智航" : currentAgentLabel}
-            agentDesc={currentAgentDesc}
-            quickQuestions={currentAgentQuickQuestions}
-            currentAgentId={currentAgentId}
-            userId={user?.id}
-            onRetryWorkflow={handleRetryWorkflow}
-            onRetryMessage={handleRetryMessage}
-            onStopWorkflow={handleStopStreaming}
-            onOpenResources={(resources) => {
-              setResourceSidebarResources(resources)
-              setResourceSidebarOpen(true)
-            }}
-          />
-
-          <InputArea
-            uploadedImages={uploadedImages}
-            uploadedFiles={uploadedFiles}
-            rawDocFiles={rawDocFiles}
-            onSendMessage={handleSendMessage}
-            onImageUpload={handleImageUpload}
-            onFileUpload={handleFileUpload}
-            onRemoveImage={handleRemoveImage}
-            onRemoveFile={handleRemoveFile}
-            onVoiceToggle={handleVoiceToggle}
-            isRecording={isRecording}
-            disabled={isStreaming}
-            isStreaming={isStreaming}
-            onStopStreaming={handleStopStreaming}
-            agentLabel={currentAgentLabel === "未知应用" ? "深海智航" : currentAgentLabel}
-            agent={currentAgent}
-            onOpenSettings={handleOpenSettings}
-          />
+          {isConversationStarted ? (
+            <>
+              <ChatArea
+                messages={messages}
+                onUseSuggestion={(text) => handleSendMessage(text)}
+                isStreaming={isStreaming}
+                agentLabel={displayAgentLabel}
+                agentDesc={currentAgentDesc}
+                quickQuestions={currentAgentQuickQuestions}
+                currentAgentId={currentAgentId}
+                userId={user?.id}
+                onRetryWorkflow={handleRetryWorkflow}
+                onRetryMessage={handleRetryMessage}
+                onStopWorkflow={handleStopStreaming}
+                onOpenResources={(resources) => {
+                  setResourceSidebarResources(resources)
+                  setResourceSidebarOpen(true)
+                }}
+              />
+              {inputAreaNode}
+            </>
+          ) : (
+            <ChatArea
+              messages={messages}
+              onUseSuggestion={(text) => handleSendMessage(text)}
+              isStreaming={isStreaming}
+              agentLabel={displayAgentLabel}
+              agentDesc={currentAgentDesc}
+              quickQuestions={currentAgentQuickQuestions}
+              currentAgentId={currentAgentId}
+              userId={user?.id}
+              onRetryWorkflow={handleRetryWorkflow}
+              onRetryMessage={handleRetryMessage}
+              onStopWorkflow={handleStopStreaming}
+              onOpenResources={(resources) => {
+                setResourceSidebarResources(resources)
+                setResourceSidebarOpen(true)
+              }}
+              emptyExtra={
+                <>
+                  {inputAreaNode}
+                  <AgentSection
+                    variant="cards"
+                    agentDefs={activeAgentDefs}
+                    currentAgentId={currentAgentId}
+                    onSelectAgent={handleSelectAgent}
+                  />
+                </>
+              }
+            />
+          )}
         </div>
 
         <ResourceSidebar

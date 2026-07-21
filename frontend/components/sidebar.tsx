@@ -286,8 +286,8 @@ export function Sidebar({
               style={{ background: "var(--border)", height: "1px" }}
             /> */}
 
-            {/* 智能体（可折叠） */}
-            {agentDefs.length > 0 && onSelectAgent && (
+            {/* 智能体（可折叠）— 暂时隐藏，改由欢迎页胶囊标签选择 */}
+            {false && agentDefs.length > 0 && onSelectAgent && (
               <div className="sidebar-section" style={{ padding: "16px 12px" }}>
               {/* 分类标题 - 点击收缩/展开 */}
               <button
@@ -373,8 +373,8 @@ export function Sidebar({
               </div>
             )}
 
-            {/* 分割线 */}
-            {agentDefs.length > 0 && onSelectAgent && (
+            {/* 分割线 — 随智能助手一并隐藏 */}
+            {false && agentDefs.length > 0 && onSelectAgent && (
               <div
                 className="sidebar-divider mx-4"
                 style={{ background: "var(--border)", height: "1px" }}

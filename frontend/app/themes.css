@@ -277,6 +277,19 @@ html, body {
   --input-box-drag-hint-color: #1A85FF;
   --upload-preview-file-bg: #F5F5F5;
   --upload-preview-file-icon-color: #8C8C8C;
+
+  /* 欢迎页智能助手 — Kimi 胶囊标签（默认） */
+  --welcome-agent-section-bg: transparent;
+  --welcome-agent-heading-color: #1A1A1A;
+  --welcome-agent-card-bg: #FAFAFA;
+  --welcome-agent-card-border: #E8E8E8;
+  --welcome-agent-card-hover-bg: #F0F0F0;
+  --welcome-agent-card-hover-border: #D4D4D4;
+  --welcome-agent-card-hover-label-color: #1F2937;
+  --welcome-agent-card-active-bg: #EBEBEB;
+  --welcome-agent-card-active-border: #D4D4D4;
+  --welcome-agent-card-active-label-color: #1F2937;
+  --welcome-agent-card-label-color: #4B5563;
   --upload-preview-file-name-color: #333333;
   --upload-preview-file-sub-color: #8C8C8C;
   --upload-preview-image-border: #E5E5E5;
@@ -300,6 +313,7 @@ html, body {
   --message-feedback-overlay: rgba(0, 0, 0, 0.45);
   --message-feedback-bg: #FFFFFF;
   --message-feedback-shadow: 0 8px 32px rgba(0, 0, 0, 0.12);
+  --message-feedback-border: transparent;
   --message-feedback-tag-bg: #F5F5F5;
   --message-feedback-tag-hover-bg: #EBEBEB;
   --message-feedback-tag-selected-bg: #E8F3FF;
@@ -308,6 +322,7 @@ html, body {
   --message-feedback-cancel-bg: #F5F5F5;
   --message-feedback-cancel-hover-bg: #EBEBEB;
   --message-feedback-submit-bg: #1A85FF;
+  --message-feedback-submit-color: #FFFFFF;
 
   /* 图表色 */
   --chart-1: #2563EB;
@@ -468,6 +483,39 @@ html, body {
   /* 空会话引导文案（仅深海，避免继承默认深色字） */
   --chat-empty-title-color: #F0F4F7;
   --chat-empty-subtitle-color: #94A3B8;
+
+  /* 消息操作栏 / 反馈弹窗（深海） */
+  --message-action-color: #94A3B8;
+  --message-action-color-hover: #E8EEF2;
+  --message-action-hover-bg: rgba(255, 255, 255, 0.08);
+  --message-action-active-color: #38BDF8;
+
+  --message-feedback-overlay: rgba(0, 0, 0, 0.62);
+  --message-feedback-bg: #132238;
+  --message-feedback-shadow: 0 12px 40px rgba(0, 0, 0, 0.45);
+  --message-feedback-border: #1E2D3F;
+  --message-feedback-tag-bg: #1A3050;
+  --message-feedback-tag-hover-bg: #243B57;
+  --message-feedback-tag-selected-bg: rgba(56, 189, 248, 0.16);
+  --message-feedback-tag-selected-color: #38BDF8;
+  --message-feedback-input-bg: #0F1C2B;
+  --message-feedback-cancel-bg: #1A3050;
+  --message-feedback-cancel-hover-bg: #243B57;
+  --message-feedback-submit-bg: #38BDF8;
+  --message-feedback-submit-color: #0D1B2A;
+
+  /* 欢迎页智能助手 — Kimi 胶囊标签（深海） */
+  --welcome-agent-section-bg: transparent;
+  --welcome-agent-heading-color: #F0F4F7;
+  --welcome-agent-card-bg: rgba(255, 255, 255, 0.04);
+  --welcome-agent-card-border: rgba(255, 255, 255, 0.12);
+  --welcome-agent-card-hover-bg: rgba(255, 255, 255, 0.08);
+  --welcome-agent-card-hover-border: rgba(255, 255, 255, 0.18);
+  --welcome-agent-card-hover-label-color: #F0F4F7;
+  --welcome-agent-card-active-bg: rgba(255, 255, 255, 0.12);
+  --welcome-agent-card-active-border: rgba(255, 255, 255, 0.2);
+  --welcome-agent-card-active-label-color: #F0F4F7;
+  --welcome-agent-card-label-color: #94A3B8;
 
   /* 图表色 */
   --chart-1: #38BDF8;

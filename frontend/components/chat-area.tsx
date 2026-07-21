@@ -1,6 +1,6 @@
 "use client"
 
-import { forwardRef, useState, useEffect, useRef } from "react"
+import { forwardRef, useState, useEffect, useRef, type ReactNode } from "react"
 import type { Message, ResourceItem } from "@/app/page"
 import { MessageBubble } from "./message-bubble"
 import { MessageActions } from "./message-actions"
@@ -21,10 +21,12 @@ interface ChatAreaProps {
   onRetryMessage?: (messageIndex: number) => void
   onStopWorkflow?: () => void
   onOpenResources?: (resources: ResourceItem[]) => void
+  /** 空会话时渲染在标题/副标题下方（如输入框、助手卡片） */
+  emptyExtra?: ReactNode
 }
 
 export const ChatArea = forwardRef<HTMLDivElement, ChatAreaProps>(
-  function ChatArea({ messages, onUseSuggestion, isStreaming, agentLabel = "深海智航", agentDesc, quickQuestions, currentAgentId, userId, onRetryWorkflow, onRetryMessage, onStopWorkflow, onOpenResources }, ref) {
+  function ChatArea({ messages, onUseSuggestion, isStreaming, agentLabel = "深海智航", agentDesc, quickQuestions, currentAgentId, userId, onRetryWorkflow, onRetryMessage, onStopWorkflow, onOpenResources, emptyExtra }, ref) {
     const [showScrollButton, setShowScrollButton] = useState(false)
     /** data:/blob: URL 用 window.open 常被浏览器拦截，改用页内预览 */
     const [previewImage, setPreviewImage] = useState<{ src: string; name: string } | null>(null)
@@ -228,7 +230,6 @@ export const ChatArea = forwardRef<HTMLDivElement, ChatAreaProps>(
               : `${agentLabel}已就绪，你可以直接发起问答、上传资料，或从下面的高频任务开始。`}
           </p>
 
-
           {/* Quick question tags */}
           <div className="flex flex-wrap justify-center gap-3 max-w-[700px]">
             {suggestions.map((s, idx) => (
@@ -256,6 +257,12 @@ export const ChatArea = forwardRef<HTMLDivElement, ChatAreaProps>(
               </button>
             ))}
           </div>
+
+          {emptyExtra ? (
+            <div className="welcome-empty-extra w-full text-left">
+              {emptyExtra}
+            </div>
+          ) : null}
         </div>
       )
     }
@@ -295,9 +302,9 @@ export const ChatArea = forwardRef<HTMLDivElement, ChatAreaProps>(
                         onStop={isLatestMessage ? onStopWorkflow : undefined}
                       />
                     )}
-                    {!visibleWorkflowProgress && msg.thinking && (
+                    {/* {!visibleWorkflowProgress && msg.thinking && (
                       <ThinkingBlock text={msg.thinking} isComplete={false} />
-                    )}
+                    )} */}
                     {!visibleWorkflowProgress && !msg.thinking && (
                       <div
                         className="rounded-2xl px-5 py-4 waiting-skeleton"
@@ -338,14 +345,14 @@ export const ChatArea = forwardRef<HTMLDivElement, ChatAreaProps>(
                     <CanvasDragonAvatar size={36} />
                   </div>
                   <div className="flex flex-col gap-2 min-w-0">
-                    {!visibleWorkflowProgress && msg.thinking && (
+                    {/* {!visibleWorkflowProgress && msg.thinking && (
                       <ThinkingBlock
                         text={msg.thinking}
                         isComplete={msg.thinkingComplete}
                         defaultExpanded={!msg.thinkingComplete}
                         autoCollapse={true}
                       />
-                    )}
+                    )} */}
                     {visibleWorkflowProgress ? (
                       <WorkflowProgressComponent
                         progress={visibleWorkflowProgress}
@@ -444,14 +451,14 @@ export const ChatArea = forwardRef<HTMLDivElement, ChatAreaProps>(
                     />
                   )}
                   {/* AI 思考过程（独立可折叠块，在气泡上方） */}
-                  {msg.thinking && !msg.loading && !visibleWorkflowProgress && (
+                  {/* {msg.thinking && !msg.loading && !visibleWorkflowProgress && (
                     <ThinkingBlock
                       text={msg.thinking}
                       isComplete={msg.thinkingComplete || !isStreaming}
                       defaultExpanded={isStreaming && !msg.thinkingComplete} // 流式且思考未完成时展开
                       autoCollapse={true} // 思考完成后自动折叠
                     />
-                  )}
+                  )} */}
 
                   {/* ── 用户消息：附件与文字分离，整体右对齐（Kimi 风格） ── */}
                   {isUser && (msg.text || hasAttachments) && (
