@@ -1,6 +1,7 @@
 "use client"
 
 import {useEffect, useMemo, useRef, useState} from "react"
+import { usePathname, useRouter } from "next/navigation"
 import type { ChatHistoryItem } from "@/app/page"
 import type { UserInfo } from "@/lib/api-client"
 import type { AgentDef } from "./agent-section"
@@ -108,6 +109,8 @@ export function Sidebar({
   }, [agentNames, chatHistory, normalizedSearch])
 
   const loginModalRef = useRef<LoginModalRef>(null);
+  const router = useRouter();
+  const pathname = usePathname();
 
   useEffect(() => {
     if (!historyMenu) return
@@ -250,6 +253,31 @@ export function Sidebar({
                   <line x1="5" y1="12" x2="19" y2="12" />
                 </svg>
                 <span className="sidebar-text-new-chat">新建会话</span>
+              </button>
+            </div>
+
+            {/* 工具集 导航入口 */}
+            <div className="sidebar-section" style={{ padding: "0 12px 4px" }}>
+              <button
+                onClick={() => router.push("/tools")}
+                className="sidebar-new-chat w-full"
+                style={
+                  pathname?.startsWith("/tools")
+                    ? {
+                        background: "var(--sidebar-new-chat-bg)",
+                        borderColor: "var(--accent)",
+                        color: "var(--accent)",
+                        boxShadow: "var(--sidebar-new-chat-shadow)",
+                      }
+                    : undefined
+                }
+                aria-label="工具集"
+                title="工具集"
+              >
+                <svg width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" className="flex-shrink-0">
+                  <path d="M14.7 6.3a4 4 0 0 0-5.4 5.4L3 18v3h3l6.3-6.3a4 4 0 0 0 5.4-5.4l-2.5 2.5-2.1-2.1 2.5-2.5z" />
+                </svg>
+                <span className="sidebar-text-new-chat">工具集</span>
               </button>
             </div>
 
