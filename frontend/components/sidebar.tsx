@@ -260,17 +260,16 @@ export function Sidebar({
             <div className="sidebar-section" style={{ padding: "0 12px 4px" }}>
               <button
                 onClick={() => router.push("/tools")}
-                className="sidebar-new-chat w-full"
-                style={
+                className={`flex items-center gap-3 w-full px-3 py-2.5 rounded-xl transition-all cursor-pointer ${
                   pathname?.startsWith("/tools")
-                    ? {
-                        background: "var(--sidebar-new-chat-bg)",
-                        borderColor: "var(--accent)",
-                        color: "var(--accent)",
-                        boxShadow: "var(--sidebar-new-chat-shadow)",
-                      }
-                    : undefined
-                }
+                    ? "bg-[var(--sidebar-accent)]"
+                    : "bg-transparent hover:bg-[var(--hover)]"
+                }`}
+                style={{
+                  color: pathname?.startsWith("/tools")
+                    ? "var(--accent)"
+                    : "var(--text-muted)",
+                }}
                 aria-label="工具集"
                 title="工具集"
               >
