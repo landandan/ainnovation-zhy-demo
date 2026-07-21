@@ -1606,8 +1606,10 @@ a.chat-user-file-card:hover {
   width: min(480px, calc(100vw - 32px));
   padding: 20px 24px 24px;
   border-radius: 16px;
+  border: 1px solid var(--message-feedback-border, transparent);
   background: var(--message-feedback-bg, #ffffff);
   box-shadow: var(--message-feedback-shadow, 0 8px 32px rgba(0, 0, 0, 0.12));
+  color: var(--foreground);
 }
 
 .message-feedback-header {
@@ -1730,7 +1732,7 @@ a.chat-user-file-card:hover {
   font-size: 14px;
   font-weight: 500;
   cursor: pointer;
-  color: #ffffff;
+  color: var(--message-feedback-submit-color, #ffffff);
   background: var(--message-feedback-submit-bg, #1a85ff);
   transition: opacity 0.15s ease;
 }
@@ -2784,6 +2786,128 @@ a.chat-user-file-card:hover {
   font-size: 8px;
   flex-shrink: 0;
   animation: pulse 2s ease-in-out infinite;
+}
+
+/* 欢迎页智能助手 — Kimi 胶囊标签风格 */
+.welcome-empty-extra {
+  max-width: var(--input-area-max-width, 960px);
+  margin: 0 auto;
+}
+
+.welcome-agent-section {
+  width: 100%;
+  max-width: var(--input-area-max-width, 960px);
+  margin: 16px auto 0;
+  padding: 4px var(--input-area-padding-x, 24px) 8px;
+}
+
+.welcome-agent-heading {
+  position: relative;
+  display: inline-block;
+  margin-bottom: 12px;
+  padding-bottom: 6px;
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1.3;
+  color: var(--welcome-agent-heading-color, var(--foreground));
+  text-align: left;
+}
+
+.welcome-agent-empty {
+  padding: 16px;
+  text-align: center;
+  font-size: 13px;
+  color: var(--text-muted);
+  border: 1px dashed var(--welcome-agent-card-border, #E5E5E5);
+  border-radius: 999px;
+  background: var(--welcome-agent-card-bg, #FAFAFA);
+}
+
+.welcome-agent-grid {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 10px;
+}
+
+.welcome-agent-card {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  width: auto;
+  min-height: 36px;
+  padding: 8px 14px;
+  text-align: left;
+  border-radius: 999px;
+  border: 1px solid var(--welcome-agent-card-border, #E8E8E8);
+  background: var(--welcome-agent-card-bg, #FAFAFA);
+  color: var(--welcome-agent-card-label-color, #4B5563);
+  box-shadow: none;
+  cursor: pointer;
+  outline: none;
+  transition: border-color 0.15s ease, background-color 0.15s ease, color 0.15s ease;
+}
+
+.welcome-agent-card:hover {
+  border-color: var(--welcome-agent-card-hover-border, #D4D4D4);
+  background: var(--welcome-agent-card-hover-bg, #F0F0F0);
+  color: var(--welcome-agent-card-hover-label-color, #1F2937);
+}
+
+.welcome-agent-card:focus-visible {
+  border-color: var(--welcome-agent-card-active-border, #D4D4D4);
+  background: var(--welcome-agent-card-active-bg, #EBEBEB);
+}
+
+.welcome-agent-card.active {
+  border-color: var(--welcome-agent-card-active-border, #D4D4D4);
+  background: var(--welcome-agent-card-active-bg, #EBEBEB);
+  color: var(--welcome-agent-card-active-label-color, #1F2937);
+  padding: 8px 14px;
+  border-width: 1px;
+}
+
+.welcome-agent-card-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  border-radius: 0;
+  font-size: inherit;
+  line-height: 1;
+  background: transparent;
+  color: currentColor;
+  flex-shrink: 0;
+  overflow: visible;
+}
+
+.welcome-agent-card-icon svg {
+  display: block;
+  width: 16px;
+  height: 16px;
+}
+
+.welcome-agent-card-label {
+  font-size: 13px;
+  font-weight: 400;
+  line-height: 1.2;
+  color: currentColor;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 12em;
+}
+
+@media (max-width: 720px) {
+  .welcome-agent-grid {
+    gap: 8px;
+  }
+
+  .welcome-agent-card {
+    min-height: 34px;
+    padding: 7px 12px;
+  }
 }
 
 /* 升级横幅 */
