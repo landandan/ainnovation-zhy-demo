@@ -245,7 +245,7 @@ export function Sidebar({
         {/* 新对话按钮 */}
             <div className="sidebar-section" style={{ padding: "0 12px 12px" }}>
               <button
-                onClick={onNewChat}
+                onClick={() => onNewChat()}
                 className="sidebar-new-chat w-full"
               >
                 <svg width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" className="flex-shrink-0">

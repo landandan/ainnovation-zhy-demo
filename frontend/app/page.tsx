@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useRef, useEffect, useCallback, useMemo } from "react"
-import { useRouter } from "next/navigation"
+import { usePathname, useRouter } from "next/navigation"
 import { Sidebar } from "@/components/sidebar"
 import { Header } from "@/components/header"
 import { ChatArea } from "@/components/chat-area"
@@ -45,6 +45,19 @@ import {
 import { getUserSettings, updateUserSettings } from "@/lib/api-client"
 import { isAuthenticated } from "@/lib/auth"
 import { handleAuthExpired } from "@/lib/http/client"
+
+/** 从地址栏读取对话路由参数（刷新恢复用） */
+function readChatUrlParams() {
+  if (typeof window === "undefined") {
+    return { agent: "", session: "" }
+  }
+  const sp = new URLSearchParams(window.location.search)
+  return {
+    agent: sp.get("agent")?.trim() || "",
+    session: sp.get("session")?.trim() || "",
+  }
+}
+
 export interface MessageFileAttachment {
   name: string
   size?: number
@@ -449,6 +462,7 @@ function mapMessage(m: MessageApi): Message[] {
 export default function Page() {
   const { user, logout } = useAuth()
   const router = useRouter()
+  const pathname = usePathname()
 
   /* ───── 主题状态 ───── */
   const [theme, setTheme] = useState<ThemeId>("")
@@ -508,7 +522,47 @@ export default function Page() {
   /* ───── 对话持久化状态 ───── */
   const [activeConversationId, setActiveConversationId] = useState<number | null>(null)
   const [sessionId, setSessionId] = useState<string>('')
+  const sessionIdRef = useRef<string>('')
   const difyConversationIdRef = useRef<string | null>(null)
+
+  useEffect(() => {
+    sessionIdRef.current = sessionId
+  }, [sessionId])
+
+  /** 同步地址栏 ?agent=&session=，刷新后可恢复当前对话 */
+  const syncChatUrl = useCallback(
+    (nextAgentId: string, nextSessionId?: string | null) => {
+      if (typeof window === "undefined") return
+      const params = new URLSearchParams()
+      const agent = String(nextAgentId ?? "").trim()
+      const session = nextSessionId == null ? "" : String(nextSessionId).trim()
+      if (agent) params.set("agent", agent)
+      if (session) params.set("session", session)
+      const qs = params.toString()
+      const base = pathname || "/"
+      const nextUrl = qs ? `${base}?${qs}` : base
+      const current = `${window.location.pathname}${window.location.search}`
+      if (current === nextUrl) return
+      router.replace(nextUrl, { scroll: false })
+    },
+    [pathname, router],
+  )
+
+  const applySessionId = useCallback(
+    (nextSessionId: string | number | null | undefined, agentIdForUrl?: string, options?: { prefer?: boolean }) => {
+      const sid = String(nextSessionId ?? "").trim()
+      if (!sid || sid === "[object Object]") return
+      const prev = String(sessionIdRef.current ?? "").trim()
+      // prefer：H5 返回的 sessionId 可覆盖先前用 conversation_id 的占位
+      if (prev && prev !== sid && !options?.prefer) return
+      if (prev !== sid) {
+        sessionIdRef.current = sid
+        setSessionId(sid)
+      }
+      syncChatUrl(agentIdForUrl || currentAgentId, sid)
+    },
+    [currentAgentId, syncChatUrl],
+  )
 
   /* ───── 流式请求中断 ───── */
   const abortControllerRef = useRef<AbortController | null>(null)
@@ -555,11 +609,13 @@ export default function Page() {
   const currentAgentQuickQuestions =
     activeAgentDefs.find((d) => d.id === currentAgentId)?.quickQuestions ?? []
 
-  /* ───── 初始化：从后端加载 agents 和 conversations ───── */
+  /* ───── 初始化：从后端加载 agents 和 conversations，并按 URL 恢复会话 ───── */
   useEffect(() => {
     if (!user) return
 
     async function loadData() {
+      const { agent: urlAgent, session: urlSession } = readChatUrlParams()
+
       try {
         // 并行加载 agents 和 conversations
         const [agentsRes, convsRes] = await Promise.all([
@@ -569,6 +625,9 @@ export default function Page() {
         console.log("🚀 ~ loadData ~ agentsRes: ", agentsRes);
         console.log("🚀 ~ loadData ~ convsRes: ", convsRes);
         //const convsRes = cRes.data
+        let resolvedAgentId = ""
+        let activeMapped: AgentDef[] = []
+
         if (agentsRes?.data?.length > 0) {
           const mapped = agentsRes.data.map(mapAgentDef)
           setAgentDefs(mapped)
@@ -581,11 +640,19 @@ export default function Page() {
             if (a.agent_id) idMap.set(String(a.agent_id), Number.isFinite(numericId) ? numericId : 0)
           }
           agentIdToDbId.current = idMap
-          const activeMapped = mapped.filter((a) => a.isActive)
-          // 首次进入时，如果未选择智能体，默认选择“深海智航”，否则选择第一个启用应用
-          if (!currentAgentId) {
+          activeMapped = mapped.filter((a) => a.isActive)
+
+          if (urlAgent) {
+            const byId = activeMapped.find((a) => a.id === urlAgent)
+            const byAgentId = activeMapped.find((a) => a.agent_id === urlAgent)
+            resolvedAgentId = byId?.id || byAgentId?.id || urlAgent
+          } else {
             const prefer = activeMapped.find((a) => a.label === "深海智航")?.id
-            setCurrentAgentId(prefer || activeMapped[0]?.id || "")
+            resolvedAgentId = prefer || activeMapped[0]?.id || ""
+          }
+
+          if (resolvedAgentId) {
+            setCurrentAgentId(resolvedAgentId)
           }
         }
 
@@ -598,6 +665,37 @@ export default function Page() {
             ? rows.length < total
             : rows.length >= CONVERSATIONS_PAGE_SIZE,
         )
+
+        // 刷新恢复：有 session 则拉历史消息；否则只同步 agent 到 URL
+        if (urlSession) {
+          try {
+            const msgsRes = await getMessages(urlSession)
+            const sortedMsgs = [...(msgsRes?.data?.messageList ?? [])].sort(
+              (a, b) => new Date(a.createTime).getTime() - new Date(b.createTime).getTime(),
+            )
+            setMessages(sortedMsgs.flatMap(mapMessage))
+            sessionIdRef.current = urlSession
+            setSessionId(urlSession)
+            difyConversationIdRef.current = null
+
+            if (!urlAgent) {
+              const conv = rows.find((c) => c.sessionId === urlSession)
+              if (conv?.appId) {
+                const appId = String(conv.appId)
+                const matched = activeMapped.find((a) => a.id === appId)
+                resolvedAgentId = matched?.id || appId
+                setCurrentAgentId(resolvedAgentId)
+              }
+            }
+
+            syncChatUrl(resolvedAgentId, urlSession)
+          } catch (restoreErr) {
+            console.error("从 URL 恢复会话失败:", restoreErr)
+            if (resolvedAgentId) syncChatUrl(resolvedAgentId, null)
+          }
+        } else if (resolvedAgentId) {
+          syncChatUrl(resolvedAgentId, null)
+        }
       } catch (err) {
         console.error("加载数据失败:", err)
       } finally {
@@ -606,7 +704,7 @@ export default function Page() {
     }
 
     loadData()
-  }, [user])
+  }, [user, syncChatUrl])
 
   useEffect(() => {
     if (loadingData || typeof window === "undefined") return
@@ -639,9 +737,9 @@ export default function Page() {
         hour: "2-digit",
         minute: "2-digit",
       }),
-      // 用 sessionId 判断选中（item.id 是 messageId，与 c.id 不一致会导致永远不高亮）
-      active: Boolean(sessionId) && c.sessionId === sessionId,
-      sessionId: c.sessionId || "",
+      // 用 sessionId 判断选中（统一转字符串，避免 number/string 对不上）
+      active: Boolean(sessionId) && String(c.sessionId ?? "") === String(sessionId),
+      sessionId: c.sessionId != null ? String(c.sessionId) : "",
       query: c.query || "",
       appId: c.appId ? String(c.appId) : undefined,
     }))
@@ -712,7 +810,7 @@ export default function Page() {
       handleStopStreaming()
     }
     setCurrentAgentId(agentId)
-    handleNewChat()
+    handleNewChat(agentId)
     maybeCloseSidebar()
   }
 
@@ -730,10 +828,33 @@ export default function Page() {
           : rows.length >= CONVERSATIONS_PAGE_SIZE,
       )
       console.log('convsRes123:', convsRes)
+      return rows
     } catch (err) {
       console.error("刷新会话列表失败:", err)
+      return [] as ConversationApi[]
     }
   }, [])
+
+  /** 发消息后列表里的 sessionId 可能与流里的 conversation_id 不一致，对齐当前高亮 */
+  const reconcileActiveSession = useCallback(
+    (rows: ConversationApi[], agentIdForUrl?: string, options?: { isNewChat?: boolean }) => {
+      const current = String(sessionIdRef.current ?? "").trim()
+      if (current && rows.some((r) => String(r.sessionId ?? "") === current)) return
+
+      // 当前 id 对不上列表时：新对话，或已有占位 id 但不在列表中，都对齐到本智能体最新一条
+      if (!options?.isNewChat && current) return
+
+      const agentKey = String(agentIdForUrl || currentAgentId || "")
+      const matched =
+        (agentKey
+          ? rows.find((r) => String(r.appId ?? "") === agentKey)
+          : undefined) || rows[0]
+      if (matched?.sessionId != null && String(matched.sessionId).trim()) {
+        applySessionId(matched.sessionId, agentKey || currentAgentId, { prefer: true })
+      }
+    },
+    [applySessionId, currentAgentId],
+  )
 
   const handleLoadMoreConversations = useCallback(async () => {
     if (loadingMoreConversations || !conversationsHasMore) return
@@ -767,10 +888,11 @@ export default function Page() {
     }
   }, [conversationsHasMore, conversationsPage, loadingMoreConversations])
 
-  const handleNewChat = () => {
+  const handleNewChat = (agentIdOverride?: string) => {
     setMessages([])
     setActiveConversationId(null)
-    setSessionId(``)
+    sessionIdRef.current = ""
+    setSessionId("")
     difyConversationIdRef.current = null
     setSidebarOpen(false)
     setIsStreaming(false)
@@ -783,6 +905,12 @@ export default function Page() {
     setImageOssIds([])
     setDocOssIds([])
     refreshConversations()
+    // 侧边栏 onClick 可能把事件对象传进来，只接受真正的 agent id 字符串
+    const nextAgentId =
+      typeof agentIdOverride === "string" && agentIdOverride.trim()
+        ? agentIdOverride.trim()
+        : currentAgentId
+    syncChatUrl(nextAgentId, null)
   }
 
   const handleSelectHistory = async (item: ChatHistoryItem) => {
@@ -806,21 +934,26 @@ export default function Page() {
       setResourceSidebarOpen(false)
       setMessages(mappedMsgs)
       setActiveConversationId(id)
+      sessionIdRef.current = item.sessionId
       setSessionId(item.sessionId)
 
       // 用历史会话的 appId 匹配智能助手列表 id，选中对应智能体（不新建会话）
+      let nextAgentId = currentAgentId
       const appId = item.appId ? String(item.appId) : ""
       if (appId) {
         const matchedAgent = agentDefs.find((a) => String(a.id) === appId)
         if (matchedAgent) {
+          nextAgentId = matchedAgent.id
           setCurrentAgentId(matchedAgent.id)
         } else {
           // 列表里暂时没有时也先写入，避免继续沿用上一个智能体
+          nextAgentId = appId
           setCurrentAgentId(appId)
         }
       }
 
       difyConversationIdRef.current = null
+      syncChatUrl(nextAgentId, item.sessionId)
       maybeCloseSidebar()
     } catch (err) {
       console.error("加载对话消息失败:", err)
@@ -835,8 +968,10 @@ export default function Page() {
       if (sessionId === sessionIdToDelete) {
         setMessages([])
         setActiveConversationId(null)
+        sessionIdRef.current = ""
         setSessionId("")
         difyConversationIdRef.current = null
+        syncChatUrl(currentAgentId, null)
       }
       await refreshConversations()
       success("对话已删除")
@@ -856,8 +991,10 @@ export default function Page() {
       if (sessionId && uniqueSessionIds.includes(sessionId)) {
         setMessages([])
         setActiveConversationId(null)
+        sessionIdRef.current = ""
         setSessionId("")
         difyConversationIdRef.current = null
+        syncChatUrl(currentAgentId, null)
       }
       await refreshConversations()
       success(`已删除 ${uniqueSessionIds.length} 条对话`)
@@ -903,6 +1040,7 @@ export default function Page() {
     const controller = new AbortController()
     abortControllerRef.current = controller
     setIsStreaming(true)
+    const isNewChat = !sessionIdRef.current
 
     try {
       const response = await callDifyChatStream({
@@ -1079,6 +1217,11 @@ export default function Page() {
             isError = true
             break
           }
+          const outerSessionId = outJson.sessionId ?? outJson.session_id
+          if (outerSessionId != null && String(outerSessionId).trim()) {
+            // 历史列表高亮以 H5 sessionId 为准（兼容 number / string）
+            applySessionId(outerSessionId, currentAgentId, { prefer: true })
+          }
           // if (!trimmed.startsWith("data:{code=200, message=data: ")) continue
           // console.log('trimmed123:', line)
 
@@ -1092,6 +1235,15 @@ export default function Page() {
             console.log('event123:', event)
             if (typeof event.message_id === "string" && event.message_id.trim()) {
               assistantDifyMessageId = event.message_id.trim()
+            }
+            const eventConversationId = event.conversation_id ?? event.conversationId
+            if (eventConversationId != null && String(eventConversationId).trim()) {
+              newDifyConversationId = String(eventConversationId).trim()
+              difyConversationIdRef.current = newDifyConversationId
+              // 仅在还没有 H5 sessionId 时，用 conversation_id 临时占位
+              if (!String(sessionIdRef.current ?? "").trim()) {
+                applySessionId(newDifyConversationId, currentAgentId)
+              }
             }
 
             switch (event.event) {
@@ -1139,7 +1291,9 @@ export default function Page() {
 
               case "workflow_finished":
                 setIsStreaming(false)
-                refreshConversations()
+                void refreshConversations().then((rows) => {
+                  reconcileActiveSession(rows, currentAgentId, { isNewChat })
+                })
                 isWorkflowTaskRef.current = true
                 if (event.task_id && !currentTaskIdRef.current) {
                   currentTaskIdRef.current = event.task_id
@@ -1201,10 +1355,6 @@ export default function Page() {
               }
 
               case "message_end":
-                if (event.conversation_id) {
-                  newDifyConversationId = event.conversation_id
-                  difyConversationIdRef.current = newDifyConversationId
-                }
                 if (event.task_id && !currentTaskIdRef.current) {
                   currentTaskIdRef.current = event.task_id
                 }
@@ -1339,6 +1489,19 @@ export default function Page() {
         prev.map((m) => (m.waiting ? { ...m, waiting: false, loading: false } : m)),
       )
       setIsStreaming(false)
+      // 刷新历史列表并对齐高亮；若后端落库稍慢，短暂重试一次
+      const syncHistoryHighlight = async () => {
+        let rows = await refreshConversations()
+        reconcileActiveSession(rows, currentAgentId, { isNewChat })
+        const current = String(sessionIdRef.current ?? "").trim()
+        const matched = current && rows.some((r) => String(r.sessionId ?? "") === current)
+        if (!matched && isNewChat) {
+          await new Promise((r) => setTimeout(r, 400))
+          rows = await refreshConversations()
+          reconcileActiveSession(rows, currentAgentId, { isNewChat: true })
+        }
+      }
+      void syncHistoryHighlight()
     }
   }
 
