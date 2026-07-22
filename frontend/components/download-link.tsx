@@ -1,6 +1,7 @@
  "use client"
 
 import { useEffect, useMemo, useState } from "react"
+import mammoth from "mammoth"
 
 import { isMockMode } from "@/lib/mock-config"
  import {getToken} from "@/lib/auth";
@@ -17,6 +18,7 @@ import { isMockMode } from "@/lib/mock-config"
    | { kind: "loading" }
    | { kind: "table"; headers: string[]; rows: string[][] }
    | { kind: "text"; content: string; language: string }
+   | { kind: "html"; content: string }
    | { kind: "image" }
    | { kind: "pdf" }
    | { kind: "unsupported"; message: string }
@@ -233,7 +235,11 @@ export function DownloadLink({ href, label, agentId, fileId }: DownloadLinkProps
 
    const fileName = useMemo(() => getFileNameFrom(href, label), [href, label])
    const baseName = useMemo(() => fileBaseNameFrom(fileName), [fileName])
-   const extension = useMemo(() => getFileExtension(fileName), [fileName])
+   const extension = useMemo(() => {
+     const fromName = getFileExtension(fileName)
+     if (fromName) return fromName
+     return getFileExtension(getFileNameFrom(href))
+   }, [fileName, href])
   const resolvedFileId = useMemo(() => fileId || extractFileIdFromHref(href), [fileId, href])
   const prefersFetchProxy = useMemo(
     () => !isMockMode() && !!agentId && (isToolFileHref(href) || isSignedDifyHref(href)),
@@ -269,6 +275,23 @@ export function DownloadLink({ href, label, agentId, fileId }: DownloadLinkProps
     return requestUrl
   }
 
+  /** 预览需要文件二进制：优先直连已有 URL，失败再走代理（避开 CORS） */
+  const loadPreviewArrayBuffer = async () => {
+    if (canDownloadDirectly(href)) {
+      try {
+        const directRes = await fetch(href)
+        if (directRes.ok) {
+          return await directRes.arrayBuffer()
+        }
+      } catch {
+        // 跨域等失败时回退代理
+      }
+    }
+
+    const res = await fetchFileResponse(ensureFileReady(false), shouldUseProxyAuth)
+    return await res.arrayBuffer()
+  }
+
   const clearPreviewAssetUrl = () => {
     setPreviewAssetUrl((prev) => {
       if (prev) {
@@ -291,6 +314,7 @@ export function DownloadLink({ href, label, agentId, fileId }: DownloadLinkProps
      if (["txt", "md", "json", "log"].includes(extension)) return { tag: extension.toUpperCase(), desc: "文本附件，可在线预览" }
      if (["png", "jpg", "jpeg", "gif", "webp"].includes(extension)) return { tag: "图片", desc: "点击查看右侧预览" }
      if (extension === "pdf") return { tag: "PDF", desc: "点击查看右侧预览" }
+     if (extension === "docx") return { tag: "DOCX", desc: "Word 文档，可在线预览" }
      return { tag: extension ? extension.toUpperCase() : "文件", desc: "点击查看附件信息" }
    }, [extension])
 
@@ -307,6 +331,13 @@ export function DownloadLink({ href, label, agentId, fileId }: DownloadLinkProps
         const objectUrl = URL.createObjectURL(blob)
         setPreviewAssetUrl(objectUrl)
         setPreview({ kind: extension === "pdf" ? "pdf" : "image" })
+        return
+      }
+
+      if (extension === "docx") {
+        const arrayBuffer = await loadPreviewArrayBuffer()
+        const result = await mammoth.convertToHtml({ arrayBuffer })
+        setPreview({ kind: "html", content: result.value || "<p>（文档无内容）</p>" })
         return
       }
 
@@ -455,6 +486,15 @@ export function DownloadLink({ href, label, agentId, fileId }: DownloadLinkProps
                 <div className="attachment-preview-code">
                   <div className="attachment-preview-code-tag">{preview.language.toUpperCase()}</div>
                   <pre>{preview.content}</pre>
+                </div>
+              )}
+
+              {preview.kind === "html" && (
+                <div className="attachment-preview-docx">
+                  <div
+                    className="attachment-preview-docx-body"
+                    dangerouslySetInnerHTML={{ __html: preview.content }}
+                  />
                 </div>
               )}
 
