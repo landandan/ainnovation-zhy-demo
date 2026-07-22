@@ -437,7 +437,7 @@ export function MessageBubble({ role, text, time, agentId, attachments }: Messag
               const label = Array.isArray(children) ? String(children.join("")).trim() : String(children as any)
               const isAttachment = !!href && (
                 /\/files\//i.test(href) ||
-                /\.(csv|tsv|txt|md|json|log|pdf|png|jpg|jpeg|gif|webp)$/i.test(href)
+                /\.(csv|tsv|txt|md|json|log|pdf|png|jpg|jpeg|gif|webp|doc|docx|xls|xlsx|ppt|pptx)$/i.test(href)
               )
               if (isAttachment) {
                 return <DownloadLink href={href!} label={label} agentId={agentId} />
