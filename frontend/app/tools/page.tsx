@@ -78,7 +78,7 @@ export default function ToolsPage() {
             工具集
           </h1>
           <p className="text-[11px]" style={{ color: "var(--text-muted)" }}>
-            实用小工具集合 · 纯前端
+            实用小工具集合
           </p>
         </div>
       </div>
