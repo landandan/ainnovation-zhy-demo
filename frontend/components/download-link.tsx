@@ -1,7 +1,8 @@
  "use client"
 
-import { useEffect, useMemo, useState } from "react"
+import { useEffect, useMemo, useRef, useState } from "react"
 import mammoth from "mammoth"
+import type { WorkBook } from "xlsx"
 
 import { isMockMode } from "@/lib/mock-config"
  import {getToken} from "@/lib/auth";
@@ -16,7 +17,7 @@ import { isMockMode } from "@/lib/mock-config"
  type PreviewState =
    | { kind: "idle" }
    | { kind: "loading" }
-   | { kind: "table"; headers: string[]; rows: string[][] }
+   | { kind: "table"; headers: string[]; rows: string[][]; sheetNames?: string[]; activeSheet?: string }
    | { kind: "text"; content: string; language: string }
    | { kind: "html"; content: string }
    | { kind: "image" }
@@ -104,6 +105,27 @@ const API_BASE_URL = process.env.NODE_ENV === "development" ? "http://localhost:
    const rows = lines.slice(1, 121).map((line) => parseDelimitedRow(line, delimiter))
    return { headers, rows }
  }
+
+async function excelSheetToPreviewTable(sheet: WorkBook["Sheets"][string], maxRows = 120) {
+  const XLSX = await import("xlsx")
+  const raw = XLSX.utils.sheet_to_json<(string | number | boolean | null | undefined)[]>(sheet, {
+    header: 1,
+    defval: "",
+    raw: false,
+  }) as Array<Array<string | number | boolean | null | undefined>>
+
+  if (!raw.length) {
+    return { headers: [] as string[], rows: [] as string[][] }
+  }
+
+  const headers = (raw[0] || []).map((cell) => String(cell ?? ""))
+  const colCount = Math.max(headers.length, ...raw.slice(1, maxRows + 1).map((row) => row.length), 1)
+  const normalizedHeaders = Array.from({ length: colCount }, (_, index) => headers[index] || `列 ${index + 1}`)
+  const rows = raw.slice(1, maxRows + 1).map((row) =>
+    Array.from({ length: colCount }, (_, index) => String(row[index] ?? "")),
+  )
+  return { headers: normalizedHeaders, rows }
+}
 
 function extractFileIdFromHref(href: string) {
   try {
@@ -232,6 +254,7 @@ export function DownloadLink({ href, label, agentId, fileId }: DownloadLinkProps
   const [preview, setPreview] = useState<PreviewState>({ kind: "idle" })
   const [downloading, setDownloading] = useState(false)
   const [previewAssetUrl, setPreviewAssetUrl] = useState<string | null>(null)
+  const workbookRef = useRef<WorkBook | null>(null)
 
    const fileName = useMemo(() => getFileNameFrom(href, label), [href, label])
    const baseName = useMemo(() => fileBaseNameFrom(fileName), [fileName])
@@ -310,17 +333,18 @@ export function DownloadLink({ href, label, agentId, fileId }: DownloadLinkProps
   }, [previewAssetUrl])
 
    const fileMeta = useMemo(() => {
-     if (["csv", "tsv"].includes(extension)) return { tag: extension.toUpperCase(), desc: "表格附件，可在线预览" }
+     if (["csv", "tsv", "xls", "xlsx"].includes(extension)) return { tag: extension.toUpperCase(), desc: "表格附件，可在线预览" }
      if (["txt", "md", "json", "log"].includes(extension)) return { tag: extension.toUpperCase(), desc: "文本附件，可在线预览" }
      if (["png", "jpg", "jpeg", "gif", "webp"].includes(extension)) return { tag: "图片", desc: "点击查看右侧预览" }
      if (extension === "pdf") return { tag: "PDF", desc: "点击查看右侧预览" }
-     if (extension === "docx") return { tag: "DOCX", desc: "Word 文档，可在线预览" }
+     if (extension === "docx" || extension === "doc") return { tag: extension.toUpperCase(), desc: "Word 文档，可在线预览" }
      return { tag: extension ? extension.toUpperCase() : "文件", desc: "点击查看附件信息" }
    }, [extension])
 
    const handlePreviewOpen = async () => {
      setPreviewOpen(true)
     clearPreviewAssetUrl()
+    workbookRef.current = null
 
      try {
        setPreview({ kind: "loading" })
@@ -334,10 +358,51 @@ export function DownloadLink({ href, label, agentId, fileId }: DownloadLinkProps
         return
       }
 
-      if (extension === "docx") {
+      if (extension === "docx" || extension === "doc") {
         const arrayBuffer = await loadPreviewArrayBuffer()
-        const result = await mammoth.convertToHtml({ arrayBuffer })
-        setPreview({ kind: "html", content: result.value || "<p>（文档无内容）</p>" })
+
+        if (extension === "docx") {
+          const result = await mammoth.convertToHtml({ arrayBuffer })
+          setPreview({ kind: "html", content: result.value || "<p>（文档无内容）</p>" })
+          return
+        }
+
+        // 部分文件后缀是 .doc 实为 docx，先尝试 mammoth
+        try {
+          const maybeDocx = await mammoth.convertToHtml({ arrayBuffer })
+          if (maybeDocx.value?.trim()) {
+            setPreview({ kind: "html", content: maybeDocx.value })
+            return
+          }
+        } catch {
+          // 真正的旧版 .doc 再走专用解析
+        }
+
+        const { parseMsDocToHtml } = await import("@file-viewer/doc")
+        const rendered = await parseMsDocToHtml(arrayBuffer)
+        const html = `${rendered.css ? `<style>${rendered.css}</style>` : ""}<div class="msdoc-root">${rendered.html || "<p>（文档无内容）</p>"}</div>`
+        setPreview({ kind: "html", content: html })
+        return
+      }
+
+      if (extension === "xls" || extension === "xlsx") {
+        const arrayBuffer = await loadPreviewArrayBuffer()
+        const XLSX = await import("xlsx")
+        const workbook = XLSX.read(arrayBuffer, { type: "array" })
+        workbookRef.current = workbook
+        const activeSheet = workbook.SheetNames[0]
+        if (!activeSheet) {
+          setPreview({ kind: "unsupported", message: "该表格文件没有可预览的工作表。" })
+          return
+        }
+        const { headers, rows } = await excelSheetToPreviewTable(workbook.Sheets[activeSheet])
+        setPreview({
+          kind: "table",
+          headers,
+          rows,
+          sheetNames: workbook.SheetNames,
+          activeSheet,
+        })
         return
       }
 
@@ -346,7 +411,8 @@ export function DownloadLink({ href, label, agentId, fileId }: DownloadLinkProps
         return
       }
 
-      const text = await (await fetchFileResponse(ensureFileReady(false), shouldUseProxyAuth)).text()
+      const arrayBuffer = await loadPreviewArrayBuffer()
+      const text = new TextDecoder("utf-8").decode(arrayBuffer)
 
        if (extension === "csv" || extension === "tsv") {
          const { headers, rows } = parseDelimitedText(text, extension === "tsv" ? "\t" : ",")
@@ -363,6 +429,24 @@ export function DownloadLink({ href, label, agentId, fileId }: DownloadLinkProps
        setPreview({ kind: "error", message })
      }
    }
+
+  const handleSheetChange = async (sheetName: string) => {
+    const workbook = workbookRef.current
+    if (!workbook || !workbook.Sheets[sheetName]) return
+    try {
+      const { headers, rows } = await excelSheetToPreviewTable(workbook.Sheets[sheetName])
+      setPreview({
+        kind: "table",
+        headers,
+        rows,
+        sheetNames: workbook.SheetNames,
+        activeSheet: sheetName,
+      })
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "切换工作表失败"
+      setPreview({ kind: "error", message })
+    }
+  }
 
    const handleDownload = async () => {
      try {
@@ -393,6 +477,7 @@ export function DownloadLink({ href, label, agentId, fileId }: DownloadLinkProps
       setIsClosing(false)
       setPreview({ kind: "idle" })
       clearPreviewAssetUrl()
+      workbookRef.current = null
     }, 220) // 与 CSS 动画时间一致
   }
 
@@ -500,6 +585,20 @@ export function DownloadLink({ href, label, agentId, fileId }: DownloadLinkProps
 
               {preview.kind === "table" && (
                 <div className="attachment-preview-table-wrap">
+                  {!!preview.sheetNames && preview.sheetNames.length > 1 && (
+                    <div className="attachment-preview-sheet-tabs">
+                      {preview.sheetNames.map((sheetName) => (
+                        <button
+                          key={sheetName}
+                          type="button"
+                          className={`attachment-preview-sheet-tab${preview.activeSheet === sheetName ? " active" : ""}`}
+                          onClick={() => handleSheetChange(sheetName)}
+                        >
+                          {sheetName}
+                        </button>
+                      ))}
+                    </div>
+                  )}
                   <table className="attachment-preview-table">
                     <thead>
                       <tr>

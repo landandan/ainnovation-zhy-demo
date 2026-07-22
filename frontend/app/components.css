@@ -1125,6 +1125,40 @@
   overflow: auto;
 }
 
+.attachment-preview-sheet-tabs {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--border);
+  background: color-mix(in srgb, var(--card) 92%, var(--background) 8%);
+}
+
+.attachment-preview-sheet-tab {
+  padding: 4px 10px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.attachment-preview-sheet-tab:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.attachment-preview-sheet-tab.active {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+  color: var(--accent);
+  font-weight: 600;
+}
+
 .attachment-preview-table {
   width: 100%;
   border-collapse: collapse;
