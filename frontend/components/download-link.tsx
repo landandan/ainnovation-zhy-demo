@@ -46,7 +46,7 @@ const API_BASE_URL = process.env.NODE_ENV === "development" ? "http://localhost:
  }
 
  function fileBaseNameFrom(fileName: string) {
-   return fileName.replace(/\.(csv|tsv|xls|xlsx|txt|md|json|pdf|png|jpg|jpeg|gif|webp)$/i, "")
+   return fileName.replace(/\.(csv|tsv|xls|xlsx|doc|docx|ppt|pptx|txt|md|json|pdf|png|jpg|jpeg|gif|webp)$/i, "")
  }
 
  function downloadBlob(blob: Blob, filename: string) {
@@ -148,6 +148,22 @@ function isSignedDifyHref(href: string) {
   return parsed.searchParams.has("timestamp")
     && parsed.searchParams.has("nonce")
     && parsed.searchParams.has("sign")
+}
+
+/** 已是完整 http(s) 地址（含 Dify 签名链）时可直连下载，不必再走后端代理 */
+function canDownloadDirectly(href: string) {
+  return /^https?:\/\//i.test(href.trim())
+}
+
+function triggerDirectDownload(url: string, filename: string) {
+  const a = document.createElement("a")
+  a.href = url
+  a.download = filename
+  a.target = "_blank"
+  a.rel = "noopener noreferrer"
+  document.body.appendChild(a)
+  a.click()
+  a.remove()
 }
 
 function buildFileAccessUrl(fileId?: string, agentId?: string, download = false) {
@@ -320,9 +336,17 @@ export function DownloadLink({ href, label, agentId, fileId }: DownloadLinkProps
    const handleDownload = async () => {
      try {
        setDownloading(true)
+      const name = fileName || `${baseName || "download"}.${extension || "file"}`
+
+      // 消息里已带可直连 URL（如带 timestamp/nonce/sign 的 docx）时，直接打开/下载，不走 /dify/files/fetch
+      if (canDownloadDirectly(href)) {
+        triggerDirectDownload(href, name)
+        return
+      }
+
       const res = await fetchFileResponse(ensureFileReady(true), shouldUseProxyAuth, "下载失败")
        const blob = await res.blob()
-       downloadBlob(blob, fileName || `${baseName || "download"}.${extension || "file"}`)
+       downloadBlob(blob, name)
     } catch (error) {
       const message = error instanceof Error ? error.message : "下载失败"
       setPreview({ kind: "error", message })
