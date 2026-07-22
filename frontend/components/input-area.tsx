@@ -108,6 +108,9 @@ export function InputArea({
   }, [hasContent, text, onSendMessage])
 
   const handleKeydown = (e: React.KeyboardEvent) => {
+    // Mac 中文等输入法「选词确认」也会产生 Enter；组合输入中不要发送
+    if (e.nativeEvent.isComposing || e.keyCode === 229) return
+
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault()
       handleSend()
