@@ -10,6 +10,7 @@
   },
   "dependencies": {
     "@base-ui/react": "^1.5.0",
+    "@file-viewer/doc": "^2.2.3",
     "@fingerprintjs/fingerprintjs": "^5.2.0",
     "@hello-pangea/dnd": "^18.0.1",
     "@heroicons/react": "^2.2.0",

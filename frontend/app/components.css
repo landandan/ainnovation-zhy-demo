@@ -848,7 +848,8 @@
 .attachment-preview-frame,
 .attachment-preview-image-wrap,
 .attachment-preview-code,
-.attachment-preview-table-wrap {
+.attachment-preview-table-wrap,
+.attachment-preview-docx {
   width: 100%;
   min-height: calc(100vh - 124px);
   border-radius: 16px;
@@ -1066,8 +1067,96 @@
   word-break: break-word;
 }
 
+.attachment-preview-docx {
+  overflow: auto;
+  padding: 20px 22px;
+  background: color-mix(in srgb, var(--card) 92%, var(--background) 8%);
+  border: 1px solid var(--border);
+}
+
+.attachment-preview-docx-body {
+  max-width: 720px;
+  margin: 0 auto;
+  color: var(--foreground);
+  font-size: 14px;
+  line-height: 1.7;
+}
+
+.attachment-preview-docx-body p {
+  margin: 0 0 0.85em;
+}
+
+.attachment-preview-docx-body h1,
+.attachment-preview-docx-body h2,
+.attachment-preview-docx-body h3,
+.attachment-preview-docx-body h4 {
+  margin: 1.1em 0 0.55em;
+  font-weight: 700;
+  line-height: 1.35;
+}
+
+.attachment-preview-docx-body ul,
+.attachment-preview-docx-body ol {
+  margin: 0 0 0.85em;
+  padding-left: 1.4em;
+}
+
+.attachment-preview-docx-body table {
+  width: 100%;
+  margin: 0 0 1em;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.attachment-preview-docx-body th,
+.attachment-preview-docx-body td {
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  text-align: left;
+  vertical-align: top;
+}
+
+.attachment-preview-docx-body img {
+  max-width: 100%;
+  height: auto;
+}
+
 .attachment-preview-table-wrap {
   overflow: auto;
+}
+
+.attachment-preview-sheet-tabs {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--border);
+  background: color-mix(in srgb, var(--card) 92%, var(--background) 8%);
+}
+
+.attachment-preview-sheet-tab {
+  padding: 4px 10px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.attachment-preview-sheet-tab:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.attachment-preview-sheet-tab.active {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+  color: var(--accent);
+  font-weight: 600;
 }
 
 .attachment-preview-table {
