@@ -8,6 +8,10 @@ import type { AgentDef } from "./agent-section"
 import LoginModal, { LoginModalRef } from "@/components/login-modal"
 import {isGuestUser} from "@/lib/auth";
 
+/** 删除/勾选时传入的 sessionId 值：无 sessionId 则用 localSessionId，字段名仍是 sessionId */
+function getHistorySessionKey(item: Pick<ChatHistoryItem, "sessionId" | "localSessionId">) {
+  return String(item.sessionId || item.localSessionId || "").trim()
+}
 type HistoryDeleteDialogState =
   | {
       mode: "single"
@@ -463,12 +467,13 @@ export function Sidebar({
                   return (
                     <div
                       key={item.id}
-                      data-session-id={item.sessionId}
+                      data-session-id={getHistorySessionKey(item)}
                       onClick={() => {
                         if (bulkMode) {
+                          const key = getHistorySessionKey(item)
                           const next = new Set(selectedHistoryIds)
-                          if (next.has(item.sessionId)) next.delete(item.sessionId)
-                          else next.add(item.sessionId)
+                          if (next.has(key)) next.delete(key)
+                          else next.add(key)
                           setSelectedHistoryIds(next)
                         } else {
                           onSelectHistory(item)
@@ -478,9 +483,10 @@ export function Sidebar({
                         if (e.key === "Enter" || e.key === " ") {
                           e.preventDefault()
                           if (bulkMode) {
+                            const key = getHistorySessionKey(item)
                             const next = new Set(selectedHistoryIds)
-                            if (next.has(item.sessionId)) next.delete(item.sessionId)
-                            else next.add(item.sessionId)
+                            if (next.has(key)) next.delete(key)
+                            else next.add(key)
                             setSelectedHistoryIds(next)
                           } else {
                             onSelectHistory(item)
@@ -499,11 +505,12 @@ export function Sidebar({
                         {bulkMode && (
                           <input
                             type="checkbox"
-                            checked={selectedHistoryIds.has(item.sessionId)}
+                            checked={selectedHistoryIds.has(getHistorySessionKey(item))}
                             onChange={(e) => {
+                              const key = getHistorySessionKey(item)
                               const next = new Set(selectedHistoryIds)
-                              if (e.target.checked) next.add(item.sessionId)
-                              else next.delete(item.sessionId)
+                              if (e.target.checked) next.add(key)
+                              else next.delete(key)
                               setSelectedHistoryIds(next)
                             }}
                             onClick={(e) => e.stopPropagation()}
@@ -524,17 +531,17 @@ export function Sidebar({
                           }}
                           aria-hidden="true"
                         />
-                        {editingHistoryId === item.sessionId ? (
+                        {editingHistoryId === getHistorySessionKey(item) ? (
                           <input
                             type="text"
                             value={editTitle}
                             disabled={renamingHistory}
                             onChange={(e) => setEditTitle(e.target.value)}
-                            onBlur={() => handleRenameSubmit(item.sessionId)}
+                            onBlur={() => handleRenameSubmit(getHistorySessionKey(item))}
                             onKeyDown={(e) => {
                               if (e.key === "Enter") {
                                 e.preventDefault()
-                                void handleRenameSubmit(item.sessionId)
+                                void handleRenameSubmit(getHistorySessionKey(item))
                               } else if (e.key === "Escape") {
                                 setEditingHistoryId(null)
                               }
@@ -604,7 +611,7 @@ export function Sidebar({
                     checked={selectedHistoryIds.size === filteredChatHistory.length && filteredChatHistory.length > 0}
                     onChange={(e) => {
                       if (e.target.checked) {
-                        setSelectedHistoryIds(new Set(filteredChatHistory.map((c) => c.sessionId)))
+                        setSelectedHistoryIds(new Set(filteredChatHistory.map((c) => getHistorySessionKey(c))))
                       } else {
                         setSelectedHistoryIds(new Set())
                       }
@@ -638,7 +645,7 @@ export function Sidebar({
                         sessionIds,
                         count: sessionIds.length,
                         title: sessionIds.length === 1
-                          ? (chatHistory.find((item) => item.sessionId === sessionIds[0])?.title || "该会话")
+                          ? (chatHistory.find((item) => getHistorySessionKey(item) === sessionIds[0])?.title || "该会话")
                           : "这些会话",
                       })
                     }}
@@ -741,7 +748,7 @@ export function Sidebar({
               onClick={(e) => {
                 e.stopPropagation()
                 setHistoryMenu(null)
-                setEditingHistoryId(historyMenu.item.sessionId)
+                setEditingHistoryId(getHistorySessionKey(historyMenu.item))
                 setEditTitle(historyMenu.item.title || "")
               }}
             >
@@ -759,7 +766,7 @@ export function Sidebar({
                 setHistoryMenu(null)
                 setDeleteDialog({
                   mode: "single",
-                  sessionIds: [historyMenu.item.sessionId],
+                  sessionIds: [getHistorySessionKey(historyMenu.item)],
                   title: historyMenu.item.title,
                 })
               }}

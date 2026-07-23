@@ -229,6 +229,7 @@ export interface ConversationApi {
   messageId: string
   appId: string
   sessionId: string
+  localSessionId?: string
   title: string;
   query: string
   type: string
@@ -358,7 +359,21 @@ export async function deleteConversationApi(sessionId: string): Promise<{ messag
     await mockDelay()
     return deleteMockConversationBySessionId(sessionId)
   }
-  return request<{ message: string }>("POST", `/h5/chat/messages/del?sessionId=${encodeURIComponent(sessionId)}`)
+  const res = await request<{
+    message?: string
+    msg?: string
+    code?: number | string
+  }>("POST", `/h5/chat/messages/del?sessionId=${encodeURIComponent(sessionId)}`)
+
+  const code = res?.code
+  if (code != null && String(code) !== "200") {
+    throw new Error(
+      (typeof res.msg === "string" && res.msg.trim()) ||
+        (typeof res.message === "string" && res.message.trim()) ||
+        "删除失败",
+    )
+  }
+  return { message: res?.msg || res?.message || "已删除" }
 }
 
 /** 重命名会话：POST /h5/chat/messages/rename */
