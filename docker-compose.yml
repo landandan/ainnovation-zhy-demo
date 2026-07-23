@@ -5,6 +5,8 @@ services:
     image: zhy-demo:latest
     build:
       context: ./frontend
+    environment:
+      TZ: Asia/Shanghai
     ports:
       - "9527:80"
     extra_hosts:
@@ -12,7 +14,12 @@ services:
 #    depends_on:
 #      - backend
     restart: unless-stopped
+    networks:
+      - frp_net
 
+networks:
+  frp_net:
+    external: true
 #  backend:
 #    build:
 #      context: ./backend
