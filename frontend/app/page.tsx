@@ -524,11 +524,20 @@ export default function Page() {
   const [activeConversationId, setActiveConversationId] = useState<number | null>(null)
   const [sessionId, setSessionId] = useState<string>('')
   const sessionIdRef = useRef<string>('')
+  /** 流式聊天用的本地会话 id：新对话前端生成 uuid，延续对话用流式返回值（state 供历史高亮匹配） */
+  const [localSessionId, setLocalSessionId] = useState<string>('')
+  const localSessionIdRef = useRef<string>('')
   const difyConversationIdRef = useRef<string | null>(null)
 
   useEffect(() => {
     sessionIdRef.current = sessionId
   }, [sessionId])
+
+  const applyLocalSessionId = useCallback((next: string) => {
+    const sid = String(next ?? "").trim()
+    localSessionIdRef.current = sid
+    setLocalSessionId((prev) => (prev === sid ? prev : sid))
+  }, [])
 
   /** 同步地址栏 ?agent=&session=，刷新后可恢复当前对话 */
   const syncChatUrl = useCallback(
@@ -685,6 +694,9 @@ export default function Page() {
             setMessages(sortedMsgs.flatMap(mapMessage))
             sessionIdRef.current = messageSessionKey
             setSessionId(messageSessionKey)
+            applyLocalSessionId(
+              String(conv?.localSessionId ?? "").trim() || messageSessionKey,
+            )
             difyConversationIdRef.current = null
 
             if (!urlAgent && conv?.appId) {
@@ -734,6 +746,11 @@ export default function Page() {
 
   /* ───── 衍生：build chatHistory from conversations ───── */
   const buildChatHistory = useCallback((): ChatHistoryItem[] => {
+    // sessionId / localSessionId 任一命中即可高亮
+    // （首轮常只有 localSessionId；次轮会写入真正 sessionId，不能丢掉对 uuid 的匹配）
+    const highlightKeys = [sessionId, localSessionId]
+      .map((k) => String(k ?? "").trim())
+      .filter(Boolean)
     return conversations.map((c) => ({
       id: c.messageId as unknown as number,
       title: c.title,
@@ -743,17 +760,17 @@ export default function Page() {
         hour: "2-digit",
         minute: "2-digit",
       }),
-      // 用 sessionId 判断选中（统一转字符串，避免 number/string 对不上）
-      active: Boolean(sessionId) && (
-        String(c.sessionId ?? "") === String(sessionId) ||
-        String(c.localSessionId ?? "") === String(sessionId)
+      active: highlightKeys.some(
+        (key) =>
+          String(c.sessionId ?? "").trim() === key ||
+          String(c.localSessionId ?? "").trim() === key,
       ),
       sessionId: c.sessionId != null ? String(c.sessionId) : "",
       localSessionId: c.localSessionId != null ? String(c.localSessionId) : undefined,
       query: c.query || "",
       appId: c.appId ? String(c.appId) : undefined,
     }))
-  }, [conversations, sessionId])
+  }, [conversations, sessionId, localSessionId])
 
   const [chatHistory, setChatHistory] = useState<ChatHistoryItem[]>([])
   useEffect(() => {
@@ -892,6 +909,7 @@ export default function Page() {
     setActiveConversationId(null)
     sessionIdRef.current = ""
     setSessionId("")
+    applyLocalSessionId("")
     difyConversationIdRef.current = null
     setSidebarOpen(false)
     setIsStreaming(false)
@@ -936,6 +954,9 @@ export default function Page() {
       setActiveConversationId(id)
       sessionIdRef.current = messageSessionKey
       setSessionId(messageSessionKey)
+      applyLocalSessionId(
+        String(item.localSessionId ?? "").trim() || messageSessionKey,
+      )
 
       // 用历史会话的 appId 匹配智能助手列表 id，选中对应智能体（不新建会话）
       let nextAgentId = currentAgentId
@@ -977,6 +998,7 @@ export default function Page() {
         setActiveConversationId(null)
         sessionIdRef.current = ""
         setSessionId("")
+        applyLocalSessionId("")
         difyConversationIdRef.current = null
         syncChatUrl(currentAgentId, null)
       }
@@ -1006,6 +1028,7 @@ export default function Page() {
         setActiveConversationId(null)
         sessionIdRef.current = ""
         setSessionId("")
+        applyLocalSessionId("")
         difyConversationIdRef.current = null
         syncChatUrl(currentAgentId, null)
       }
@@ -1054,6 +1077,11 @@ export default function Page() {
     abortControllerRef.current = controller
     setIsStreaming(true)
     const isNewChat = !sessionIdRef.current
+    /** 新对话生成 uuid；延续对话用上次流式（或历史）里的 localSessionId */
+    const localSessionIdForRequest = isNewChat
+      ? crypto.randomUUID()
+      : localSessionIdRef.current || crypto.randomUUID()
+    applyLocalSessionId(localSessionIdForRequest)
     /** 业务失败 / 鉴权失败时不在 finally 里误选历史会话 */
     let shouldReconcileHistory = true
 
@@ -1068,6 +1096,7 @@ export default function Page() {
         signal: controller.signal,
         sessionId: sessionId,
         inputFiles,
+        localSessionId: localSessionIdForRequest,
       })
 
       const reader = response.body?.getReader()
@@ -1199,11 +1228,16 @@ export default function Page() {
             isWorkflowTaskRef.current = false
             stopStreamPayloadRef.current = null
             // 无 sessionId 时用 localSessionId 选中当前会话（字段名不变，只换取值）
+            const failLocalSessionId = String(
+              outJson.localSessionId || outJson.local_session_id || "",
+            ).trim()
+            if (failLocalSessionId) {
+              applyLocalSessionId(failLocalSessionId)
+            }
             const failSessionKey = String(
               outJson.sessionId ||
                 outJson.session_id ||
-                outJson.localSessionId ||
-                outJson.local_session_id ||
+                failLocalSessionId ||
                 "",
             ).trim()
             if (failSessionKey) {
@@ -1249,11 +1283,16 @@ export default function Page() {
             isError = true
             break
           }
+          const returnedLocalSessionId = String(
+            outJson.localSessionId || outJson.local_session_id || "",
+          ).trim()
+          if (returnedLocalSessionId) {
+            applyLocalSessionId(returnedLocalSessionId)
+          }
           const outerSessionKey = String(
             outJson.sessionId ||
               outJson.session_id ||
-              outJson.localSessionId ||
-              outJson.local_session_id ||
+              returnedLocalSessionId ||
               "",
           ).trim()
           if (outerSessionKey) {

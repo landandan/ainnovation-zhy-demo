@@ -20,10 +20,15 @@ import { isMockMode } from "@/lib/mock-config"
    | { kind: "table"; headers: string[]; rows: string[][]; sheetNames?: string[]; activeSheet?: string }
    | { kind: "text"; content: string; language: string }
    | { kind: "html"; content: string }
+   | { kind: "pptx" }
    | { kind: "image" }
    | { kind: "pdf" }
    | { kind: "unsupported"; message: string }
    | { kind: "error"; message: string }
+
+type PptxViewerInstance = {
+  destroy: () => void
+}
 
 const API_BASE_URL = process.env.NODE_ENV === "development" ? "http://localhost:5000/api" : "/api"
 
@@ -262,7 +267,11 @@ export function DownloadLink({ href, label, agentId, fileId }: DownloadLinkProps
   const [preview, setPreview] = useState<PreviewState>({ kind: "idle" })
   const [downloading, setDownloading] = useState(false)
   const [previewAssetUrl, setPreviewAssetUrl] = useState<string | null>(null)
+  const [pptxBooting, setPptxBooting] = useState(false)
   const workbookRef = useRef<WorkBook | null>(null)
+  const pptxContainerRef = useRef<HTMLDivElement | null>(null)
+  const pptxViewerRef = useRef<PptxViewerInstance | null>(null)
+  const pptxBufferRef = useRef<ArrayBuffer | null>(null)
 
    const fileName = useMemo(() => getFileNameFrom(href, label), [href, label])
    const baseName = useMemo(() => fileBaseNameFrom(fileName), [fileName])
@@ -332,6 +341,20 @@ export function DownloadLink({ href, label, agentId, fileId }: DownloadLinkProps
     })
   }
 
+  const destroyPptxViewer = () => {
+    try {
+      pptxViewerRef.current?.destroy()
+    } catch {
+      /* ignore */
+    }
+    pptxViewerRef.current = null
+    pptxBufferRef.current = null
+    setPptxBooting(false)
+    if (pptxContainerRef.current) {
+      pptxContainerRef.current.innerHTML = ""
+    }
+  }
+
   useEffect(() => {
     return () => {
       if (previewAssetUrl) {
@@ -340,12 +363,95 @@ export function DownloadLink({ href, label, agentId, fileId }: DownloadLinkProps
     }
   }, [previewAssetUrl])
 
+  useEffect(() => {
+    return () => {
+      try {
+        pptxViewerRef.current?.destroy()
+      } catch {
+        /* ignore */
+      }
+      pptxViewerRef.current = null
+      pptxBufferRef.current = null
+    }
+  }, [])
+
+  // pptx：容器挂载后再打开渲染引擎（静态导出用 public 下的 worker）
+  useEffect(() => {
+    if (preview.kind !== "pptx") return
+    const container = pptxContainerRef.current
+    const buffer = pptxBufferRef.current
+    if (!container || !buffer) return
+
+    let cancelled = false
+    setPptxBooting(true)
+
+    ;(async () => {
+      try {
+        const { PptxViewer } = await import("@file-viewer/pptx")
+        await import("@file-viewer/pptx/styles.css")
+        if (cancelled) return
+
+        try {
+          pptxViewerRef.current?.destroy()
+        } catch {
+          /* ignore */
+        }
+        pptxViewerRef.current = null
+        container.innerHTML = ""
+
+        const viewer = await PptxViewer.open(buffer, container, {
+          fitMode: "contain",
+          zoomPercent: 100,
+          workerUrl: "/file-viewer/pptx.worker.js",
+          workerType: "module",
+          onRenderComplete: () => {
+            if (!cancelled) setPptxBooting(false)
+          },
+          onError: (error) => {
+            if (cancelled) return
+            const message = error instanceof Error ? error.message : "PPT 预览失败"
+            setPreview({ kind: "error", message })
+            setPptxBooting(false)
+          },
+        })
+
+        if (cancelled) {
+          viewer.destroy()
+          return
+        }
+        pptxViewerRef.current = viewer
+        // 部分文件很快完成，可能已错过 onRenderComplete
+        setPptxBooting(false)
+      } catch (error) {
+        if (cancelled) return
+        const message = error instanceof Error ? error.message : "PPT 预览失败"
+        setPreview({ kind: "error", message })
+        setPptxBooting(false)
+      }
+    })()
+
+    return () => {
+      cancelled = true
+      try {
+        pptxViewerRef.current?.destroy()
+      } catch {
+        /* ignore */
+      }
+      pptxViewerRef.current = null
+      if (pptxContainerRef.current) {
+        pptxContainerRef.current.innerHTML = ""
+      }
+    }
+  }, [preview.kind])
+
    const fileMeta = useMemo(() => {
      if (["csv", "tsv", "xls", "xlsx"].includes(extension)) return { tag: extension.toUpperCase(), desc: "表格附件，可在线预览" }
      if (["txt", "md", "json", "log"].includes(extension)) return { tag: extension.toUpperCase(), desc: "文本附件，可在线预览" }
      if (["png", "jpg", "jpeg", "gif", "webp"].includes(extension)) return { tag: "图片", desc: "点击查看右侧预览" }
      if (extension === "pdf") return { tag: "PDF", desc: "点击查看右侧预览" }
      if (extension === "docx" || extension === "doc") return { tag: extension.toUpperCase(), desc: "Word 文档，可在线预览" }
+     if (extension === "pptx") return { tag: "PPTX", desc: "演示文稿，可在线预览" }
+     if (extension === "ppt") return { tag: "PPT", desc: "旧版演示文稿，请下载查看" }
      return { tag: extension ? extension.toUpperCase() : "文件", desc: "点击查看附件信息" }
    }, [extension])
 
@@ -353,6 +459,7 @@ export function DownloadLink({ href, label, agentId, fileId }: DownloadLinkProps
      setPreviewOpen(true)
     clearPreviewAssetUrl()
     workbookRef.current = null
+    destroyPptxViewer()
 
      try {
        setPreview({ kind: "loading" })
@@ -390,6 +497,21 @@ export function DownloadLink({ href, label, agentId, fileId }: DownloadLinkProps
         const rendered = await parseMsDocToHtml(arrayBuffer)
         const html = `${rendered.css ? `<style>${rendered.css}</style>` : ""}<div class="msdoc-root">${rendered.html || "<p>（文档无内容）</p>"}</div>`
         setPreview({ kind: "html", content: html })
+        return
+      }
+
+      if (extension === "pptx") {
+        const arrayBuffer = await loadPreviewArrayBuffer()
+        pptxBufferRef.current = arrayBuffer
+        setPreview({ kind: "pptx" })
+        return
+      }
+
+      if (extension === "ppt") {
+        setPreview({
+          kind: "unsupported",
+          message: "旧版 .ppt 暂不支持在线预览，请下载后查看。建议使用 .pptx。",
+        })
         return
       }
 
@@ -474,6 +596,7 @@ export function DownloadLink({ href, label, agentId, fileId }: DownloadLinkProps
       setPreview({ kind: "idle" })
       clearPreviewAssetUrl()
       workbookRef.current = null
+      destroyPptxViewer()
     }, 220) // 与 CSS 动画时间一致
   }
 
@@ -576,6 +699,18 @@ export function DownloadLink({ href, label, agentId, fileId }: DownloadLinkProps
                     className="attachment-preview-docx-body"
                     dangerouslySetInnerHTML={{ __html: preview.content }}
                   />
+                </div>
+              )}
+
+              {preview.kind === "pptx" && (
+                <div className="attachment-preview-pptx-wrap">
+                  {pptxBooting ? (
+                    <div className="attachment-preview-pptx-loading">
+                      <span className="spinner" />
+                      <span>正在渲染幻灯片...</span>
+                    </div>
+                  ) : null}
+                  <div ref={pptxContainerRef} className="attachment-preview-pptx" />
                 </div>
               )}
 
