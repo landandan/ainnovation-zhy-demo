@@ -835,14 +835,15 @@ export default function Page() {
     }
   }, [])
 
-  /** 发消息后列表里的 sessionId 可能与流里的 conversation_id 不一致，对齐当前高亮 */
+  /** 发消息成功后：若当前 sessionId 与列表不一致，再对齐高亮；无 session 时绝不瞎选历史第一条 */
   const reconcileActiveSession = useCallback(
     (rows: ConversationApi[], agentIdForUrl?: string, options?: { isNewChat?: boolean }) => {
       const current = String(sessionIdRef.current ?? "").trim()
-      if (current && rows.some((r) => String(r.sessionId ?? "") === current)) return
-
-      // 当前 id 对不上列表时：新对话，或已有占位 id 但不在列表中，都对齐到本智能体最新一条
-      if (!options?.isNewChat && current) return
+      // 本次没有建立会话（如业务失败「智能体繁忙」）时，保持未选中，避免误高亮别的历史
+      if (!current) return
+      if (rows.some((r) => String(r.sessionId ?? "") === current)) return
+      // 仅新对话且已有占位 id、但列表对不上时，才用本智能体最新一条对齐
+      if (!options?.isNewChat) return
 
       const agentKey = String(agentIdForUrl || currentAgentId || "")
       const matched =
@@ -1041,6 +1042,8 @@ export default function Page() {
     abortControllerRef.current = controller
     setIsStreaming(true)
     const isNewChat = !sessionIdRef.current
+    /** 业务失败 / 鉴权失败时不在 finally 里误选历史会话 */
+    let shouldReconcileHistory = true
 
     try {
       const response = await callDifyChatStream({
@@ -1133,6 +1136,7 @@ export default function Page() {
                     : m,
                 ),
               )
+              shouldReconcileHistory = false
               return
             }
           }
@@ -1172,6 +1176,7 @@ export default function Page() {
             } catch {
               /* ignore */
             }
+            shouldReconcileHistory = false
             return
           }
           if (outJson.code !== 200) {
@@ -1181,6 +1186,7 @@ export default function Page() {
             currentTaskIdRef.current = null
             isWorkflowTaskRef.current = false
             stopStreamPayloadRef.current = null
+            shouldReconcileHistory = false
             setMessages((prev) => {
               const updated = [...prev]
               // 优先按发起请求时的下标更新；若状态不同步则回退到最后一条 waiting 的 AI
@@ -1454,6 +1460,7 @@ export default function Page() {
         return
       }
 
+      shouldReconcileHistory = false
       const errMsg = err instanceof Error ? err.message : "未知错误"
       const time = new Date().toLocaleTimeString("zh-CN", { hour: "2-digit", minute: "2-digit" })
       setMessages((prev) => {
@@ -1489,19 +1496,23 @@ export default function Page() {
         prev.map((m) => (m.waiting ? { ...m, waiting: false, loading: false } : m)),
       )
       setIsStreaming(false)
-      // 刷新历史列表并对齐高亮；若后端落库稍慢，短暂重试一次
-      const syncHistoryHighlight = async () => {
-        let rows = await refreshConversations()
-        reconcileActiveSession(rows, currentAgentId, { isNewChat })
-        const current = String(sessionIdRef.current ?? "").trim()
-        const matched = current && rows.some((r) => String(r.sessionId ?? "") === current)
-        if (!matched && isNewChat) {
-          await new Promise((r) => setTimeout(r, 400))
-          rows = await refreshConversations()
-          reconcileActiveSession(rows, currentAgentId, { isNewChat: true })
+      // 仅成功流式才对齐历史高亮；业务失败（如智能体繁忙）只刷新列表、不自动选中
+      if (!shouldReconcileHistory) {
+        void refreshConversations()
+      } else {
+        const syncHistoryHighlight = async () => {
+          let rows = await refreshConversations()
+          reconcileActiveSession(rows, currentAgentId, { isNewChat })
+          const current = String(sessionIdRef.current ?? "").trim()
+          const matched = current && rows.some((r) => String(r.sessionId ?? "") === current)
+          if (!matched && isNewChat && current) {
+            await new Promise((r) => setTimeout(r, 400))
+            rows = await refreshConversations()
+            reconcileActiveSession(rows, currentAgentId, { isNewChat: true })
+          }
         }
+        void syncHistoryHighlight()
       }
-      void syncHistoryHighlight()
     }
   }
 
