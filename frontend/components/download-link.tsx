@@ -63,49 +63,6 @@ const API_BASE_URL = process.env.NODE_ENV === "development" ? "http://localhost:
    a.remove()
  }
 
- function parseDelimitedRow(line: string, delimiter: string) {
-   const result: string[] = []
-   let current = ""
-   let inQuotes = false
-
-   for (let i = 0; i < line.length; i += 1) {
-     const char = line[i]
-     const next = line[i + 1]
-
-     if (char === '"') {
-       if (inQuotes && next === '"') {
-         current += '"'
-         i += 1
-       } else {
-         inQuotes = !inQuotes
-       }
-       continue
-     }
-
-     if (char === delimiter && !inQuotes) {
-       result.push(current.trim())
-       current = ""
-       continue
-     }
-
-     current += char
-   }
-
-   result.push(current.trim())
-   return result
- }
-
- function parseDelimitedText(text: string, delimiter: string) {
-   const lines = text.split(/\r?\n/).filter((line) => line.trim().length > 0)
-   if (lines.length === 0) {
-     return { headers: [], rows: [] }
-   }
-
-   const headers = parseDelimitedRow(lines[0], delimiter)
-   const rows = lines.slice(1, 121).map((line) => parseDelimitedRow(line, delimiter))
-   return { headers, rows }
- }
-
 async function excelSheetToPreviewTable(sheet: WorkBook["Sheets"][string], maxRows = 120) {
   const XLSX = await import("xlsx")
   const raw = XLSX.utils.sheet_to_json<(string | number | boolean | null | undefined)[]>(sheet, {
@@ -125,6 +82,57 @@ async function excelSheetToPreviewTable(sheet: WorkBook["Sheets"][string], maxRo
     Array.from({ length: colCount }, (_, index) => String(row[index] ?? "")),
   )
   return { headers: normalizedHeaders, rows }
+}
+
+/** csv / tsv / xls / xlsx 统一用 SheetJS 解析 */
+async function readSpreadsheetWorkbook(arrayBuffer: ArrayBuffer, extension: string): Promise<WorkBook> {
+  const XLSX = await import("xlsx")
+  const ext = extension.toLowerCase()
+
+  if (ext === "csv" || ext === "tsv") {
+    let text = new TextDecoder("utf-8").decode(arrayBuffer)
+    if (text.charCodeAt(0) === 0xfeff) {
+      text = text.slice(1)
+    }
+    try {
+      return XLSX.read(text, {
+        type: "string",
+        FS: ext === "tsv" ? "\t" : ",",
+        raw: false,
+      })
+    } catch {
+      // 编码异常时回退按二进制让 SheetJS 自行识别
+      return XLSX.read(arrayBuffer, { type: "array", raw: false })
+    }
+  }
+
+  // xls / xlsx（及误标后缀的表格）
+  return XLSX.read(arrayBuffer, { type: "array", cellDates: true, raw: false })
+}
+
+async function openSpreadsheetPreview(
+  arrayBuffer: ArrayBuffer,
+  extension: string,
+): Promise<{
+  headers: string[]
+  rows: string[][]
+  sheetNames: string[]
+  activeSheet: string
+  workbook: WorkBook
+}> {
+  const workbook = await readSpreadsheetWorkbook(arrayBuffer, extension)
+  const activeSheet = workbook.SheetNames[0]
+  if (!activeSheet) {
+    throw new Error("该表格文件没有可预览的工作表")
+  }
+  const { headers, rows } = await excelSheetToPreviewTable(workbook.Sheets[activeSheet])
+  return {
+    headers,
+    rows,
+    sheetNames: workbook.SheetNames,
+    activeSheet,
+    workbook,
+  }
 }
 
 function extractFileIdFromHref(href: string) {
@@ -385,28 +393,21 @@ export function DownloadLink({ href, label, agentId, fileId }: DownloadLinkProps
         return
       }
 
-      if (extension === "xls" || extension === "xlsx") {
+      if (["csv", "tsv", "xls", "xlsx"].includes(extension)) {
         const arrayBuffer = await loadPreviewArrayBuffer()
-        const XLSX = await import("xlsx")
-        const workbook = XLSX.read(arrayBuffer, { type: "array" })
-        workbookRef.current = workbook
-        const activeSheet = workbook.SheetNames[0]
-        if (!activeSheet) {
-          setPreview({ kind: "unsupported", message: "该表格文件没有可预览的工作表。" })
-          return
-        }
-        const { headers, rows } = await excelSheetToPreviewTable(workbook.Sheets[activeSheet])
+        const result = await openSpreadsheetPreview(arrayBuffer, extension)
+        workbookRef.current = result.workbook
         setPreview({
           kind: "table",
-          headers,
-          rows,
-          sheetNames: workbook.SheetNames,
-          activeSheet,
+          headers: result.headers,
+          rows: result.rows,
+          sheetNames: result.sheetNames,
+          activeSheet: result.activeSheet,
         })
         return
       }
 
-      if (!["csv", "tsv", "txt", "md", "json", "log"].includes(extension)) {
+      if (!["txt", "md", "json", "log"].includes(extension)) {
         setPreview({ kind: "unsupported", message: "当前附件暂不支持在线预览，可直接下载查看。" })
         return
       }
@@ -414,11 +415,6 @@ export function DownloadLink({ href, label, agentId, fileId }: DownloadLinkProps
       const arrayBuffer = await loadPreviewArrayBuffer()
       const text = new TextDecoder("utf-8").decode(arrayBuffer)
 
-       if (extension === "csv" || extension === "tsv") {
-         const { headers, rows } = parseDelimitedText(text, extension === "tsv" ? "\t" : ",")
-         setPreview({ kind: "table", headers, rows })
-         return
-       }
        setPreview({
          kind: "text",
          content: text,
