@@ -182,6 +182,8 @@ export interface AgentDefApi {
   difyAppId?: string
   appUrl?: string
   visible?: string
+  /** "1" 表示展示思考/工作流进度 */
+  thinkShow?: string | number
   createTime?: string
 }
 
