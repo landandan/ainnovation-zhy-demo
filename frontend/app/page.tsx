@@ -2179,6 +2179,9 @@ export default function Page() {
       onStopStreaming={handleStopStreaming}
       agentLabel={displayAgentLabel}
       agent={currentAgent}
+      agentDefs={activeAgentDefs}
+      currentAgentId={currentAgentId}
+      onSelectAgent={handleSelectAgent}
       onOpenSettings={handleOpenSettings}
     />
   )

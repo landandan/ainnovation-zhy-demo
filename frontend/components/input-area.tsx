@@ -25,7 +25,11 @@ interface InputAreaProps {
   isStreaming?: boolean
   onStopStreaming?: () => void
   agentLabel?: string
-  agent?: AgentDef
+  agent?: AgentDef & { visible?: string }
+  agentDefs?: Array<{ id: string; label: string; visible?: string }>
+  currentAgentId?: string
+  /** 切换智能体（会新开对话） */
+  onSelectAgent?: (agentId: string) => void
   onOpenSettings?: () => void
 }
 
@@ -132,6 +136,9 @@ export function InputArea({
   onStopStreaming,
   agentLabel = "深海智航",
   agent = {},
+  agentDefs = [],
+  currentAgentId = "",
+  onSelectAgent,
   onOpenSettings,
 }: InputAreaProps) {
   const [text, setText] = useState("")
@@ -139,6 +146,7 @@ export function InputArea({
   const [lightboxLoading, setLightboxLoading] = useState(false)
   const [pptxBooting, setPptxBooting] = useState(false)
   const [isDragging, setIsDragging] = useState(false)
+  const [agentMenuOpen, setAgentMenuOpen] = useState(false)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const imageInputRef = useRef<HTMLInputElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
@@ -148,6 +156,7 @@ export function InputArea({
   const pptxViewerRef = useRef<PptxViewerInstance | null>(null)
   const pptxBufferRef = useRef<ArrayBuffer | null>(null)
   const workbookRef = useRef<WorkBook | null>(null)
+  const agentMenuRef = useRef<HTMLDivElement | null>(null)
 
   const hasContent = text.trim() || uploadedImages.length > 0 || uploadedFiles.length > 0
   const hasUploading = uploadingAttachments.some((item) => item.status === "uploading")
@@ -195,13 +204,39 @@ export function InputArea({
     return () => window.removeEventListener("keydown", onKeyDown)
   }, [lightbox, lightboxLoading, closeLightbox])
 
-  const loginModalRef = useRef<LoginModalRef>(null);
-  
+  useEffect(() => {
+    if (!agentMenuOpen) return
+    const onPointerDown = (e: MouseEvent) => {
+      if (!agentMenuRef.current?.contains(e.target as Node)) {
+        setAgentMenuOpen(false)
+      }
+    }
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setAgentMenuOpen(false)
+    }
+    document.addEventListener("mousedown", onPointerDown)
+    window.addEventListener("keydown", onKeyDown)
+    return () => {
+      document.removeEventListener("mousedown", onPointerDown)
+      window.removeEventListener("keydown", onKeyDown)
+    }
+  }, [agentMenuOpen])
+
+  const loginModalRef = useRef<LoginModalRef>(null)
+
+  const handlePickAgent = (next: { id: string; label: string; visible?: string }) => {
+    setAgentMenuOpen(false)
+    if (next.id === currentAgentId) return
+    if (next.visible === "1" && isGuestUser()) {
+      loginModalRef.current?.open()
+      return
+    }
+    onSelectAgent?.(next.id)
+  }
+
   const handleSend = useCallback(() => {
     if (!canSend) return
-    if (isGuestUser() && agent.visible == '1') {
-    console.log('🔍 ~ InputArea ~ frontend/components/input-area.tsx:97 ~ isGuestUser():', isGuestUser());
-      
+    if (isGuestUser() && agent.visible == "1") {
       loginModalRef.current?.open()
       return
     }
@@ -726,16 +761,57 @@ export function InputArea({
 
           <div className="input-box-toolbar">
             <div className="flex items-center gap-3">
-              <div
-                className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-sm"
-                style={{ color: "var(--text-secondary)", background: "var(--primary)" }}
-              >
-                <svg width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-                  <circle cx="12" cy="12" r="10" />
-                  <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3" />
-                  <line x1="12" y1="17" x2="12.01" y2="17" />
-                </svg>
-                <span>当前助手: {agentLabel}</span>
+              <div className="input-agent-switch" ref={agentMenuRef}>
+                <button
+                  type="button"
+                  className="input-agent-switch-trigger"
+                  onClick={() => setAgentMenuOpen((open) => !open)}
+                  aria-expanded={agentMenuOpen}
+                  aria-haspopup="listbox"
+                  title="切换智能助手（将新开对话）"
+                >
+                  <svg width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                    <circle cx="12" cy="12" r="10" />
+                    <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3" />
+                    <line x1="12" y1="17" x2="12.01" y2="17" />
+                  </svg>
+                  <span>当前助手: {agentLabel}</span>
+                  <svg
+                    className={`input-agent-switch-caret${agentMenuOpen ? " open" : ""}`}
+                    width="14"
+                    height="14"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    viewBox="0 0 24 24"
+                  >
+                    <polyline points="6 9 12 15 18 9" />
+                  </svg>
+                </button>
+                {agentMenuOpen && (
+                  <div className="input-agent-switch-menu" role="listbox">
+                    {agentDefs.length === 0 ? (
+                      <div className="input-agent-switch-empty">暂无可用助手</div>
+                    ) : (
+                      agentDefs.map((item) => {
+                        const active = item.id === currentAgentId
+                        return (
+                          <button
+                            key={item.id}
+                            type="button"
+                            role="option"
+                            aria-selected={active}
+                            className={`input-agent-switch-item${active ? " active" : ""}`}
+                            onClick={() => handlePickAgent(item)}
+                          >
+                            <span className="input-agent-switch-item-label">{item.label}</span>
+                            {active ? <span className="input-agent-switch-item-check">✓</span> : null}
+                          </button>
+                        )
+                      })
+                    )}
+                  </div>
+                )}
               </div>
             </div>
 
