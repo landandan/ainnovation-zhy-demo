@@ -6,11 +6,13 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint ."
+    "lint": "eslint .",
+    "sync:pptx-worker": "mkdir -p public/file-viewer && cp node_modules/@file-viewer/pptx/dist/worker/pptx.worker.js public/file-viewer/pptx.worker.js"
   },
   "dependencies": {
     "@base-ui/react": "^1.5.0",
     "@file-viewer/doc": "^2.2.3",
+    "@file-viewer/pptx": "^2.2.3",
     "@fingerprintjs/fingerprintjs": "^5.2.0",
     "@hello-pangea/dnd": "^18.0.1",
     "@heroicons/react": "^2.2.0",

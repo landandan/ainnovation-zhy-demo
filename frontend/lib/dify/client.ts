@@ -19,6 +19,8 @@ export interface DifyChatProxyRequest {
   userId: string
   agentId: string
   sessionId: string
+  /** 新对话由前端生成 uuid；延续对话用流式返回的 localSessionId */
+  localSessionId?: string
   query: string
   conversation_id?: string | null
   inputs?: Record<string, unknown>
@@ -102,9 +104,22 @@ export async function callDifyChatStream(params: {
   agentId?: string
   signal?: AbortSignal
   sessionId?: string
+  /** 新对话 uuid；延续对话用上次流式返回值 */
+  localSessionId?: string
   inputFiles?: Array<{ ossId: string | number }>
 }): Promise<Response> {
-  const { query, userId, user, conversationId, inputs, agentId, signal, sessionId, inputFiles } = params
+  const {
+    query,
+    userId,
+    user,
+    conversationId,
+    inputs,
+    agentId,
+    signal,
+    sessionId,
+    localSessionId,
+    inputFiles,
+  } = params
 
   // --- Help 智能体：直接返回 Mock 数据，完全绕过 Dify ---
   // if (agentId === "help") {
@@ -169,6 +184,9 @@ export async function callDifyChatStream(params: {
     // conversation_id: "1783586820396-b8sit26yn",
     query,
     inputs: inputs || {},
+  }
+  if (localSessionId) {
+    body.localSessionId = localSessionId
   }
     //   "query": "什么是oa",
     // "user": "192.168.11.30",

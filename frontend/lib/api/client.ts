@@ -229,6 +229,7 @@ export interface ConversationApi {
   messageId: string
   appId: string
   sessionId: string
+  localSessionId?: string
   title: string;
   query: string
   type: string
@@ -353,20 +354,34 @@ export async function getConversations(params?: {
 //   return request<{ conversation: ConversationApi }>("PUT", `/conversations/${convId}`, data)
 // }
 
-export async function deleteConversationApi(sessionId: string): Promise<{ message: string }> {
+export async function deleteConversationApi(localSessionId: string): Promise<{ message: string }> {
   if (isMockMode()) {
     await mockDelay()
-    return deleteMockConversationBySessionId(sessionId)
+    return deleteMockConversationBySessionId(localSessionId)
   }
-  return request<{ message: string }>("POST", `/h5/chat/messages/del?sessionId=${encodeURIComponent(sessionId)}`)
+  const res = await request<{
+    message?: string
+    msg?: string
+    code?: number | string
+  }>("POST", `/h5/chat/messages/del?localSessionId=${encodeURIComponent(localSessionId)}`)
+
+  const code = res?.code
+  if (code != null && String(code) !== "200") {
+    throw new Error(
+      (typeof res.msg === "string" && res.msg.trim()) ||
+        (typeof res.message === "string" && res.message.trim()) ||
+        "删除失败",
+    )
+  }
+  return { message: res?.msg || res?.message || "已删除" }
 }
 
 /** 重命名会话：POST /h5/chat/messages/rename */
 export async function renameConversationApi(
-  sessionId: string,
+  localSessionId: string,
   title: string,
 ): Promise<{ message?: string; code?: number | string }> {
-  return request("POST", "/h5/chat/messages/rename", { sessionId, title })
+  return request("POST", "/h5/chat/messages/rename", { localSessionId, title })
 }
 
 /** 从单文件上传响应中提取 ossId */
@@ -383,8 +398,29 @@ export function extractOssIdFromUpload(res: unknown): string | number | null {
   return raw as string | number
 }
 
-/** 单文件上传：POST /h5/file/upload/single，form field = files */
-export async function uploadFileSingle(file: File): Promise<any> {
+/** 从单文件上传响应中提取可预览/下载的 url */
+export function extractUrlFromUpload(res: unknown): string | null {
+  if (!res || typeof res !== "object") return null
+  const obj = res as Record<string, any>
+  const raw =
+    obj?.data?.url ??
+    obj?.data?.fileUrl ??
+    obj?.url ??
+    obj?.fileUrl ??
+    obj?.data?.data?.url
+  if (typeof raw !== "string") return null
+  const url = raw.trim()
+  return url || null
+}
+
+/** 单文件上传：POST /h5/file/upload/single；支持进度回调 */
+export async function uploadFileSingle(
+  file: File,
+  options?: {
+    onProgress?: (percent: number) => void
+    signal?: AbortSignal
+  },
+): Promise<any> {
   const token = getToken()
   if (!token) {
     throw new Error("未登录，无法上传文件")
@@ -393,41 +429,69 @@ export async function uploadFileSingle(file: File): Promise<any> {
   const formData = new FormData()
   formData.append("file", file)
 
-  const headers: Record<string, string> = {
-    Authorization: `Bearer ${token}`,
-    clientid: getClientId() || "0d4c873ff6146ecd7f38e2e45526ab1b",
-  }
+  const clientid = getClientId() || "0d4c873ff6146ecd7f38e2e45526ab1b"
 
-  const controller = new AbortController()
-  const timeoutId = setTimeout(() => controller.abort(), 60000)
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest()
+    xhr.open("POST", `${API_BASE_URL}/h5/file/upload/single`)
+    xhr.setRequestHeader("Authorization", `Bearer ${token}`)
+    xhr.setRequestHeader("clientid", clientid)
+    xhr.timeout = 60000
 
-  let res: Response
-  try {
-    res = await fetch(`${API_BASE_URL}/h5/file/upload/single`, {
-      method: "POST",
-      headers,
-      body: formData,
-      signal: controller.signal,
-    })
-  } catch (err: unknown) {
-    clearTimeout(timeoutId)
-    if (err instanceof DOMException && err.name === "AbortError") {
-      throw new Error("上传超时，请稍后重试")
+    const onAbort = () => {
+      xhr.abort()
     }
-    throw new Error(err instanceof Error ? err.message : "上传失败")
-  }
-  clearTimeout(timeoutId)
+    if (options?.signal) {
+      if (options.signal.aborted) {
+        reject(new Error("上传已取消"))
+        return
+      }
+      options.signal.addEventListener("abort", onAbort, { once: true })
+    }
 
-  if (!res.ok) {
-    const errText = await res.text().catch(() => res.statusText)
-    throw new Error(`上传失败 (${res.status}): ${errText}`)
-  }
+    xhr.upload.onprogress = (event) => {
+      if (!event.lengthComputable) return
+      const percent = Math.max(0, Math.min(100, Math.round((event.loaded / event.total) * 100)))
+      options?.onProgress?.(percent)
+    }
 
-  const contentType = res.headers.get("content-type") || ""
-  if (contentType.includes("application/json")) {
-    return res.json()
-  }
-  return res.text()
+    xhr.onload = () => {
+      options?.signal?.removeEventListener("abort", onAbort)
+      if (xhr.status >= 200 && xhr.status < 300) {
+        options?.onProgress?.(100)
+        const contentType = xhr.getResponseHeader("content-type") || ""
+        if (contentType.includes("application/json")) {
+          try {
+            resolve(JSON.parse(xhr.responseText || "{}"))
+          } catch {
+            reject(new Error("上传响应解析失败"))
+          }
+          return
+        }
+        resolve(xhr.responseText)
+        return
+      }
+      reject(new Error(`上传失败 (${xhr.status}): ${xhr.responseText || xhr.statusText}`))
+    }
+
+    xhr.onerror = () => {
+      options?.signal?.removeEventListener("abort", onAbort)
+      reject(new Error("上传失败"))
+    }
+
+    xhr.ontimeout = () => {
+      options?.signal?.removeEventListener("abort", onAbort)
+      reject(new Error("上传超时，请稍后重试"))
+    }
+
+    xhr.onabort = () => {
+      options?.signal?.removeEventListener("abort", onAbort)
+      reject(new Error("上传已取消"))
+    }
+
+    options?.onProgress?.(0)
+    xhr.send(formData)
+  })
 }
 
 export async function submitMessageFeedback(data: {
@@ -448,18 +512,21 @@ export async function submitMessageFeedback(data: {
 }
 
 export async function getMessages(
-  sessionId: string,
+  localSessionId: string,
 ): Promise<MessagesListResponse> {
   // if (isMockMode()) {
   //   await mockDelay()
-  //   return getMockMessages(sessionId)
+  //   return getMockMessages(localSessionId)
   // }
   // const qs = new URLSearchParams()
   // if (params?.page) qs.set("page", String(params.page))
   // if (params?.per_page) qs.set("per_page", String(params.per_page))
   // if (params?.before_id) qs.set("before_id", String(params.before_id))
   // const query = qs.toString()
-  return request<MessagesListResponse>("POST", `/h5/chat/messages?sessionId=${sessionId}`)
+  return request<MessagesListResponse>(
+    "POST",
+    `/h5/chat/messages?localSessionId=${encodeURIComponent(localSessionId)}`,
+  )
 }
 
 // 已废弃：旧 /conversations/:id/messages 接口不再使用

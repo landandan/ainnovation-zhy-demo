@@ -22,6 +22,7 @@ import {
   // addMessage,
   uploadFileSingle,
   extractOssIdFromUpload,
+  extractUrlFromUpload,
   type AgentDefApi,
   type ConversationApi,
   type MessageApi,
@@ -49,12 +50,14 @@ import { handleAuthExpired } from "@/lib/http/client"
 /** 从地址栏读取对话路由参数（刷新恢复用） */
 function readChatUrlParams() {
   if (typeof window === "undefined") {
-    return { agent: "", session: "" }
+    return { agent: "", localSessionId: "" }
   }
   const sp = new URLSearchParams(window.location.search)
   return {
     agent: sp.get("agent")?.trim() || "",
-    session: sp.get("session")?.trim() || "",
+    // 优先 localSessionId；兼容旧链接里的 session
+    localSessionId:
+      sp.get("localSessionId")?.trim() || sp.get("session")?.trim() || "",
   }
 }
 
@@ -65,6 +68,18 @@ export interface MessageFileAttachment {
   file_id?: string
   mime_type?: string
   type?: string
+}
+
+/** 输入区上传中的附件（Kimi 风格进度卡片） */
+export interface UploadingAttachment {
+  id: string
+  kind: "file" | "image"
+  name: string
+  size: number
+  progress: number
+  status: "uploading" | "error"
+  errorMessage?: string
+  previewUrl?: string
 }
 
 export interface ResourceItem {
@@ -102,6 +117,7 @@ export interface ChatHistoryItem {
   time: string
   active: boolean
   sessionId: string
+  localSessionId?: string
   query?: string
   /** 会话所属智能体 id，对应智能助手列表的 agent.id */
   appId?: string
@@ -507,13 +523,16 @@ export default function Page() {
   const [currentAgentId, setCurrentAgentId] = useState<string>("")
   const [messages, setMessages] = useState<Message[]>([])
   const [uploadedImages, setUploadedImages] = useState<string[]>([])
-  const [uploadedFiles, setUploadedFiles] = useState<{ name: string; size: number }[]>([])
+  const [uploadedFiles, setUploadedFiles] = useState<MessageFileAttachment[]>([])
   /* 原始 File 对象，用于上传到 Dify */
   const [rawImageFiles, setRawImageFiles] = useState<File[]>([])
   const [rawDocFiles, setRawDocFiles] = useState<File[]>([])
   /** 上传接口返回的 ossId（与图片/文档预览一一对应） */
   const [imageOssIds, setImageOssIds] = useState<Array<string | number>>([])
   const [docOssIds, setDocOssIds] = useState<Array<string | number>>([])
+  /** 上传中附件（选中后立刻展示进度卡片） */
+  const [uploadingAttachments, setUploadingAttachments] = useState<UploadingAttachment[]>([])
+  const uploadAbortMapRef = useRef<Map<string, AbortController>>(new Map())
   const [isRecording, setIsRecording] = useState(false)
   const [isStreaming, setIsStreaming] = useState(false)
   const [resourceSidebarOpen, setResourceSidebarOpen] = useState(false)
@@ -523,21 +542,31 @@ export default function Page() {
   const [activeConversationId, setActiveConversationId] = useState<number | null>(null)
   const [sessionId, setSessionId] = useState<string>('')
   const sessionIdRef = useRef<string>('')
+  /** 流式聊天用的本地会话 id：新对话前端生成 uuid，延续对话用流式返回值（state 供历史高亮匹配） */
+  const [localSessionId, setLocalSessionId] = useState<string>('')
+  const localSessionIdRef = useRef<string>('')
   const difyConversationIdRef = useRef<string | null>(null)
 
   useEffect(() => {
     sessionIdRef.current = sessionId
   }, [sessionId])
 
-  /** 同步地址栏 ?agent=&session=，刷新后可恢复当前对话 */
+  const applyLocalSessionId = useCallback((next: string) => {
+    const sid = String(next ?? "").trim()
+    localSessionIdRef.current = sid
+    setLocalSessionId((prev) => (prev === sid ? prev : sid))
+  }, [])
+
+  /** 同步地址栏 ?agent=&localSessionId=，刷新后可恢复当前对话 */
   const syncChatUrl = useCallback(
-    (nextAgentId: string, nextSessionId?: string | null) => {
+    (nextAgentId: string, nextLocalSessionId?: string | null) => {
       if (typeof window === "undefined") return
       const params = new URLSearchParams()
       const agent = String(nextAgentId ?? "").trim()
-      const session = nextSessionId == null ? "" : String(nextSessionId).trim()
+      const localSid =
+        nextLocalSessionId == null ? "" : String(nextLocalSessionId).trim()
       if (agent) params.set("agent", agent)
-      if (session) params.set("session", session)
+      if (localSid) params.set("localSessionId", localSid)
       const qs = params.toString()
       const base = pathname || "/"
       const nextUrl = qs ? `${base}?${qs}` : base
@@ -559,7 +588,9 @@ export default function Page() {
         sessionIdRef.current = sid
         setSessionId(sid)
       }
-      syncChatUrl(agentIdForUrl || currentAgentId, sid)
+      // 地址栏始终写 localSessionId，避免次轮真正 sessionId 覆盖后刷新对不上
+      const urlKey = String(localSessionIdRef.current || sid).trim()
+      syncChatUrl(agentIdForUrl || currentAgentId, urlKey)
     },
     [currentAgentId, syncChatUrl],
   )
@@ -614,7 +645,7 @@ export default function Page() {
     if (!user) return
 
     async function loadData() {
-      const { agent: urlAgent, session: urlSession } = readChatUrlParams()
+      const { agent: urlAgent, localSessionId: urlLocalSessionId } = readChatUrlParams()
 
       try {
         // 并行加载 agents 和 conversations
@@ -666,29 +697,39 @@ export default function Page() {
             : rows.length >= CONVERSATIONS_PAGE_SIZE,
         )
 
-        // 刷新恢复：有 session 则拉历史消息；否则只同步 agent 到 URL
-        if (urlSession) {
+        // 刷新恢复：有 localSessionId 则拉历史消息；否则只同步 agent 到 URL
+        if (urlLocalSessionId) {
           try {
-            const msgsRes = await getMessages(urlSession)
+            const conv =
+              rows.find((c) => String(c.localSessionId ?? "").trim() === urlLocalSessionId) ||
+              rows.find((c) => String(c.sessionId ?? "").trim() === urlLocalSessionId)
+            // 拉消息 / 地址栏统一用 localSessionId
+            const localSid =
+              String(conv?.localSessionId ?? "").trim() || urlLocalSessionId
+            const msgsRes = await getMessages(localSid)
             const sortedMsgs = [...(msgsRes?.data?.messageList ?? [])].sort(
               (a, b) => new Date(a.createTime).getTime() - new Date(b.createTime).getTime(),
             )
             setMessages(sortedMsgs.flatMap(mapMessage))
-            sessionIdRef.current = urlSession
-            setSessionId(urlSession)
+            const realSessionId = String(conv?.sessionId ?? "").trim()
+            if (realSessionId) {
+              sessionIdRef.current = realSessionId
+              setSessionId(realSessionId)
+            } else {
+              sessionIdRef.current = localSid
+              setSessionId(localSid)
+            }
+            applyLocalSessionId(localSid)
             difyConversationIdRef.current = null
 
-            if (!urlAgent) {
-              const conv = rows.find((c) => c.sessionId === urlSession)
-              if (conv?.appId) {
-                const appId = String(conv.appId)
-                const matched = activeMapped.find((a) => a.id === appId)
-                resolvedAgentId = matched?.id || appId
-                setCurrentAgentId(resolvedAgentId)
-              }
+            if (!urlAgent && conv?.appId) {
+              const appId = String(conv.appId)
+              const matched = activeMapped.find((a) => a.id === appId)
+              resolvedAgentId = matched?.id || appId
+              setCurrentAgentId(resolvedAgentId)
             }
 
-            syncChatUrl(resolvedAgentId, urlSession)
+            syncChatUrl(resolvedAgentId, localSid)
           } catch (restoreErr) {
             console.error("从 URL 恢复会话失败:", restoreErr)
             if (resolvedAgentId) syncChatUrl(resolvedAgentId, null)
@@ -728,6 +769,11 @@ export default function Page() {
 
   /* ───── 衍生：build chatHistory from conversations ───── */
   const buildChatHistory = useCallback((): ChatHistoryItem[] => {
+    // sessionId / localSessionId 任一命中即可高亮
+    // （首轮常只有 localSessionId；次轮会写入真正 sessionId，不能丢掉对 uuid 的匹配）
+    const highlightKeys = [sessionId, localSessionId]
+      .map((k) => String(k ?? "").trim())
+      .filter(Boolean)
     return conversations.map((c) => ({
       id: c.messageId as unknown as number,
       title: c.title,
@@ -737,13 +783,17 @@ export default function Page() {
         hour: "2-digit",
         minute: "2-digit",
       }),
-      // 用 sessionId 判断选中（统一转字符串，避免 number/string 对不上）
-      active: Boolean(sessionId) && String(c.sessionId ?? "") === String(sessionId),
+      active: highlightKeys.some(
+        (key) =>
+          String(c.sessionId ?? "").trim() === key ||
+          String(c.localSessionId ?? "").trim() === key,
+      ),
       sessionId: c.sessionId != null ? String(c.sessionId) : "",
+      localSessionId: c.localSessionId != null ? String(c.localSessionId) : undefined,
       query: c.query || "",
       appId: c.appId ? String(c.appId) : undefined,
     }))
-  }, [conversations, sessionId])
+  }, [conversations, sessionId, localSessionId])
 
   const [chatHistory, setChatHistory] = useState<ChatHistoryItem[]>([])
   useEffect(() => {
@@ -835,27 +885,15 @@ export default function Page() {
     }
   }, [])
 
-  /** 发消息成功后：若当前 sessionId 与列表不一致，再对齐高亮；无 session 时绝不瞎选历史第一条 */
-  const reconcileActiveSession = useCallback(
-    (rows: ConversationApi[], agentIdForUrl?: string, options?: { isNewChat?: boolean }) => {
-      const current = String(sessionIdRef.current ?? "").trim()
-      // 本次没有建立会话（如业务失败「智能体繁忙」）时，保持未选中，避免误高亮别的历史
-      if (!current) return
-      if (rows.some((r) => String(r.sessionId ?? "") === current)) return
-      // 仅新对话且已有占位 id、但列表对不上时，才用本智能体最新一条对齐
-      if (!options?.isNewChat) return
-
-      const agentKey = String(agentIdForUrl || currentAgentId || "")
-      const matched =
-        (agentKey
-          ? rows.find((r) => String(r.appId ?? "") === agentKey)
-          : undefined) || rows[0]
-      if (matched?.sessionId != null && String(matched.sessionId).trim()) {
-        applySessionId(matched.sessionId, agentKey || currentAgentId, { prefer: true })
-      }
-    },
-    [applySessionId, currentAgentId],
-  )
+  const conversationMatchesCurrent = useCallback((rows: ConversationApi[], current: string) => {
+    const key = String(current ?? "").trim()
+    if (!key) return false
+    return rows.some(
+      (r) =>
+        String(r.sessionId ?? "").trim() === key ||
+        String(r.localSessionId ?? "").trim() === key,
+    )
+  }, [])
 
   const handleLoadMoreConversations = useCallback(async () => {
     if (loadingMoreConversations || !conversationsHasMore) return
@@ -894,6 +932,7 @@ export default function Page() {
     setActiveConversationId(null)
     sessionIdRef.current = ""
     setSessionId("")
+    applyLocalSessionId("")
     difyConversationIdRef.current = null
     setSidebarOpen(false)
     setIsStreaming(false)
@@ -905,6 +944,11 @@ export default function Page() {
     setRawDocFiles([])
     setImageOssIds([])
     setDocOssIds([])
+    for (const controller of uploadAbortMapRef.current.values()) {
+      controller.abort()
+    }
+    uploadAbortMapRef.current.clear()
+    setUploadingAttachments([])
     refreshConversations()
     // 侧边栏 onClick 可能把事件对象传进来，只接受真正的 agent id 字符串
     const nextAgentId =
@@ -921,8 +965,13 @@ export default function Page() {
       console.log('id123:', id)
       console.log('sessionId123:', item.sessionId)
       console.log('item:', item)
-      // 从后端加载消息
-      const msgsRes = await getMessages(item.sessionId)
+      // 拉消息用 localSessionId
+      const localSid = String(item.localSessionId ?? "").trim()
+      if (!localSid) {
+        error("该会话缺少 localSessionId，无法加载消息")
+        return
+      }
+      const msgsRes = await getMessages(localSid)
       console.log('msgsRes123:', msgsRes)
       
       // 确保消息按正序排列（旧的在前，新的在后）
@@ -935,8 +984,15 @@ export default function Page() {
       setResourceSidebarOpen(false)
       setMessages(mappedMsgs)
       setActiveConversationId(id)
-      sessionIdRef.current = item.sessionId
-      setSessionId(item.sessionId)
+      const realSessionId = String(item.sessionId ?? "").trim()
+      if (realSessionId) {
+        sessionIdRef.current = realSessionId
+        setSessionId(realSessionId)
+      } else {
+        sessionIdRef.current = localSid
+        setSessionId(localSid)
+      }
+      applyLocalSessionId(localSid)
 
       // 用历史会话的 appId 匹配智能助手列表 id，选中对应智能体（不新建会话）
       let nextAgentId = currentAgentId
@@ -954,7 +1010,7 @@ export default function Page() {
       }
 
       difyConversationIdRef.current = null
-      syncChatUrl(nextAgentId, item.sessionId)
+      syncChatUrl(nextAgentId, localSid)
       maybeCloseSidebar()
     } catch (err) {
       console.error("加载对话消息失败:", err)
@@ -962,15 +1018,25 @@ export default function Page() {
     }
   }
 
-  const handleDeleteHistory = async (sessionIdToDelete: string) => {
+  const handleDeleteHistory = async (localSessionIdToDelete: string) => {
     try {
-      await deleteConversationApi(sessionIdToDelete)
-      setConversations((prev) => prev.filter((c) => c.sessionId !== sessionIdToDelete))
-      if (sessionId === sessionIdToDelete) {
+      await deleteConversationApi(localSessionIdToDelete)
+      setConversations((prev) =>
+        prev.filter((c) => {
+          const sid = String(c.sessionId ?? "").trim()
+          const localSid = String(c.localSessionId ?? "").trim()
+          return sid !== localSessionIdToDelete && localSid !== localSessionIdToDelete
+        }),
+      )
+      if (
+        localSessionId === localSessionIdToDelete ||
+        sessionId === localSessionIdToDelete
+      ) {
         setMessages([])
         setActiveConversationId(null)
         sessionIdRef.current = ""
         setSessionId("")
+        applyLocalSessionId("")
         difyConversationIdRef.current = null
         syncChatUrl(currentAgentId, null)
       }
@@ -978,40 +1044,54 @@ export default function Page() {
       success("对话已删除")
     } catch (err) {
       console.error("删除对话失败:", err)
-      error("删除失败")
+      error(err instanceof Error && err.message.trim() ? err.message : "删除失败")
     }
   }
 
-  const handleBulkDeleteHistory = async (sessionIds: string[]) => {
+  const handleBulkDeleteHistory = async (localSessionIds: string[]) => {
     try {
-      const uniqueSessionIds = [...new Set(sessionIds.filter(Boolean))]
-      for (const sid of uniqueSessionIds) {
-        await deleteConversationApi(sid)
+      const uniqueLocalSessionIds = [...new Set(localSessionIds.filter(Boolean))]
+      for (const localSid of uniqueLocalSessionIds) {
+        await deleteConversationApi(localSid)
       }
-      setConversations((prev) => prev.filter((c) => !uniqueSessionIds.includes(c.sessionId)))
-      if (sessionId && uniqueSessionIds.includes(sessionId)) {
+      setConversations((prev) =>
+        prev.filter((c) => {
+          const sid = String(c.sessionId ?? "").trim()
+          const localSid = String(c.localSessionId ?? "").trim()
+          return (
+            !uniqueLocalSessionIds.includes(sid) &&
+            !uniqueLocalSessionIds.includes(localSid)
+          )
+        }),
+      )
+      if (
+        (localSessionId && uniqueLocalSessionIds.includes(localSessionId)) ||
+        (sessionId && uniqueLocalSessionIds.includes(sessionId))
+      ) {
         setMessages([])
         setActiveConversationId(null)
         sessionIdRef.current = ""
         setSessionId("")
+        applyLocalSessionId("")
         difyConversationIdRef.current = null
         syncChatUrl(currentAgentId, null)
       }
       await refreshConversations()
-      success(`已删除 ${uniqueSessionIds.length} 条对话`)
+      success(`已删除 ${uniqueLocalSessionIds.length} 条对话`)
     } catch (err) {
       console.error("批量删除对话失败:", err)
-      error("批量删除失败")
+      error(err instanceof Error && err.message.trim() ? err.message : "批量删除失败")
     }
   }
 
-  const handleRenameHistory = async (sessionIdToRename: string, newTitle: string) => {
-    if (!sessionIdToRename || !newTitle.trim()) return
+  const handleRenameHistory = async (localSessionIdToRename: string, newTitle: string) => {
+    if (!localSessionIdToRename || !newTitle.trim()) return
     try {
-      await renameConversationApi(sessionIdToRename, newTitle.trim())
+      await renameConversationApi(localSessionIdToRename, newTitle.trim())
       setConversations((prev) =>
         prev.map((c) =>
-          c.sessionId === sessionIdToRename
+          String(c.localSessionId ?? "").trim() === localSessionIdToRename ||
+          String(c.sessionId ?? "").trim() === localSessionIdToRename
             ? { ...c, title: newTitle.trim(), query: newTitle.trim() }
             : c,
         ),
@@ -1042,6 +1122,11 @@ export default function Page() {
     abortControllerRef.current = controller
     setIsStreaming(true)
     const isNewChat = !sessionIdRef.current
+    /** 新对话生成 uuid；延续对话用上次流式（或历史）里的 localSessionId */
+    const localSessionIdForRequest = isNewChat
+      ? crypto.randomUUID()
+      : localSessionIdRef.current || crypto.randomUUID()
+    applyLocalSessionId(localSessionIdForRequest)
     /** 业务失败 / 鉴权失败时不在 finally 里误选历史会话 */
     let shouldReconcileHistory = true
 
@@ -1056,6 +1141,7 @@ export default function Page() {
         signal: controller.signal,
         sessionId: sessionId,
         inputFiles,
+        localSessionId: localSessionIdForRequest,
       })
 
       const reader = response.body?.getReader()
@@ -1186,7 +1272,26 @@ export default function Page() {
             currentTaskIdRef.current = null
             isWorkflowTaskRef.current = false
             stopStreamPayloadRef.current = null
-            shouldReconcileHistory = false
+            // 无 sessionId 时用 localSessionId 选中当前会话（字段名不变，只换取值）
+            const failLocalSessionId = String(
+              outJson.localSessionId || outJson.local_session_id || "",
+            ).trim()
+            if (failLocalSessionId) {
+              applyLocalSessionId(failLocalSessionId)
+            }
+            const failSessionKey = String(
+              outJson.sessionId ||
+                outJson.session_id ||
+                failLocalSessionId ||
+                "",
+            ).trim()
+            if (failSessionKey) {
+              applySessionId(failSessionKey, currentAgentId, { prefer: true })
+              // 有可匹配的会话标识时，finally 里刷新列表并按 localSessionId 高亮
+              shouldReconcileHistory = true
+            } else {
+              shouldReconcileHistory = false
+            }
             setMessages((prev) => {
               const updated = [...prev]
               // 优先按发起请求时的下标更新；若状态不同步则回退到最后一条 waiting 的 AI
@@ -1223,10 +1328,21 @@ export default function Page() {
             isError = true
             break
           }
-          const outerSessionId = outJson.sessionId ?? outJson.session_id
-          if (outerSessionId != null && String(outerSessionId).trim()) {
-            // 历史列表高亮以 H5 sessionId 为准（兼容 number / string）
-            applySessionId(outerSessionId, currentAgentId, { prefer: true })
+          const returnedLocalSessionId = String(
+            outJson.localSessionId || outJson.local_session_id || "",
+          ).trim()
+          if (returnedLocalSessionId) {
+            applyLocalSessionId(returnedLocalSessionId)
+          }
+          const outerSessionKey = String(
+            outJson.sessionId ||
+              outJson.session_id ||
+              returnedLocalSessionId ||
+              "",
+          ).trim()
+          if (outerSessionKey) {
+            // 优先 sessionId，没有则用 localSessionId；历史高亮两边都能匹配
+            applySessionId(outerSessionKey, currentAgentId, { prefer: true })
           }
           // if (!trimmed.startsWith("data:{code=200, message=data: ")) continue
           // console.log('trimmed123:', line)
@@ -1246,10 +1362,7 @@ export default function Page() {
             if (eventConversationId != null && String(eventConversationId).trim()) {
               newDifyConversationId = String(eventConversationId).trim()
               difyConversationIdRef.current = newDifyConversationId
-              // 仅在还没有 H5 sessionId 时，用 conversation_id 临时占位
-              if (!String(sessionIdRef.current ?? "").trim()) {
-                applySessionId(newDifyConversationId, currentAgentId)
-              }
+              // 不再用 conversation_id 写进路由/高亮：列表匹配靠 sessionId / localSessionId
             }
 
             switch (event.event) {
@@ -1297,9 +1410,7 @@ export default function Page() {
 
               case "workflow_finished":
                 setIsStreaming(false)
-                void refreshConversations().then((rows) => {
-                  reconcileActiveSession(rows, currentAgentId, { isNewChat })
-                })
+                void refreshConversations()
                 isWorkflowTaskRef.current = true
                 if (event.task_id && !currentTaskIdRef.current) {
                   currentTaskIdRef.current = event.task_id
@@ -1496,19 +1607,17 @@ export default function Page() {
         prev.map((m) => (m.waiting ? { ...m, waiting: false, loading: false } : m)),
       )
       setIsStreaming(false)
-      // 仅成功流式才对齐历史高亮；业务失败（如智能体繁忙）只刷新列表、不自动选中
+      // 仅成功流式，或失败但已拿到 sessionId/localSessionId 时，才对齐历史高亮
       if (!shouldReconcileHistory) {
         void refreshConversations()
       } else {
         const syncHistoryHighlight = async () => {
           let rows = await refreshConversations()
-          reconcileActiveSession(rows, currentAgentId, { isNewChat })
           const current = String(sessionIdRef.current ?? "").trim()
-          const matched = current && rows.some((r) => String(r.sessionId ?? "") === current)
-          if (!matched && isNewChat && current) {
+          // 只按返回的 sessionId/localSessionId 精确匹配；匹配不到就保持，绝不改写成别的历史
+          if (current && !conversationMatchesCurrent(rows, current) && isNewChat) {
             await new Promise((r) => setTimeout(r, 400))
             rows = await refreshConversations()
-            reconcileActiveSession(rows, currentAgentId, { isNewChat: true })
           }
         }
         void syncHistoryHighlight()
@@ -1703,6 +1812,11 @@ export default function Page() {
     setRawDocFiles([])
     setImageOssIds([])
     setDocOssIds([])
+    for (const controller of uploadAbortMapRef.current.values()) {
+      controller.abort()
+    }
+    uploadAbortMapRef.current.clear()
+    setUploadingAttachments([])
 
     newMessages.push({ 
       role: "ai", 
@@ -1726,8 +1840,32 @@ export default function Page() {
   }
 
   const handleImageUpload = async (dataUrl: string, rawFile: File) => {
+    const uploadId = crypto.randomUUID()
+    const controller = new AbortController()
+    uploadAbortMapRef.current.set(uploadId, controller)
+    setUploadingAttachments((prev) => [
+      ...prev,
+      {
+        id: uploadId,
+        kind: "image",
+        name: rawFile.name || "图片",
+        size: rawFile.size,
+        progress: 0,
+        status: "uploading",
+        previewUrl: dataUrl,
+      },
+    ])
     try {
-      const uploadRes = await uploadFileSingle(rawFile)
+      const uploadRes = await uploadFileSingle(rawFile, {
+        signal: controller.signal,
+        onProgress: (percent) => {
+          setUploadingAttachments((prev) =>
+            prev.map((item) =>
+              item.id === uploadId ? { ...item, progress: percent } : item,
+            ),
+          )
+        },
+      })
       const ossId = extractOssIdFromUpload(uploadRes)
       if (ossId == null) {
         throw new Error("上传成功但未返回 ossId")
@@ -1735,26 +1873,95 @@ export default function Page() {
       setUploadedImages((prev) => [...prev, dataUrl])
       setRawImageFiles((prev) => [...prev, rawFile])
       setImageOssIds((prev) => [...prev, ossId])
+      setUploadingAttachments((prev) => prev.filter((item) => item.id !== uploadId))
     } catch (err) {
+      if (controller.signal.aborted) {
+        setUploadingAttachments((prev) => prev.filter((item) => item.id !== uploadId))
+        return
+      }
       const errMsg = err instanceof Error ? err.message : "附件上传失败"
+      setUploadingAttachments((prev) =>
+        prev.map((item) =>
+          item.id === uploadId
+            ? { ...item, status: "error", errorMessage: errMsg, progress: item.progress }
+            : item,
+        ),
+      )
       error(`附件上传失败: ${errMsg}`)
+    } finally {
+      uploadAbortMapRef.current.delete(uploadId)
     }
   }
 
   const handleFileUpload = async (file: { name: string; size: number }, rawFile: File) => {
+    const uploadId = crypto.randomUUID()
+    const controller = new AbortController()
+    uploadAbortMapRef.current.set(uploadId, controller)
+    setUploadingAttachments((prev) => [
+      ...prev,
+      {
+        id: uploadId,
+        kind: "file",
+        name: file.name,
+        size: file.size,
+        progress: 0,
+        status: "uploading",
+      },
+    ])
     try {
-      const uploadRes = await uploadFileSingle(rawFile)
+      const uploadRes = await uploadFileSingle(rawFile, {
+        signal: controller.signal,
+        onProgress: (percent) => {
+          setUploadingAttachments((prev) =>
+            prev.map((item) =>
+              item.id === uploadId ? { ...item, progress: percent } : item,
+            ),
+          )
+        },
+      })
       const ossId = extractOssIdFromUpload(uploadRes)
       if (ossId == null) {
         throw new Error("上传成功但未返回 ossId")
       }
-      setUploadedFiles((prev) => [...prev, file])
+      const fileUrl = extractUrlFromUpload(uploadRes)
+      setUploadedFiles((prev) => [
+        ...prev,
+        {
+          name: file.name,
+          size: file.size,
+          mime_type: rawFile.type || undefined,
+          type: "document",
+          original_url: fileUrl || undefined,
+          file_id: String(ossId),
+        },
+      ])
       setRawDocFiles((prev) => [...prev, rawFile])
       setDocOssIds((prev) => [...prev, ossId])
+      setUploadingAttachments((prev) => prev.filter((item) => item.id !== uploadId))
     } catch (err) {
+      if (controller.signal.aborted) {
+        setUploadingAttachments((prev) => prev.filter((item) => item.id !== uploadId))
+        return
+      }
       const errMsg = err instanceof Error ? err.message : "附件上传失败"
+      setUploadingAttachments((prev) =>
+        prev.map((item) =>
+          item.id === uploadId
+            ? { ...item, status: "error", errorMessage: errMsg, progress: item.progress }
+            : item,
+        ),
+      )
       error(`附件上传失败: ${errMsg}`)
+    } finally {
+      uploadAbortMapRef.current.delete(uploadId)
     }
+  }
+
+  const handleCancelUploading = (uploadId: string) => {
+    const controller = uploadAbortMapRef.current.get(uploadId)
+    controller?.abort()
+    uploadAbortMapRef.current.delete(uploadId)
+    setUploadingAttachments((prev) => prev.filter((item) => item.id !== uploadId))
   }
 
   const handleRemoveImage = (idx: number) => {
@@ -1933,15 +2140,17 @@ export default function Page() {
     <InputArea
       uploadedImages={uploadedImages}
       uploadedFiles={uploadedFiles}
+      uploadingAttachments={uploadingAttachments}
       rawDocFiles={rawDocFiles}
       onSendMessage={handleSendMessage}
       onImageUpload={handleImageUpload}
       onFileUpload={handleFileUpload}
       onRemoveImage={handleRemoveImage}
       onRemoveFile={handleRemoveFile}
+      onCancelUploading={handleCancelUploading}
       onVoiceToggle={handleVoiceToggle}
       isRecording={isRecording}
-      disabled={isStreaming}
+      disabled={isStreaming || uploadingAttachments.some((item) => item.status === "uploading")}
       isStreaming={isStreaming}
       onStopStreaming={handleStopStreaming}
       agentLabel={displayAgentLabel}
