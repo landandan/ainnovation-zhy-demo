@@ -61,6 +61,23 @@ function readChatUrlParams() {
   }
 }
 
+/** 生成客户端唯一 id（兼容非 HTTPS / 旧浏览器，避免 crypto.randomUUID 不可用） */
+function createClientId() {
+  const c = typeof globalThis !== "undefined" ? globalThis.crypto : undefined
+  if (c && typeof c.randomUUID === "function") {
+    return c.randomUUID()
+  }
+  if (c && typeof c.getRandomValues === "function") {
+    const bytes = new Uint8Array(16)
+    c.getRandomValues(bytes)
+    bytes[6] = (bytes[6] & 0x0f) | 0x40
+    bytes[8] = (bytes[8] & 0x3f) | 0x80
+    const hex = Array.from(bytes, (b) => b.toString(16).padStart(2, "0")).join("")
+    return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`
+  }
+  return `id-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`
+}
+
 export interface MessageFileAttachment {
   name: string
   size?: number
@@ -1124,8 +1141,8 @@ export default function Page() {
     const isNewChat = !sessionIdRef.current
     /** 新对话生成 uuid；延续对话用上次流式（或历史）里的 localSessionId */
     const localSessionIdForRequest = isNewChat
-      ? crypto.randomUUID()
-      : localSessionIdRef.current || crypto.randomUUID()
+      ? createClientId()
+      : localSessionIdRef.current || createClientId()
     applyLocalSessionId(localSessionIdForRequest)
     /** 业务失败 / 鉴权失败时不在 finally 里误选历史会话 */
     let shouldReconcileHistory = true
@@ -1840,7 +1857,7 @@ export default function Page() {
   }
 
   const handleImageUpload = async (dataUrl: string, rawFile: File) => {
-    const uploadId = crypto.randomUUID()
+    const uploadId = createClientId()
     const controller = new AbortController()
     uploadAbortMapRef.current.set(uploadId, controller)
     setUploadingAttachments((prev) => [
@@ -1894,7 +1911,7 @@ export default function Page() {
   }
 
   const handleFileUpload = async (file: { name: string; size: number }, rawFile: File) => {
-    const uploadId = crypto.randomUUID()
+    const uploadId = createClientId()
     const controller = new AbortController()
     uploadAbortMapRef.current.set(uploadId, controller)
     setUploadingAttachments((prev) => [
