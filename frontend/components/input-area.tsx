@@ -6,16 +6,19 @@ import LoginModal, { LoginModalRef } from "@/components/login-modal"
 import mammoth from "mammoth"
 import type { WorkBook } from "xlsx"
 import type { AgentDef } from "./agent-section"
+import type { UploadingAttachment } from "@/app/page"
 
 interface InputAreaProps {
   uploadedImages: string[]
   uploadedFiles: { name: string; size: number }[]
+  uploadingAttachments?: UploadingAttachment[]
   rawDocFiles?: File[]
   onSendMessage: (text: string) => void
   onImageUpload: (dataUrl: string, rawFile: File) => void
   onFileUpload: (file: { name: string; size: number }, rawFile: File) => void
   onRemoveImage: (idx: number) => void
   onRemoveFile: (idx: number) => void
+  onCancelUploading?: (uploadId: string) => void
   onVoiceToggle: () => void
   isRecording: boolean
   disabled?: boolean
@@ -114,12 +117,14 @@ async function openSpreadsheetPreview(arrayBuffer: ArrayBuffer, extension: strin
 export function InputArea({
   uploadedImages,
   uploadedFiles,
+  uploadingAttachments = [],
   rawDocFiles = [],
   onSendMessage,
   onImageUpload,
   onFileUpload,
   onRemoveImage,
   onRemoveFile,
+  onCancelUploading,
   onVoiceToggle,
   isRecording,
   disabled = false,
@@ -145,6 +150,8 @@ export function InputArea({
   const workbookRef = useRef<WorkBook | null>(null)
 
   const hasContent = text.trim() || uploadedImages.length > 0 || uploadedFiles.length > 0
+  const hasUploading = uploadingAttachments.some((item) => item.status === "uploading")
+  const canSend = hasContent && !hasUploading && !disabled
 
   const destroyPptxViewer = useCallback(() => {
     try {
@@ -191,7 +198,7 @@ export function InputArea({
   const loginModalRef = useRef<LoginModalRef>(null);
   
   const handleSend = useCallback(() => {
-    if (!hasContent) return
+    if (!canSend) return
     if (isGuestUser() && agent.visible == '1') {
     console.log('🔍 ~ InputArea ~ frontend/components/input-area.tsx:97 ~ isGuestUser():', isGuestUser());
       
@@ -203,7 +210,7 @@ export function InputArea({
     if (textareaRef.current) {
       textareaRef.current.style.height = "auto"
     }
-  }, [hasContent, text, onSendMessage])
+  }, [canSend, text, onSendMessage, agent])
 
   const handleKeydown = (e: React.KeyboardEvent) => {
     // Mac 中文等输入法「选词确认」也会产生 Enter；组合输入中不要发送
@@ -552,11 +559,84 @@ export function InputArea({
             </div>
           )}
 
-          {(uploadedImages.length > 0 || uploadedFiles.length > 0) && (
+          {(uploadedImages.length > 0 || uploadedFiles.length > 0 || uploadingAttachments.length > 0) && (
             <div className="upload-preview-list">
+              {uploadingAttachments.map((item) => {
+                const ext = (item.name.split(".").pop() || "FILE").toUpperCase()
+                const isError = item.status === "error"
+                const statusText = isError
+                  ? item.errorMessage || "上传失败"
+                  : item.progress >= 100
+                    ? "处理中..."
+                    : "上传中..."
+                const ringSize = 36
+                const stroke = 3
+                const radius = (ringSize - stroke) / 2
+                const circumference = 2 * Math.PI * radius
+                const progress = Math.max(0, Math.min(100, item.progress))
+                const dashOffset = circumference * (1 - progress / 100)
+                return (
+                  <div
+                    key={`uploading-${item.id}`}
+                    className={`upload-preview-file is-uploading${isError ? " is-error" : ""}`}
+                  >
+                    <div className="upload-preview-file-icon" aria-hidden="true">
+                      {isError ? (
+                        <svg width="20" height="20" fill="none" stroke="currentColor" strokeWidth="1.5" viewBox="0 0 24 24">
+                          <circle cx="12" cy="12" r="9" />
+                          <line x1="12" y1="8" x2="12" y2="12" />
+                          <line x1="12" y1="16" x2="12.01" y2="16" />
+                        </svg>
+                      ) : (
+                        <svg
+                          className="upload-preview-progress-ring"
+                          width={ringSize}
+                          height={ringSize}
+                          viewBox={`0 0 ${ringSize} ${ringSize}`}
+                        >
+                          <circle
+                            className="upload-preview-progress-track"
+                            cx={ringSize / 2}
+                            cy={ringSize / 2}
+                            r={radius}
+                            fill="none"
+                            strokeWidth={stroke}
+                          />
+                          <circle
+                            className="upload-preview-progress-value"
+                            cx={ringSize / 2}
+                            cy={ringSize / 2}
+                            r={radius}
+                            fill="none"
+                            strokeWidth={stroke}
+                            strokeDasharray={circumference}
+                            strokeDashoffset={dashOffset}
+                            strokeLinecap="round"
+                          />
+                        </svg>
+                      )}
+                    </div>
+                    <div className="upload-preview-file-meta">
+                      <span className="upload-preview-file-name" title={item.name}>{item.name}</span>
+                      <span className="upload-preview-file-sub">
+                        {isError ? statusText : `${ext} · ${statusText}`}
+                      </span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => onCancelUploading?.(item.id)}
+                      className="upload-preview-remove is-visible"
+                      title={isError ? "移除" : "取消上传"}
+                      aria-label={isError ? "移除" : "取消上传"}
+                    >
+                      ✕
+                    </button>
+                  </div>
+                )
+              })}
               {uploadedFiles.map((file, idx) => {
                 const ext = (file.name.split(".").pop() || "FILE").toUpperCase()
-                const sizeKb = (file.size / 1024).toFixed(2)
+                const sizeKb = ((file.size || 0) / 1024).toFixed(2)
                 return (
                   <div
                     key={`file-${idx}`}
@@ -702,9 +782,9 @@ export function InputArea({
                 <button
                   type="button"
                   onClick={handleSend}
-                  disabled={!hasContent}
+                  disabled={!canSend}
                   className="input-box-send"
-                  title="发送"
+                  title={hasUploading ? "附件上传中，请稍候" : "发送"}
                 >
                   <svg width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24">
                     <line x1="12" y1="19" x2="12" y2="5" />

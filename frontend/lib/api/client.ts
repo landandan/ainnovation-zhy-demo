@@ -413,8 +413,14 @@ export function extractUrlFromUpload(res: unknown): string | null {
   return url || null
 }
 
-/** 单文件上传：POST /h5/file/upload/single，form field = files */
-export async function uploadFileSingle(file: File): Promise<any> {
+/** 单文件上传：POST /h5/file/upload/single；支持进度回调 */
+export async function uploadFileSingle(
+  file: File,
+  options?: {
+    onProgress?: (percent: number) => void
+    signal?: AbortSignal
+  },
+): Promise<any> {
   const token = getToken()
   if (!token) {
     throw new Error("未登录，无法上传文件")
@@ -423,41 +429,69 @@ export async function uploadFileSingle(file: File): Promise<any> {
   const formData = new FormData()
   formData.append("file", file)
 
-  const headers: Record<string, string> = {
-    Authorization: `Bearer ${token}`,
-    clientid: getClientId() || "0d4c873ff6146ecd7f38e2e45526ab1b",
-  }
+  const clientid = getClientId() || "0d4c873ff6146ecd7f38e2e45526ab1b"
 
-  const controller = new AbortController()
-  const timeoutId = setTimeout(() => controller.abort(), 60000)
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest()
+    xhr.open("POST", `${API_BASE_URL}/h5/file/upload/single`)
+    xhr.setRequestHeader("Authorization", `Bearer ${token}`)
+    xhr.setRequestHeader("clientid", clientid)
+    xhr.timeout = 60000
 
-  let res: Response
-  try {
-    res = await fetch(`${API_BASE_URL}/h5/file/upload/single`, {
-      method: "POST",
-      headers,
-      body: formData,
-      signal: controller.signal,
-    })
-  } catch (err: unknown) {
-    clearTimeout(timeoutId)
-    if (err instanceof DOMException && err.name === "AbortError") {
-      throw new Error("上传超时，请稍后重试")
+    const onAbort = () => {
+      xhr.abort()
     }
-    throw new Error(err instanceof Error ? err.message : "上传失败")
-  }
-  clearTimeout(timeoutId)
+    if (options?.signal) {
+      if (options.signal.aborted) {
+        reject(new Error("上传已取消"))
+        return
+      }
+      options.signal.addEventListener("abort", onAbort, { once: true })
+    }
 
-  if (!res.ok) {
-    const errText = await res.text().catch(() => res.statusText)
-    throw new Error(`上传失败 (${res.status}): ${errText}`)
-  }
+    xhr.upload.onprogress = (event) => {
+      if (!event.lengthComputable) return
+      const percent = Math.max(0, Math.min(100, Math.round((event.loaded / event.total) * 100)))
+      options?.onProgress?.(percent)
+    }
 
-  const contentType = res.headers.get("content-type") || ""
-  if (contentType.includes("application/json")) {
-    return res.json()
-  }
-  return res.text()
+    xhr.onload = () => {
+      options?.signal?.removeEventListener("abort", onAbort)
+      if (xhr.status >= 200 && xhr.status < 300) {
+        options?.onProgress?.(100)
+        const contentType = xhr.getResponseHeader("content-type") || ""
+        if (contentType.includes("application/json")) {
+          try {
+            resolve(JSON.parse(xhr.responseText || "{}"))
+          } catch {
+            reject(new Error("上传响应解析失败"))
+          }
+          return
+        }
+        resolve(xhr.responseText)
+        return
+      }
+      reject(new Error(`上传失败 (${xhr.status}): ${xhr.responseText || xhr.statusText}`))
+    }
+
+    xhr.onerror = () => {
+      options?.signal?.removeEventListener("abort", onAbort)
+      reject(new Error("上传失败"))
+    }
+
+    xhr.ontimeout = () => {
+      options?.signal?.removeEventListener("abort", onAbort)
+      reject(new Error("上传超时，请稍后重试"))
+    }
+
+    xhr.onabort = () => {
+      options?.signal?.removeEventListener("abort", onAbort)
+      reject(new Error("上传已取消"))
+    }
+
+    options?.onProgress?.(0)
+    xhr.send(formData)
+  })
 }
 
 export async function submitMessageFeedback(data: {

@@ -1952,6 +1952,34 @@ button.chat-user-file-card:hover {
   color: var(--upload-preview-file-sub-color, #8C8C8C);
 }
 
+.upload-preview-file.is-uploading {
+  cursor: default;
+  opacity: 0.95;
+}
+
+.upload-preview-file.is-error {
+  border: 1px solid color-mix(in srgb, #ef4444 35%, transparent);
+}
+
+.upload-preview-progress-ring {
+  display: block;
+  transform: rotate(-90deg);
+}
+
+.upload-preview-progress-track {
+  stroke: color-mix(in srgb, var(--text-muted, #8C8C8C) 28%, transparent);
+}
+
+.upload-preview-progress-value {
+  stroke: var(--accent, #2563eb);
+  transition: stroke-dashoffset 0.15s ease;
+}
+
+.upload-preview-remove.is-visible {
+  opacity: 0.9;
+  pointer-events: auto;
+}
+
 .upload-preview-image {
   position: relative;
   width: 64px;

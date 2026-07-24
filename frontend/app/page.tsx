@@ -70,6 +70,18 @@ export interface MessageFileAttachment {
   type?: string
 }
 
+/** 输入区上传中的附件（Kimi 风格进度卡片） */
+export interface UploadingAttachment {
+  id: string
+  kind: "file" | "image"
+  name: string
+  size: number
+  progress: number
+  status: "uploading" | "error"
+  errorMessage?: string
+  previewUrl?: string
+}
+
 export interface ResourceItem {
   document_name: string
   content: string
@@ -518,6 +530,9 @@ export default function Page() {
   /** 上传接口返回的 ossId（与图片/文档预览一一对应） */
   const [imageOssIds, setImageOssIds] = useState<Array<string | number>>([])
   const [docOssIds, setDocOssIds] = useState<Array<string | number>>([])
+  /** 上传中附件（选中后立刻展示进度卡片） */
+  const [uploadingAttachments, setUploadingAttachments] = useState<UploadingAttachment[]>([])
+  const uploadAbortMapRef = useRef<Map<string, AbortController>>(new Map())
   const [isRecording, setIsRecording] = useState(false)
   const [isStreaming, setIsStreaming] = useState(false)
   const [resourceSidebarOpen, setResourceSidebarOpen] = useState(false)
@@ -929,6 +944,11 @@ export default function Page() {
     setRawDocFiles([])
     setImageOssIds([])
     setDocOssIds([])
+    for (const controller of uploadAbortMapRef.current.values()) {
+      controller.abort()
+    }
+    uploadAbortMapRef.current.clear()
+    setUploadingAttachments([])
     refreshConversations()
     // 侧边栏 onClick 可能把事件对象传进来，只接受真正的 agent id 字符串
     const nextAgentId =
@@ -1792,6 +1812,11 @@ export default function Page() {
     setRawDocFiles([])
     setImageOssIds([])
     setDocOssIds([])
+    for (const controller of uploadAbortMapRef.current.values()) {
+      controller.abort()
+    }
+    uploadAbortMapRef.current.clear()
+    setUploadingAttachments([])
 
     newMessages.push({ 
       role: "ai", 
@@ -1815,8 +1840,32 @@ export default function Page() {
   }
 
   const handleImageUpload = async (dataUrl: string, rawFile: File) => {
+    const uploadId = crypto.randomUUID()
+    const controller = new AbortController()
+    uploadAbortMapRef.current.set(uploadId, controller)
+    setUploadingAttachments((prev) => [
+      ...prev,
+      {
+        id: uploadId,
+        kind: "image",
+        name: rawFile.name || "图片",
+        size: rawFile.size,
+        progress: 0,
+        status: "uploading",
+        previewUrl: dataUrl,
+      },
+    ])
     try {
-      const uploadRes = await uploadFileSingle(rawFile)
+      const uploadRes = await uploadFileSingle(rawFile, {
+        signal: controller.signal,
+        onProgress: (percent) => {
+          setUploadingAttachments((prev) =>
+            prev.map((item) =>
+              item.id === uploadId ? { ...item, progress: percent } : item,
+            ),
+          )
+        },
+      })
       const ossId = extractOssIdFromUpload(uploadRes)
       if (ossId == null) {
         throw new Error("上传成功但未返回 ossId")
@@ -1824,15 +1873,52 @@ export default function Page() {
       setUploadedImages((prev) => [...prev, dataUrl])
       setRawImageFiles((prev) => [...prev, rawFile])
       setImageOssIds((prev) => [...prev, ossId])
+      setUploadingAttachments((prev) => prev.filter((item) => item.id !== uploadId))
     } catch (err) {
+      if (controller.signal.aborted) {
+        setUploadingAttachments((prev) => prev.filter((item) => item.id !== uploadId))
+        return
+      }
       const errMsg = err instanceof Error ? err.message : "附件上传失败"
+      setUploadingAttachments((prev) =>
+        prev.map((item) =>
+          item.id === uploadId
+            ? { ...item, status: "error", errorMessage: errMsg, progress: item.progress }
+            : item,
+        ),
+      )
       error(`附件上传失败: ${errMsg}`)
+    } finally {
+      uploadAbortMapRef.current.delete(uploadId)
     }
   }
 
   const handleFileUpload = async (file: { name: string; size: number }, rawFile: File) => {
+    const uploadId = crypto.randomUUID()
+    const controller = new AbortController()
+    uploadAbortMapRef.current.set(uploadId, controller)
+    setUploadingAttachments((prev) => [
+      ...prev,
+      {
+        id: uploadId,
+        kind: "file",
+        name: file.name,
+        size: file.size,
+        progress: 0,
+        status: "uploading",
+      },
+    ])
     try {
-      const uploadRes = await uploadFileSingle(rawFile)
+      const uploadRes = await uploadFileSingle(rawFile, {
+        signal: controller.signal,
+        onProgress: (percent) => {
+          setUploadingAttachments((prev) =>
+            prev.map((item) =>
+              item.id === uploadId ? { ...item, progress: percent } : item,
+            ),
+          )
+        },
+      })
       const ossId = extractOssIdFromUpload(uploadRes)
       if (ossId == null) {
         throw new Error("上传成功但未返回 ossId")
@@ -1851,10 +1937,31 @@ export default function Page() {
       ])
       setRawDocFiles((prev) => [...prev, rawFile])
       setDocOssIds((prev) => [...prev, ossId])
+      setUploadingAttachments((prev) => prev.filter((item) => item.id !== uploadId))
     } catch (err) {
+      if (controller.signal.aborted) {
+        setUploadingAttachments((prev) => prev.filter((item) => item.id !== uploadId))
+        return
+      }
       const errMsg = err instanceof Error ? err.message : "附件上传失败"
+      setUploadingAttachments((prev) =>
+        prev.map((item) =>
+          item.id === uploadId
+            ? { ...item, status: "error", errorMessage: errMsg, progress: item.progress }
+            : item,
+        ),
+      )
       error(`附件上传失败: ${errMsg}`)
+    } finally {
+      uploadAbortMapRef.current.delete(uploadId)
     }
+  }
+
+  const handleCancelUploading = (uploadId: string) => {
+    const controller = uploadAbortMapRef.current.get(uploadId)
+    controller?.abort()
+    uploadAbortMapRef.current.delete(uploadId)
+    setUploadingAttachments((prev) => prev.filter((item) => item.id !== uploadId))
   }
 
   const handleRemoveImage = (idx: number) => {
@@ -2033,15 +2140,17 @@ export default function Page() {
     <InputArea
       uploadedImages={uploadedImages}
       uploadedFiles={uploadedFiles}
+      uploadingAttachments={uploadingAttachments}
       rawDocFiles={rawDocFiles}
       onSendMessage={handleSendMessage}
       onImageUpload={handleImageUpload}
       onFileUpload={handleFileUpload}
       onRemoveImage={handleRemoveImage}
       onRemoveFile={handleRemoveFile}
+      onCancelUploading={handleCancelUploading}
       onVoiceToggle={handleVoiceToggle}
       isRecording={isRecording}
-      disabled={isStreaming}
+      disabled={isStreaming || uploadingAttachments.some((item) => item.status === "uploading")}
       isStreaming={isStreaming}
       onStopStreaming={handleStopStreaming}
       agentLabel={displayAgentLabel}
