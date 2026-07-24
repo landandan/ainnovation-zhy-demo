@@ -7,6 +7,7 @@ import { MessageActions } from "./message-actions"
 import { ThinkingBlock } from "./thinking-block"
 import { CanvasDragonAvatar } from "./canvas-dragon-avatar"
 import { WorkflowProgressComponent } from "./workflow-progress"
+import { DownloadLink } from "./download-link"
 
 interface ChatAreaProps {
   messages: Message[]
@@ -185,17 +186,19 @@ export const ChatArea = forwardRef<HTMLDivElement, ChatAreaProps>(
                     </div>
                   </>
                 )
-                if (file.original_url) {
+                const href = file.original_url || (file.file_id ? `/files/${file.file_id}` : "")
+                if (href) {
                   return (
-                    <a
+                    <DownloadLink
                       key={`file-${idx}`}
+                      href={href}
+                      label={file.name}
+                      agentId={currentAgentId}
+                      fileId={file.file_id}
                       className="chat-user-file-card"
-                      href={file.original_url}
-                      target="_blank"
-                      rel="noopener noreferrer"
                     >
                       {meta}
-                    </a>
+                    </DownloadLink>
                   )
                 }
                 return (

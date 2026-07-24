@@ -1,6 +1,6 @@
  "use client"
 
-import { useEffect, useMemo, useRef, useState } from "react"
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react"
 import mammoth from "mammoth"
 import type { WorkBook } from "xlsx"
 
@@ -12,6 +12,10 @@ import { isMockMode } from "@/lib/mock-config"
    label?: string
   agentId?: string
   fileId?: string
+  /** 自定义触发器样式，默认 attachment-link-card */
+  className?: string
+  /** 自定义触发器内容；不传则用默认图标+文件名 */
+  children?: ReactNode
  }
 
  type PreviewState =
@@ -261,7 +265,7 @@ async function fetchFileResponse(url: string, withAuth: boolean, errorLabel = "�
   return res
 }
 
-export function DownloadLink({ href, label, agentId, fileId }: DownloadLinkProps) {
+export function DownloadLink({ href, label, agentId, fileId, className, children }: DownloadLinkProps) {
   const [previewOpen, setPreviewOpen] = useState(false)
   const [isClosing, setIsClosing] = useState(false)
   const [preview, setPreview] = useState<PreviewState>({ kind: "idle" })
@@ -605,23 +609,27 @@ export function DownloadLink({ href, label, agentId, fileId }: DownloadLinkProps
       <button
         type="button"
         onClick={handlePreviewOpen}
-        className="attachment-link-card"
+        className={className || "attachment-link-card"}
         title={`预览 ${fileName}`}
       >
-        <span
-          className="attachment-link-icon"
-          style={{ background: "color-mix(in srgb, var(--accent) 12%, var(--card) 88%)", color: "var(--accent)" }}
-        >
-          <svg width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
-            <polyline points="14 2 14 8 20 8" />
-          </svg>
-        </span>
-        <span className="attachment-link-main">
-          <span className="attachment-link-name">{fileName}</span>
-          <span className="attachment-link-desc">{fileMeta.desc}</span>
-        </span>
-        <span className="attachment-link-tag">{fileMeta.tag}</span>
+        {children ?? (
+          <>
+            <span
+              className="attachment-link-icon"
+              style={{ background: "color-mix(in srgb, var(--accent) 12%, var(--card) 88%)", color: "var(--accent)" }}
+            >
+              <svg width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                <polyline points="14 2 14 8 20 8" />
+              </svg>
+            </span>
+            <span className="attachment-link-main">
+              <span className="attachment-link-name">{fileName}</span>
+              <span className="attachment-link-desc">{fileMeta.desc}</span>
+            </span>
+            <span className="attachment-link-tag">{fileMeta.tag}</span>
+          </>
+        )}
       </button>
 
       {previewOpen && (

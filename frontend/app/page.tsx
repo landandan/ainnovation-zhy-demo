@@ -22,6 +22,7 @@ import {
   // addMessage,
   uploadFileSingle,
   extractOssIdFromUpload,
+  extractUrlFromUpload,
   type AgentDefApi,
   type ConversationApi,
   type MessageApi,
@@ -49,12 +50,14 @@ import { handleAuthExpired } from "@/lib/http/client"
 /** 从地址栏读取对话路由参数（刷新恢复用） */
 function readChatUrlParams() {
   if (typeof window === "undefined") {
-    return { agent: "", session: "" }
+    return { agent: "", localSessionId: "" }
   }
   const sp = new URLSearchParams(window.location.search)
   return {
     agent: sp.get("agent")?.trim() || "",
-    session: sp.get("session")?.trim() || "",
+    // 优先 localSessionId；兼容旧链接里的 session
+    localSessionId:
+      sp.get("localSessionId")?.trim() || sp.get("session")?.trim() || "",
   }
 }
 
@@ -508,7 +511,7 @@ export default function Page() {
   const [currentAgentId, setCurrentAgentId] = useState<string>("")
   const [messages, setMessages] = useState<Message[]>([])
   const [uploadedImages, setUploadedImages] = useState<string[]>([])
-  const [uploadedFiles, setUploadedFiles] = useState<{ name: string; size: number }[]>([])
+  const [uploadedFiles, setUploadedFiles] = useState<MessageFileAttachment[]>([])
   /* 原始 File 对象，用于上传到 Dify */
   const [rawImageFiles, setRawImageFiles] = useState<File[]>([])
   const [rawDocFiles, setRawDocFiles] = useState<File[]>([])
@@ -539,15 +542,16 @@ export default function Page() {
     setLocalSessionId((prev) => (prev === sid ? prev : sid))
   }, [])
 
-  /** 同步地址栏 ?agent=&session=，刷新后可恢复当前对话 */
+  /** 同步地址栏 ?agent=&localSessionId=，刷新后可恢复当前对话 */
   const syncChatUrl = useCallback(
-    (nextAgentId: string, nextSessionId?: string | null) => {
+    (nextAgentId: string, nextLocalSessionId?: string | null) => {
       if (typeof window === "undefined") return
       const params = new URLSearchParams()
       const agent = String(nextAgentId ?? "").trim()
-      const session = nextSessionId == null ? "" : String(nextSessionId).trim()
+      const localSid =
+        nextLocalSessionId == null ? "" : String(nextLocalSessionId).trim()
       if (agent) params.set("agent", agent)
-      if (session) params.set("session", session)
+      if (localSid) params.set("localSessionId", localSid)
       const qs = params.toString()
       const base = pathname || "/"
       const nextUrl = qs ? `${base}?${qs}` : base
@@ -569,7 +573,9 @@ export default function Page() {
         sessionIdRef.current = sid
         setSessionId(sid)
       }
-      syncChatUrl(agentIdForUrl || currentAgentId, sid)
+      // 地址栏始终写 localSessionId，避免次轮真正 sessionId 覆盖后刷新对不上
+      const urlKey = String(localSessionIdRef.current || sid).trim()
+      syncChatUrl(agentIdForUrl || currentAgentId, urlKey)
     },
     [currentAgentId, syncChatUrl],
   )
@@ -624,7 +630,7 @@ export default function Page() {
     if (!user) return
 
     async function loadData() {
-      const { agent: urlAgent, session: urlSession } = readChatUrlParams()
+      const { agent: urlAgent, localSessionId: urlLocalSessionId } = readChatUrlParams()
 
       try {
         // 并行加载 agents 和 conversations
@@ -676,27 +682,29 @@ export default function Page() {
             : rows.length >= CONVERSATIONS_PAGE_SIZE,
         )
 
-        // 刷新恢复：有 session 则拉历史消息；否则只同步 agent 到 URL
-        if (urlSession) {
+        // 刷新恢复：有 localSessionId 则拉历史消息；否则只同步 agent 到 URL
+        if (urlLocalSessionId) {
           try {
             const conv =
-              rows.find((c) => String(c.sessionId ?? "").trim() === urlSession) ||
-              rows.find((c) => String(c.localSessionId ?? "").trim() === urlSession)
-            // 拉消息优先用真实 sessionId，没有则用 URL / localSessionId
-            const messageSessionKey =
-              String(conv?.sessionId ?? "").trim() ||
-              String(conv?.localSessionId ?? "").trim() ||
-              urlSession
-            const msgsRes = await getMessages(messageSessionKey)
+              rows.find((c) => String(c.localSessionId ?? "").trim() === urlLocalSessionId) ||
+              rows.find((c) => String(c.sessionId ?? "").trim() === urlLocalSessionId)
+            // 拉消息 / 地址栏统一用 localSessionId
+            const localSid =
+              String(conv?.localSessionId ?? "").trim() || urlLocalSessionId
+            const msgsRes = await getMessages(localSid)
             const sortedMsgs = [...(msgsRes?.data?.messageList ?? [])].sort(
               (a, b) => new Date(a.createTime).getTime() - new Date(b.createTime).getTime(),
             )
             setMessages(sortedMsgs.flatMap(mapMessage))
-            sessionIdRef.current = messageSessionKey
-            setSessionId(messageSessionKey)
-            applyLocalSessionId(
-              String(conv?.localSessionId ?? "").trim() || messageSessionKey,
-            )
+            const realSessionId = String(conv?.sessionId ?? "").trim()
+            if (realSessionId) {
+              sessionIdRef.current = realSessionId
+              setSessionId(realSessionId)
+            } else {
+              sessionIdRef.current = localSid
+              setSessionId(localSid)
+            }
+            applyLocalSessionId(localSid)
             difyConversationIdRef.current = null
 
             if (!urlAgent && conv?.appId) {
@@ -706,7 +714,7 @@ export default function Page() {
               setCurrentAgentId(resolvedAgentId)
             }
 
-            syncChatUrl(resolvedAgentId, messageSessionKey)
+            syncChatUrl(resolvedAgentId, localSid)
           } catch (restoreErr) {
             console.error("从 URL 恢复会话失败:", restoreErr)
             if (resolvedAgentId) syncChatUrl(resolvedAgentId, null)
@@ -937,9 +945,13 @@ export default function Page() {
       console.log('id123:', id)
       console.log('sessionId123:', item.sessionId)
       console.log('item:', item)
-      // 从后端加载消息（无 sessionId 时用 localSessionId，字段名仍是 sessionId）
-      const messageSessionKey = item.sessionId || item.localSessionId || ""
-      const msgsRes = await getMessages(messageSessionKey)
+      // 拉消息用 localSessionId
+      const localSid = String(item.localSessionId ?? "").trim()
+      if (!localSid) {
+        error("该会话缺少 localSessionId，无法加载消息")
+        return
+      }
+      const msgsRes = await getMessages(localSid)
       console.log('msgsRes123:', msgsRes)
       
       // 确保消息按正序排列（旧的在前，新的在后）
@@ -952,11 +964,15 @@ export default function Page() {
       setResourceSidebarOpen(false)
       setMessages(mappedMsgs)
       setActiveConversationId(id)
-      sessionIdRef.current = messageSessionKey
-      setSessionId(messageSessionKey)
-      applyLocalSessionId(
-        String(item.localSessionId ?? "").trim() || messageSessionKey,
-      )
+      const realSessionId = String(item.sessionId ?? "").trim()
+      if (realSessionId) {
+        sessionIdRef.current = realSessionId
+        setSessionId(realSessionId)
+      } else {
+        sessionIdRef.current = localSid
+        setSessionId(localSid)
+      }
+      applyLocalSessionId(localSid)
 
       // 用历史会话的 appId 匹配智能助手列表 id，选中对应智能体（不新建会话）
       let nextAgentId = currentAgentId
@@ -974,7 +990,7 @@ export default function Page() {
       }
 
       difyConversationIdRef.current = null
-      syncChatUrl(nextAgentId, messageSessionKey)
+      syncChatUrl(nextAgentId, localSid)
       maybeCloseSidebar()
     } catch (err) {
       console.error("加载对话消息失败:", err)
@@ -982,18 +998,20 @@ export default function Page() {
     }
   }
 
-  const handleDeleteHistory = async (sessionIdToDelete: string) => {
+  const handleDeleteHistory = async (localSessionIdToDelete: string) => {
     try {
-      // 字段名仍是 sessionId；无 sessionId 时把 localSessionId 作为值传入
-      await deleteConversationApi(sessionIdToDelete)
+      await deleteConversationApi(localSessionIdToDelete)
       setConversations((prev) =>
         prev.filter((c) => {
           const sid = String(c.sessionId ?? "").trim()
           const localSid = String(c.localSessionId ?? "").trim()
-          return sid !== sessionIdToDelete && localSid !== sessionIdToDelete
+          return sid !== localSessionIdToDelete && localSid !== localSessionIdToDelete
         }),
       )
-      if (sessionId === sessionIdToDelete) {
+      if (
+        localSessionId === localSessionIdToDelete ||
+        sessionId === localSessionIdToDelete
+      ) {
         setMessages([])
         setActiveConversationId(null)
         sessionIdRef.current = ""
@@ -1010,20 +1028,26 @@ export default function Page() {
     }
   }
 
-  const handleBulkDeleteHistory = async (sessionIds: string[]) => {
+  const handleBulkDeleteHistory = async (localSessionIds: string[]) => {
     try {
-      const uniqueSessionIds = [...new Set(sessionIds.filter(Boolean))]
-      for (const sid of uniqueSessionIds) {
-        await deleteConversationApi(sid)
+      const uniqueLocalSessionIds = [...new Set(localSessionIds.filter(Boolean))]
+      for (const localSid of uniqueLocalSessionIds) {
+        await deleteConversationApi(localSid)
       }
       setConversations((prev) =>
         prev.filter((c) => {
           const sid = String(c.sessionId ?? "").trim()
           const localSid = String(c.localSessionId ?? "").trim()
-          return !uniqueSessionIds.includes(sid) && !uniqueSessionIds.includes(localSid)
+          return (
+            !uniqueLocalSessionIds.includes(sid) &&
+            !uniqueLocalSessionIds.includes(localSid)
+          )
         }),
       )
-      if (sessionId && uniqueSessionIds.includes(sessionId)) {
+      if (
+        (localSessionId && uniqueLocalSessionIds.includes(localSessionId)) ||
+        (sessionId && uniqueLocalSessionIds.includes(sessionId))
+      ) {
         setMessages([])
         setActiveConversationId(null)
         sessionIdRef.current = ""
@@ -1033,20 +1057,21 @@ export default function Page() {
         syncChatUrl(currentAgentId, null)
       }
       await refreshConversations()
-      success(`已删除 ${uniqueSessionIds.length} 条对话`)
+      success(`已删除 ${uniqueLocalSessionIds.length} 条对话`)
     } catch (err) {
       console.error("批量删除对话失败:", err)
       error(err instanceof Error && err.message.trim() ? err.message : "批量删除失败")
     }
   }
 
-  const handleRenameHistory = async (sessionIdToRename: string, newTitle: string) => {
-    if (!sessionIdToRename || !newTitle.trim()) return
+  const handleRenameHistory = async (localSessionIdToRename: string, newTitle: string) => {
+    if (!localSessionIdToRename || !newTitle.trim()) return
     try {
-      await renameConversationApi(sessionIdToRename, newTitle.trim())
+      await renameConversationApi(localSessionIdToRename, newTitle.trim())
       setConversations((prev) =>
         prev.map((c) =>
-          c.sessionId === sessionIdToRename
+          String(c.localSessionId ?? "").trim() === localSessionIdToRename ||
+          String(c.sessionId ?? "").trim() === localSessionIdToRename
             ? { ...c, title: newTitle.trim(), query: newTitle.trim() }
             : c,
         ),
@@ -1812,7 +1837,18 @@ export default function Page() {
       if (ossId == null) {
         throw new Error("上传成功但未返回 ossId")
       }
-      setUploadedFiles((prev) => [...prev, file])
+      const fileUrl = extractUrlFromUpload(uploadRes)
+      setUploadedFiles((prev) => [
+        ...prev,
+        {
+          name: file.name,
+          size: file.size,
+          mime_type: rawFile.type || undefined,
+          type: "document",
+          original_url: fileUrl || undefined,
+          file_id: String(ossId),
+        },
+      ])
       setRawDocFiles((prev) => [...prev, rawFile])
       setDocOssIds((prev) => [...prev, ossId])
     } catch (err) {

@@ -3,6 +3,9 @@
 import { isGuestUser } from "@/lib/auth";
 import { useState, useRef, useCallback, useEffect } from "react"
 import LoginModal, { LoginModalRef } from "@/components/login-modal"
+import mammoth from "mammoth"
+import type { WorkBook } from "xlsx"
+import type { AgentDef } from "./agent-section"
 
 interface InputAreaProps {
   uploadedImages: string[]
@@ -27,11 +30,85 @@ type LightboxPreview =
   | { kind: "image"; src: string; name: string }
   | { kind: "pdf"; url: string; name: string }
   | { kind: "text"; content: string; name: string }
+  | { kind: "html"; content: string; name: string }
+  | { kind: "pptx"; name: string }
+  | {
+      kind: "table"
+      name: string
+      headers: string[]
+      rows: string[][]
+      sheetNames?: string[]
+      activeSheet?: string
+    }
   | { kind: "unsupported"; name: string; message: string }
+
+type PptxViewerInstance = {
+  destroy: () => void
+}
 
 function getExt(name: string) {
   const match = name.toLowerCase().match(/\.([a-z0-9]+)$/)
   return match?.[1] || ""
+}
+
+async function excelSheetToPreviewTable(sheet: WorkBook["Sheets"][string], maxRows = 120) {
+  const XLSX = await import("xlsx")
+  const raw = XLSX.utils.sheet_to_json<(string | number | boolean | null | undefined)[]>(sheet, {
+    header: 1,
+    defval: "",
+    raw: false,
+  }) as Array<Array<string | number | boolean | null | undefined>>
+
+  if (!raw.length) {
+    return { headers: [] as string[], rows: [] as string[][] }
+  }
+
+  const headers = (raw[0] || []).map((cell) => String(cell ?? ""))
+  const colCount = Math.max(headers.length, ...raw.slice(1, maxRows + 1).map((row) => row.length), 1)
+  const normalizedHeaders = Array.from({ length: colCount }, (_, index) => headers[index] || `列 ${index + 1}`)
+  const rows = raw.slice(1, maxRows + 1).map((row) =>
+    Array.from({ length: colCount }, (_, index) => String(row[index] ?? "")),
+  )
+  return { headers: normalizedHeaders, rows }
+}
+
+async function readSpreadsheetWorkbook(arrayBuffer: ArrayBuffer, extension: string): Promise<WorkBook> {
+  const XLSX = await import("xlsx")
+  const ext = extension.toLowerCase()
+
+  if (ext === "csv" || ext === "tsv") {
+    let text = new TextDecoder("utf-8").decode(arrayBuffer)
+    if (text.charCodeAt(0) === 0xfeff) {
+      text = text.slice(1)
+    }
+    try {
+      return XLSX.read(text, {
+        type: "string",
+        FS: ext === "tsv" ? "\t" : ",",
+        raw: false,
+      })
+    } catch {
+      return XLSX.read(arrayBuffer, { type: "array", raw: false })
+    }
+  }
+
+  return XLSX.read(arrayBuffer, { type: "array", cellDates: true, raw: false })
+}
+
+async function openSpreadsheetPreview(arrayBuffer: ArrayBuffer, extension: string) {
+  const workbook = await readSpreadsheetWorkbook(arrayBuffer, extension)
+  const activeSheet = workbook.SheetNames[0]
+  if (!activeSheet) {
+    throw new Error("该表格文件没有可预览的工作表")
+  }
+  const { headers, rows } = await excelSheetToPreviewTable(workbook.Sheets[activeSheet])
+  return {
+    headers,
+    rows,
+    sheetNames: workbook.SheetNames,
+    activeSheet,
+    workbook,
+  }
 }
 
 export function InputArea({
@@ -55,14 +132,33 @@ export function InputArea({
   const [text, setText] = useState("")
   const [lightbox, setLightbox] = useState<LightboxPreview | null>(null)
   const [lightboxLoading, setLightboxLoading] = useState(false)
+  const [pptxBooting, setPptxBooting] = useState(false)
   const [isDragging, setIsDragging] = useState(false)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const imageInputRef = useRef<HTMLInputElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const objectUrlRef = useRef<string | null>(null)
   const dragDepthRef = useRef(0)
+  const pptxContainerRef = useRef<HTMLDivElement | null>(null)
+  const pptxViewerRef = useRef<PptxViewerInstance | null>(null)
+  const pptxBufferRef = useRef<ArrayBuffer | null>(null)
+  const workbookRef = useRef<WorkBook | null>(null)
 
   const hasContent = text.trim() || uploadedImages.length > 0 || uploadedFiles.length > 0
+
+  const destroyPptxViewer = useCallback(() => {
+    try {
+      pptxViewerRef.current?.destroy()
+    } catch {
+      /* ignore */
+    }
+    pptxViewerRef.current = null
+    pptxBufferRef.current = null
+    setPptxBooting(false)
+    if (pptxContainerRef.current) {
+      pptxContainerRef.current.innerHTML = ""
+    }
+  }, [])
 
   const revokeObjectUrl = useCallback(() => {
     if (objectUrlRef.current) {
@@ -73,9 +169,11 @@ export function InputArea({
 
   const closeLightbox = useCallback(() => {
     revokeObjectUrl()
+    destroyPptxViewer()
+    workbookRef.current = null
     setLightbox(null)
     setLightboxLoading(false)
-  }, [revokeObjectUrl])
+  }, [revokeObjectUrl, destroyPptxViewer])
 
   useEffect(() => {
     return () => revokeObjectUrl()
@@ -238,6 +336,8 @@ export function InputArea({
 
     const ext = getExt(meta.name)
     revokeObjectUrl()
+    destroyPptxViewer()
+    workbookRef.current = null
 
     if (!file) {
       setLightbox({
@@ -257,15 +357,74 @@ export function InputArea({
         return
       }
 
+      // 表格优先走表格预览（不要当纯文本打开）
+      if (["csv", "tsv", "xls", "xlsx"].includes(ext)) {
+        const arrayBuffer = await file.arrayBuffer()
+        const result = await openSpreadsheetPreview(arrayBuffer, ext)
+        workbookRef.current = result.workbook
+        setLightbox({
+          kind: "table",
+          name: meta.name,
+          headers: result.headers,
+          rows: result.rows,
+          sheetNames: result.sheetNames,
+          activeSheet: result.activeSheet,
+        })
+        return
+      }
+
       if (
         file.type.startsWith("text/") ||
-        ["txt", "md", "json", "csv", "tsv", "log", "xml", "html", "css", "js", "ts"].includes(ext)
+        ["txt", "md", "json", "log", "xml", "html", "css", "js", "ts"].includes(ext)
       ) {
         const content = await file.text()
         setLightbox({
           kind: "text",
           content: content.slice(0, 200000),
           name: meta.name,
+        })
+        return
+      }
+
+      // Word：本地 File 转 HTML（与消息附件预览同一套能力）
+      if (ext === "docx" || ext === "doc") {
+        const arrayBuffer = await file.arrayBuffer()
+        if (ext === "docx") {
+          const result = await mammoth.convertToHtml({ arrayBuffer })
+          setLightbox({
+            kind: "html",
+            content: result.value || "<p>（文档无内容）</p>",
+            name: meta.name,
+          })
+          return
+        }
+        try {
+          const maybeDocx = await mammoth.convertToHtml({ arrayBuffer })
+          if (maybeDocx.value?.trim()) {
+            setLightbox({ kind: "html", content: maybeDocx.value, name: meta.name })
+            return
+          }
+        } catch {
+          // 旧版 .doc 走专用解析
+        }
+        const { parseMsDocToHtml } = await import("@file-viewer/doc")
+        const rendered = await parseMsDocToHtml(arrayBuffer)
+        const html = `${rendered.css ? `<style>${rendered.css}</style>` : ""}<div class="msdoc-root">${rendered.html || "<p>（文档无内容）</p>"}</div>`
+        setLightbox({ kind: "html", content: html, name: meta.name })
+        return
+      }
+
+      if (ext === "pptx") {
+        pptxBufferRef.current = await file.arrayBuffer()
+        setLightbox({ kind: "pptx", name: meta.name })
+        return
+      }
+
+      if (ext === "ppt") {
+        setLightbox({
+          kind: "unsupported",
+          name: meta.name,
+          message: "旧版 .ppt 暂不支持在线预览，请下载后查看。建议使用 .pptx。",
         })
         return
       }
@@ -285,6 +444,97 @@ export function InputArea({
       setLightboxLoading(false)
     }
   }
+
+  const handleSheetChange = async (sheetName: string) => {
+    const workbook = workbookRef.current
+    if (!workbook || !workbook.Sheets[sheetName] || lightbox?.kind !== "table") return
+    try {
+      const { headers, rows } = await excelSheetToPreviewTable(workbook.Sheets[sheetName])
+      setLightbox({
+        ...lightbox,
+        headers,
+        rows,
+        activeSheet: sheetName,
+      })
+    } catch {
+      /* ignore sheet switch errors */
+    }
+  }
+
+  // pptx：lightbox 挂载后再初始化 viewer
+  useEffect(() => {
+    if (lightbox?.kind !== "pptx") return
+    const container = pptxContainerRef.current
+    const buffer = pptxBufferRef.current
+    if (!container || !buffer) return
+
+    let cancelled = false
+    setPptxBooting(true)
+
+    ;(async () => {
+      try {
+        const { PptxViewer } = await import("@file-viewer/pptx")
+        await import("@file-viewer/pptx/styles.css")
+        if (cancelled) return
+
+        try {
+          pptxViewerRef.current?.destroy()
+        } catch {
+          /* ignore */
+        }
+        pptxViewerRef.current = null
+        container.innerHTML = ""
+
+        const viewer = await PptxViewer.open(buffer, container, {
+          fitMode: "contain",
+          zoomPercent: 100,
+          workerUrl: "/file-viewer/pptx.worker.js",
+          workerType: "module",
+          onRenderComplete: () => {
+            if (!cancelled) setPptxBooting(false)
+          },
+          onError: () => {
+            if (cancelled) return
+            setLightbox({
+              kind: "unsupported",
+              name: lightbox.name,
+              message: "PPTX 预览失败，请稍后重试",
+            })
+            setPptxBooting(false)
+          },
+        })
+        if (cancelled) {
+          viewer.destroy()
+          return
+        }
+        pptxViewerRef.current = viewer
+        setPptxBooting(false)
+      } catch {
+        if (!cancelled) {
+          setLightbox({
+            kind: "unsupported",
+            name: lightbox.name,
+            message: "PPTX 预览失败，请稍后重试",
+          })
+        }
+      } finally {
+        if (!cancelled) setPptxBooting(false)
+      }
+    })()
+
+    return () => {
+      cancelled = true
+      try {
+        pptxViewerRef.current?.destroy()
+      } catch {
+        /* ignore */
+      }
+      pptxViewerRef.current = null
+      if (pptxContainerRef.current) {
+        pptxContainerRef.current.innerHTML = ""
+      }
+    }
+  }, [lightbox])
 
   return (
     <div className="input-area-container pt-4">
@@ -515,6 +765,66 @@ export function InputArea({
               <div className="upload-lightbox-text">
                 <div className="upload-lightbox-text-title">{lightbox.name}</div>
                 <pre>{lightbox.content}</pre>
+              </div>
+            )}
+
+            {lightbox?.kind === "html" && (
+              <div className="upload-lightbox-docx">
+                <div className="upload-lightbox-text-title">{lightbox.name}</div>
+                <div
+                  className="upload-lightbox-docx-body"
+                  dangerouslySetInnerHTML={{ __html: lightbox.content }}
+                />
+              </div>
+            )}
+
+            {lightbox?.kind === "pptx" && (
+              <div className="upload-lightbox-pptx-wrap">
+                <div className="upload-lightbox-text-title">{lightbox.name}</div>
+                {pptxBooting ? (
+                  <div className="upload-lightbox-message">正在加载演示文稿...</div>
+                ) : null}
+                <div ref={pptxContainerRef} className="upload-lightbox-pptx" />
+              </div>
+            )}
+
+            {lightbox?.kind === "table" && (
+              <div className="upload-lightbox-table-wrap">
+                <div className="upload-lightbox-text-title">{lightbox.name}</div>
+                {!!lightbox.sheetNames && lightbox.sheetNames.length > 1 && (
+                  <div className="upload-lightbox-sheet-tabs">
+                    {lightbox.sheetNames.map((sheetName) => (
+                      <button
+                        key={sheetName}
+                        type="button"
+                        className={`upload-lightbox-sheet-tab${lightbox.activeSheet === sheetName ? " active" : ""}`}
+                        onClick={() => void handleSheetChange(sheetName)}
+                      >
+                        {sheetName}
+                      </button>
+                    ))}
+                  </div>
+                )}
+                <div className="upload-lightbox-table-scroll">
+                  <table className="upload-lightbox-table">
+                    <thead>
+                      <tr>
+                        {lightbox.headers.map((header, index) => (
+                          <th key={`h-${index}`}>{header}</th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {lightbox.rows.map((row, rowIndex) => (
+                        <tr key={`r-${rowIndex}`}>
+                          {lightbox.headers.map((_, cellIndex) => (
+                            <td key={`c-${rowIndex}-${cellIndex}`}>{row[cellIndex] ?? ""}</td>
+                          ))}
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
               </div>
             )}
 

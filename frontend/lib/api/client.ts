@@ -354,16 +354,16 @@ export async function getConversations(params?: {
 //   return request<{ conversation: ConversationApi }>("PUT", `/conversations/${convId}`, data)
 // }
 
-export async function deleteConversationApi(sessionId: string): Promise<{ message: string }> {
+export async function deleteConversationApi(localSessionId: string): Promise<{ message: string }> {
   if (isMockMode()) {
     await mockDelay()
-    return deleteMockConversationBySessionId(sessionId)
+    return deleteMockConversationBySessionId(localSessionId)
   }
   const res = await request<{
     message?: string
     msg?: string
     code?: number | string
-  }>("POST", `/h5/chat/messages/del?sessionId=${encodeURIComponent(sessionId)}`)
+  }>("POST", `/h5/chat/messages/del?localSessionId=${encodeURIComponent(localSessionId)}`)
 
   const code = res?.code
   if (code != null && String(code) !== "200") {
@@ -378,10 +378,10 @@ export async function deleteConversationApi(sessionId: string): Promise<{ messag
 
 /** 重命名会话：POST /h5/chat/messages/rename */
 export async function renameConversationApi(
-  sessionId: string,
+  localSessionId: string,
   title: string,
 ): Promise<{ message?: string; code?: number | string }> {
-  return request("POST", "/h5/chat/messages/rename", { sessionId, title })
+  return request("POST", "/h5/chat/messages/rename", { localSessionId, title })
 }
 
 /** 从单文件上传响应中提取 ossId */
@@ -396,6 +396,21 @@ export function extractOssIdFromUpload(res: unknown): string | number | null {
     return asNum
   }
   return raw as string | number
+}
+
+/** 从单文件上传响应中提取可预览/下载的 url */
+export function extractUrlFromUpload(res: unknown): string | null {
+  if (!res || typeof res !== "object") return null
+  const obj = res as Record<string, any>
+  const raw =
+    obj?.data?.url ??
+    obj?.data?.fileUrl ??
+    obj?.url ??
+    obj?.fileUrl ??
+    obj?.data?.data?.url
+  if (typeof raw !== "string") return null
+  const url = raw.trim()
+  return url || null
 }
 
 /** 单文件上传：POST /h5/file/upload/single，form field = files */
@@ -463,18 +478,21 @@ export async function submitMessageFeedback(data: {
 }
 
 export async function getMessages(
-  sessionId: string,
+  localSessionId: string,
 ): Promise<MessagesListResponse> {
   // if (isMockMode()) {
   //   await mockDelay()
-  //   return getMockMessages(sessionId)
+  //   return getMockMessages(localSessionId)
   // }
   // const qs = new URLSearchParams()
   // if (params?.page) qs.set("page", String(params.page))
   // if (params?.per_page) qs.set("per_page", String(params.per_page))
   // if (params?.before_id) qs.set("before_id", String(params.before_id))
   // const query = qs.toString()
-  return request<MessagesListResponse>("POST", `/h5/chat/messages?sessionId=${sessionId}`)
+  return request<MessagesListResponse>(
+    "POST",
+    `/h5/chat/messages?localSessionId=${encodeURIComponent(localSessionId)}`,
+  )
 }
 
 // 已废弃：旧 /conversations/:id/messages 接口不再使用

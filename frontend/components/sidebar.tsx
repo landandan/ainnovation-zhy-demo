@@ -8,9 +8,14 @@ import type { AgentDef } from "./agent-section"
 import LoginModal, { LoginModalRef } from "@/components/login-modal"
 import {isGuestUser} from "@/lib/auth";
 
-/** 删除/勾选时传入的 sessionId 值：无 sessionId 则用 localSessionId，字段名仍是 sessionId */
+/** 历史会话操作 key：优先 localSessionId（删除/勾选/重命名等） */
 function getHistorySessionKey(item: Pick<ChatHistoryItem, "sessionId" | "localSessionId">) {
-  return String(item.sessionId || item.localSessionId || "").trim()
+  return String(item.localSessionId || item.sessionId || "").trim()
+}
+
+/** @deprecated 与 getHistorySessionKey 同优先顺序，保留兼容 */
+function getHistoryLocalSessionKey(item: Pick<ChatHistoryItem, "sessionId" | "localSessionId">) {
+  return getHistorySessionKey(item)
 }
 type HistoryDeleteDialogState =
   | {
@@ -39,9 +44,9 @@ interface SidebarProps {
   chatHistory: ChatHistoryItem[]
   agentNames: Record<string, string>
   onSelectHistory: (item: any) => void
-  onDeleteHistory: (sessionId: string) => void | Promise<void>
-  onBulkDeleteHistory?: (sessionIds: string[]) => void | Promise<void>
-  onRenameHistory?: (sessionId: string, newTitle: string) => void | Promise<void>
+  onDeleteHistory: (localSessionId: string) => void | Promise<void>
+  onBulkDeleteHistory?: (localSessionIds: string[]) => void | Promise<void>
+  onRenameHistory?: (localSessionId: string, newTitle: string) => void | Promise<void>
   onOpenSettings: () => void
   activeConversationId: number | null
   user: UserInfo | null
@@ -96,7 +101,7 @@ export function Sidebar({
   const [deleteDialog, setDeleteDialog] = useState<HistoryDeleteDialogState>(null)
   const [deletingHistory, setDeletingHistory] = useState(false)
   
-  // 重命名状态（用 sessionId 对齐 /h5/chat/messages/rename）
+  // 重命名状态（用 localSessionId 对齐 /h5/chat/messages/rename）
   const [editingHistoryId, setEditingHistoryId] = useState<string | null>(null)
   const [editTitle, setEditTitle] = useState("")
   const [renamingHistory, setRenamingHistory] = useState(false)
@@ -147,14 +152,14 @@ export function Sidebar({
     onClose()
   }
 
-  const handleRenameSubmit = async (sessionId: string) => {
+  const handleRenameSubmit = async (localSessionId: string) => {
     if (!editTitle.trim() || !onRenameHistory || renamingHistory) {
       setEditingHistoryId(null)
       return
     }
     setRenamingHistory(true)
     try {
-      await onRenameHistory(sessionId, editTitle.trim())
+      await onRenameHistory(localSessionId, editTitle.trim())
     } finally {
       setRenamingHistory(false)
       setEditingHistoryId(null)
@@ -537,11 +542,11 @@ export function Sidebar({
                             value={editTitle}
                             disabled={renamingHistory}
                             onChange={(e) => setEditTitle(e.target.value)}
-                            onBlur={() => handleRenameSubmit(getHistorySessionKey(item))}
+                            onBlur={() => handleRenameSubmit(getHistoryLocalSessionKey(item))}
                             onKeyDown={(e) => {
                               if (e.key === "Enter") {
                                 e.preventDefault()
-                                void handleRenameSubmit(getHistorySessionKey(item))
+                                void handleRenameSubmit(getHistoryLocalSessionKey(item))
                               } else if (e.key === "Escape") {
                                 setEditingHistoryId(null)
                               }
