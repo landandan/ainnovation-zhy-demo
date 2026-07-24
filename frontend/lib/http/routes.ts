@@ -1,5 +1,5 @@
 export const API_BASE_URL = process.env.NODE_ENV === "development"
-  ? "http://192.168.10.195:6039"
+  ? "http://192.168.11.99:6039"
   : "/api"
 
 export const DIFY_FILE_UPLOAD_BASE_URL = process.env.NODE_ENV === "development"

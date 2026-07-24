@@ -149,6 +149,9 @@ export interface AgentDef {
   gradient: string
   sortOrder: number
   isActive: boolean
+  /** "1" 表示展示思考/工作流进度 */
+  thinkShow?: string | number
+  visible?: string
 }
 
 /** 3 套主题列表 */
@@ -178,6 +181,8 @@ function mapAgentDef(a: AgentDefApi): AgentDef {
     sortOrder: a.sort_order ?? 0,
     isActive,
     quickQuestions: a.quick_questions || [],
+    thinkShow: a.thinkShow,
+    visible: a.visible,
   }
   // return {
   //   id: a.agent_id,
@@ -656,6 +661,8 @@ export default function Page() {
     activeAgentDefs.find((d) => d.id === currentAgentId)?.desc ?? ""
   const currentAgentQuickQuestions =
     activeAgentDefs.find((d) => d.id === currentAgentId)?.quickQuestions ?? []
+  const currentAgentThinkShow =
+    activeAgentDefs.find((d) => d.id === currentAgentId)?.thinkShow
 
   /* ───── 初始化：从后端加载 agents 和 conversations，并按 URL 恢复会话 ───── */
   useEffect(() => {
@@ -2250,6 +2257,7 @@ export default function Page() {
                 agentDesc={currentAgentDesc}
                 quickQuestions={currentAgentQuickQuestions}
                 currentAgentId={currentAgentId}
+                thinkShow={currentAgentThinkShow}
                 userId={user?.id}
                 onRetryWorkflow={handleRetryWorkflow}
                 onRetryMessage={handleRetryMessage}
@@ -2270,6 +2278,7 @@ export default function Page() {
               agentDesc={currentAgentDesc}
               quickQuestions={currentAgentQuickQuestions}
               currentAgentId={currentAgentId}
+              thinkShow={currentAgentThinkShow}
               userId={user?.id}
               onRetryWorkflow={handleRetryWorkflow}
               onRetryMessage={handleRetryMessage}
