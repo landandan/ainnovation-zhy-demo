@@ -16,11 +16,11 @@ if (process.env.NODE_ENV !== 'production') {
   nextConfig.rewrites = async () => [
     {
       source: '/api/:path*',
-      destination: 'http://192.168.11.95:6039/:path*',//'http://192.168.10.66:6039/:path*',//'http://localhost:5000/api/:path*',
+      destination: 'http://192.168.10.168:26039/:path*',//'http://192.168.10.66:6039/:path*',//'http://localhost:5000/api/:path*',
     },
     {
       source: '/v1/:path*',
-      destination: 'http://192.168.10.66:6039/v1/:path*',//'http://192.168.10.66:6039/v1/:path*',//'http://localhost/v1/:path*',
+      destination: 'http://192.168.10.168:26039/v1/:path*',//'http://192.168.10.66:6039/v1/:path*',//'http://localhost/v1/:path*',
     },
   ]
 }
