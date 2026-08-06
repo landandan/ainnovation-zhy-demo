@@ -1,4 +1,4 @@
-name: Cleanup old release assets
+name: Cleanup Release Assets
 
 on:
   workflow_dispatch:
@@ -6,49 +6,89 @@ on:
     tags:
       - "v*"
 
+
 jobs:
   cleanup:
+
     runs-on: ubuntu-latest
 
     env:
-      KEEP_RELEASES: 6
+      KEEP_RELEASES: 3
+
 
     steps:
 
-      - name: Cleanup Release Assets
+      - name: Cleanup old release assets
+
         env:
           GITEA_URL: ${{ gitea.server_url }}
           REPO: ${{ gitea.repository }}
           GITEA_TOKEN: ${{ secrets.PAT_TOKEN }}
 
+        shell: bash
+
         run: |
 
-          set +e
+          set -u
 
-          echo "=================================="
+
+          echo "================================"
           echo " Gitea Release Asset Cleanup"
-          echo "=================================="
+          echo "================================"
 
-          echo "Server : ${GITEA_URL}"
-          echo "Repo   : ${REPO}"
-          echo "Keep   : ${KEEP_RELEASES}"
+          echo "Gitea : ${GITEA_URL}"
+          echo "Repo  : ${REPO}"
+          echo "Keep  : ${KEEP_RELEASES}"
           echo
 
 
-          #################################
+
+          ###################################
           # 检查 Token
-          #################################
+          ###################################
 
           if [ -z "${GITEA_TOKEN}" ]; then
-              echo "ERROR: GITEA_TOKEN is empty"
+
+              echo "ERROR: GITEA_TOKEN missing"
+
               exit 1
+
           fi
 
 
-          #################################
-          # 获取 Release 列表
-          #################################
 
+          ###################################
+          # 测试 Token
+          ###################################
+
+          echo "Checking token..."
+
+
+          user=$(curl -s \
+            -H "Authorization: token ${GITEA_TOKEN}" \
+            "${GITEA_URL}/api/v1/user")
+
+
+          echo "${user}" | jq .
+
+
+          if echo "${user}" | jq -e '.message' >/dev/null
+
+          then
+
+              echo "Token invalid"
+
+              exit 1
+
+          fi
+
+
+
+          ###################################
+          # 获取 Release
+          ###################################
+
+          echo
           echo "Fetching releases..."
 
 
@@ -57,46 +97,57 @@ jobs:
             "${GITEA_URL}/api/v1/repos/${REPO}/releases?limit=100")
 
 
-          if echo "$releases" | jq -e '.message' >/dev/null 2>&1
+
+          echo "${releases}" | jq .
+
+
+
+          count=$(echo "${releases}" | jq length)
+
+
+
+          echo
+
+          echo "Release count: ${count}"
+
+
+
+          if [ "${count}" -le "${KEEP_RELEASES}" ]
+
           then
-              echo "API Error:"
-              echo "$releases" | jq .
-              exit 1
-          fi
 
-
-          total=$(echo "$releases" | jq length)
-
-          echo "Total releases: ${total}"
-
-
-          if [ "$total" -le "$KEEP_RELEASES" ]
-          then
               echo "Nothing to cleanup"
+
               exit 0
+
           fi
 
 
 
-          #################################
-          # 找旧 Release
-          #################################
 
-          old_releases=$(echo "$releases" \
-              | jq -r ".[$KEEP_RELEASES:][] | .id")
+          ###################################
+          # 获取需要清理的 Release ID
+          ###################################
+
+          old_release_ids=$(echo "${releases}" \
+            | jq -r ".[$KEEP_RELEASES:][] | .id")
 
 
-          #################################
-          # 删除旧 Release 附件
-          #################################
 
-          for release_id in ${old_releases}
+          ###################################
+          # 循环删除附件
+          ###################################
+
+
+          for release_id in ${old_release_ids}
+
           do
 
               echo
-              echo "--------------------------------"
-              echo "Processing Release ID: ${release_id}"
-              echo "--------------------------------"
+              echo "================================"
+              echo "Release ID: ${release_id}"
+              echo "================================"
+
 
 
               assets=$(curl -s \
@@ -104,31 +155,48 @@ jobs:
                 "${GITEA_URL}/api/v1/repos/${REPO}/releases/${release_id}/assets")
 
 
-              asset_count=$(echo "$assets" | jq length)
+
+              echo "${assets}" | jq .
 
 
-              if [ "$asset_count" -eq 0 ]
+
+              asset_count=$(echo "${assets}" | jq length)
+
+
+
+              if [ "${asset_count}" -eq 0 ]
+
               then
+
                   echo "No assets"
+
                   continue
+
               fi
 
 
-              echo "Assets: ${asset_count}"
+
+              echo "Asset count: ${asset_count}"
 
 
-              echo "$assets" \
-              | jq -r '.[] | "\(.id) \(.name)"' \
-              | while read asset_id asset_name
+
+
+              echo "${assets}" \
+              | jq -r '.[] | "\(.id)|\(.name)"' \
+              | while IFS="|" read asset_id asset_name
+
+
               do
 
+
                   echo
-                  echo "Deleting:"
-                  echo " ID   : ${asset_id}"
-                  echo " Name : ${asset_name}"
+                  echo "Deleting asset:"
+                  echo " id   = ${asset_id}"
+                  echo " name = ${asset_name}"
 
 
-                  result=$(curl \
+
+                  response=$(curl \
                     -s \
                     -w "\nHTTP_CODE:%{http_code}" \
                     -X DELETE \
@@ -136,26 +204,41 @@ jobs:
                     "${GITEA_URL}/api/v1/repos/${REPO}/releases/assets/${asset_id}")
 
 
-                  code=$(echo "$result" \
+
+                  echo "${response}"
+
+
+
+                  http_code=$(echo "${response}" \
                     | grep HTTP_CODE \
-                    | cut -d: -f2)
+                    | cut -d ":" -f2)
 
 
-                  if [ "$code" = "204" ]
+
+                  if [ "${http_code}" = "204" ]
+
                   then
-                      echo "SUCCESS"
+
+                      echo "DELETE SUCCESS"
+
+
                   else
-                      echo "FAILED"
-                      echo "$result"
+
+                      echo "DELETE FAILED"
+
                   fi
+
 
 
               done
 
+
+
           done
 
 
+
           echo
-          echo "=================================="
-          echo " Cleanup finished"
-          echo "=================================="
+          echo "================================"
+          echo "Cleanup finished"
+          echo "================================"
