@@ -1,6 +1,6 @@
  "use client"
 
-import { useEffect, useMemo, useRef, useState } from "react"
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react"
 import mammoth from "mammoth"
 import type { WorkBook } from "xlsx"
 
@@ -12,6 +12,10 @@ import { isMockMode } from "@/lib/mock-config"
    label?: string
   agentId?: string
   fileId?: string
+  /** 自定义触发器样式，默认 attachment-link-card */
+  className?: string
+  /** 自定义触发器内容；不传则用默认图标+文件名 */
+  children?: ReactNode
  }
 
  type PreviewState =
@@ -20,10 +24,15 @@ import { isMockMode } from "@/lib/mock-config"
    | { kind: "table"; headers: string[]; rows: string[][]; sheetNames?: string[]; activeSheet?: string }
    | { kind: "text"; content: string; language: string }
    | { kind: "html"; content: string }
+   | { kind: "pptx" }
    | { kind: "image" }
    | { kind: "pdf" }
    | { kind: "unsupported"; message: string }
    | { kind: "error"; message: string }
+
+type PptxViewerInstance = {
+  destroy: () => void
+}
 
 const API_BASE_URL = process.env.NODE_ENV === "development" ? "http://localhost:5000/api" : "/api"
 
@@ -63,49 +72,6 @@ const API_BASE_URL = process.env.NODE_ENV === "development" ? "http://localhost:
    a.remove()
  }
 
- function parseDelimitedRow(line: string, delimiter: string) {
-   const result: string[] = []
-   let current = ""
-   let inQuotes = false
-
-   for (let i = 0; i < line.length; i += 1) {
-     const char = line[i]
-     const next = line[i + 1]
-
-     if (char === '"') {
-       if (inQuotes && next === '"') {
-         current += '"'
-         i += 1
-       } else {
-         inQuotes = !inQuotes
-       }
-       continue
-     }
-
-     if (char === delimiter && !inQuotes) {
-       result.push(current.trim())
-       current = ""
-       continue
-     }
-
-     current += char
-   }
-
-   result.push(current.trim())
-   return result
- }
-
- function parseDelimitedText(text: string, delimiter: string) {
-   const lines = text.split(/\r?\n/).filter((line) => line.trim().length > 0)
-   if (lines.length === 0) {
-     return { headers: [], rows: [] }
-   }
-
-   const headers = parseDelimitedRow(lines[0], delimiter)
-   const rows = lines.slice(1, 121).map((line) => parseDelimitedRow(line, delimiter))
-   return { headers, rows }
- }
-
 async function excelSheetToPreviewTable(sheet: WorkBook["Sheets"][string], maxRows = 120) {
   const XLSX = await import("xlsx")
   const raw = XLSX.utils.sheet_to_json<(string | number | boolean | null | undefined)[]>(sheet, {
@@ -125,6 +91,57 @@ async function excelSheetToPreviewTable(sheet: WorkBook["Sheets"][string], maxRo
     Array.from({ length: colCount }, (_, index) => String(row[index] ?? "")),
   )
   return { headers: normalizedHeaders, rows }
+}
+
+/** csv / tsv / xls / xlsx 统一用 SheetJS 解析 */
+async function readSpreadsheetWorkbook(arrayBuffer: ArrayBuffer, extension: string): Promise<WorkBook> {
+  const XLSX = await import("xlsx")
+  const ext = extension.toLowerCase()
+
+  if (ext === "csv" || ext === "tsv") {
+    let text = new TextDecoder("utf-8").decode(arrayBuffer)
+    if (text.charCodeAt(0) === 0xfeff) {
+      text = text.slice(1)
+    }
+    try {
+      return XLSX.read(text, {
+        type: "string",
+        FS: ext === "tsv" ? "\t" : ",",
+        raw: false,
+      })
+    } catch {
+      // 编码异常时回退按二进制让 SheetJS 自行识别
+      return XLSX.read(arrayBuffer, { type: "array", raw: false })
+    }
+  }
+
+  // xls / xlsx（及误标后缀的表格）
+  return XLSX.read(arrayBuffer, { type: "array", cellDates: true, raw: false })
+}
+
+async function openSpreadsheetPreview(
+  arrayBuffer: ArrayBuffer,
+  extension: string,
+): Promise<{
+  headers: string[]
+  rows: string[][]
+  sheetNames: string[]
+  activeSheet: string
+  workbook: WorkBook
+}> {
+  const workbook = await readSpreadsheetWorkbook(arrayBuffer, extension)
+  const activeSheet = workbook.SheetNames[0]
+  if (!activeSheet) {
+    throw new Error("该表格文件没有可预览的工作表")
+  }
+  const { headers, rows } = await excelSheetToPreviewTable(workbook.Sheets[activeSheet])
+  return {
+    headers,
+    rows,
+    sheetNames: workbook.SheetNames,
+    activeSheet,
+    workbook,
+  }
 }
 
 function extractFileIdFromHref(href: string) {
@@ -248,13 +265,17 @@ async function fetchFileResponse(url: string, withAuth: boolean, errorLabel = "�
   return res
 }
 
-export function DownloadLink({ href, label, agentId, fileId }: DownloadLinkProps) {
+export function DownloadLink({ href, label, agentId, fileId, className, children }: DownloadLinkProps) {
   const [previewOpen, setPreviewOpen] = useState(false)
   const [isClosing, setIsClosing] = useState(false)
   const [preview, setPreview] = useState<PreviewState>({ kind: "idle" })
   const [downloading, setDownloading] = useState(false)
   const [previewAssetUrl, setPreviewAssetUrl] = useState<string | null>(null)
+  const [pptxBooting, setPptxBooting] = useState(false)
   const workbookRef = useRef<WorkBook | null>(null)
+  const pptxContainerRef = useRef<HTMLDivElement | null>(null)
+  const pptxViewerRef = useRef<PptxViewerInstance | null>(null)
+  const pptxBufferRef = useRef<ArrayBuffer | null>(null)
 
    const fileName = useMemo(() => getFileNameFrom(href, label), [href, label])
    const baseName = useMemo(() => fileBaseNameFrom(fileName), [fileName])
@@ -324,6 +345,20 @@ export function DownloadLink({ href, label, agentId, fileId }: DownloadLinkProps
     })
   }
 
+  const destroyPptxViewer = () => {
+    try {
+      pptxViewerRef.current?.destroy()
+    } catch {
+      /* ignore */
+    }
+    pptxViewerRef.current = null
+    pptxBufferRef.current = null
+    setPptxBooting(false)
+    if (pptxContainerRef.current) {
+      pptxContainerRef.current.innerHTML = ""
+    }
+  }
+
   useEffect(() => {
     return () => {
       if (previewAssetUrl) {
@@ -332,12 +367,95 @@ export function DownloadLink({ href, label, agentId, fileId }: DownloadLinkProps
     }
   }, [previewAssetUrl])
 
+  useEffect(() => {
+    return () => {
+      try {
+        pptxViewerRef.current?.destroy()
+      } catch {
+        /* ignore */
+      }
+      pptxViewerRef.current = null
+      pptxBufferRef.current = null
+    }
+  }, [])
+
+  // pptx：容器挂载后再打开渲染引擎（静态导出用 public 下的 worker）
+  useEffect(() => {
+    if (preview.kind !== "pptx") return
+    const container = pptxContainerRef.current
+    const buffer = pptxBufferRef.current
+    if (!container || !buffer) return
+
+    let cancelled = false
+    setPptxBooting(true)
+
+    ;(async () => {
+      try {
+        const { PptxViewer } = await import("@file-viewer/pptx")
+        await import("@file-viewer/pptx/styles.css")
+        if (cancelled) return
+
+        try {
+          pptxViewerRef.current?.destroy()
+        } catch {
+          /* ignore */
+        }
+        pptxViewerRef.current = null
+        container.innerHTML = ""
+
+        const viewer = await PptxViewer.open(buffer, container, {
+          fitMode: "contain",
+          zoomPercent: 100,
+          workerUrl: "/file-viewer/pptx.worker.js",
+          workerType: "module",
+          onRenderComplete: () => {
+            if (!cancelled) setPptxBooting(false)
+          },
+          onError: (error) => {
+            if (cancelled) return
+            const message = error instanceof Error ? error.message : "PPT 预览失败"
+            setPreview({ kind: "error", message })
+            setPptxBooting(false)
+          },
+        })
+
+        if (cancelled) {
+          viewer.destroy()
+          return
+        }
+        pptxViewerRef.current = viewer
+        // 部分文件很快完成，可能已错过 onRenderComplete
+        setPptxBooting(false)
+      } catch (error) {
+        if (cancelled) return
+        const message = error instanceof Error ? error.message : "PPT 预览失败"
+        setPreview({ kind: "error", message })
+        setPptxBooting(false)
+      }
+    })()
+
+    return () => {
+      cancelled = true
+      try {
+        pptxViewerRef.current?.destroy()
+      } catch {
+        /* ignore */
+      }
+      pptxViewerRef.current = null
+      if (pptxContainerRef.current) {
+        pptxContainerRef.current.innerHTML = ""
+      }
+    }
+  }, [preview.kind])
+
    const fileMeta = useMemo(() => {
      if (["csv", "tsv", "xls", "xlsx"].includes(extension)) return { tag: extension.toUpperCase(), desc: "表格附件，可在线预览" }
      if (["txt", "md", "json", "log"].includes(extension)) return { tag: extension.toUpperCase(), desc: "文本附件，可在线预览" }
      if (["png", "jpg", "jpeg", "gif", "webp"].includes(extension)) return { tag: "图片", desc: "点击查看右侧预览" }
      if (extension === "pdf") return { tag: "PDF", desc: "点击查看右侧预览" }
      if (extension === "docx" || extension === "doc") return { tag: extension.toUpperCase(), desc: "Word 文档，可在线预览" }
+     if (extension === "pptx") return { tag: "PPTX", desc: "演示文稿，可在线预览" }
+     if (extension === "ppt") return { tag: "PPT", desc: "旧版演示文稿，请下载查看" }
      return { tag: extension ? extension.toUpperCase() : "文件", desc: "点击查看附件信息" }
    }, [extension])
 
@@ -345,6 +463,7 @@ export function DownloadLink({ href, label, agentId, fileId }: DownloadLinkProps
      setPreviewOpen(true)
     clearPreviewAssetUrl()
     workbookRef.current = null
+    destroyPptxViewer()
 
      try {
        setPreview({ kind: "loading" })
@@ -385,28 +504,36 @@ export function DownloadLink({ href, label, agentId, fileId }: DownloadLinkProps
         return
       }
 
-      if (extension === "xls" || extension === "xlsx") {
+      if (extension === "pptx") {
         const arrayBuffer = await loadPreviewArrayBuffer()
-        const XLSX = await import("xlsx")
-        const workbook = XLSX.read(arrayBuffer, { type: "array" })
-        workbookRef.current = workbook
-        const activeSheet = workbook.SheetNames[0]
-        if (!activeSheet) {
-          setPreview({ kind: "unsupported", message: "该表格文件没有可预览的工作表。" })
-          return
-        }
-        const { headers, rows } = await excelSheetToPreviewTable(workbook.Sheets[activeSheet])
+        pptxBufferRef.current = arrayBuffer
+        setPreview({ kind: "pptx" })
+        return
+      }
+
+      if (extension === "ppt") {
         setPreview({
-          kind: "table",
-          headers,
-          rows,
-          sheetNames: workbook.SheetNames,
-          activeSheet,
+          kind: "unsupported",
+          message: "旧版 .ppt 暂不支持在线预览，请下载后查看。建议使用 .pptx。",
         })
         return
       }
 
-      if (!["csv", "tsv", "txt", "md", "json", "log"].includes(extension)) {
+      if (["csv", "tsv", "xls", "xlsx"].includes(extension)) {
+        const arrayBuffer = await loadPreviewArrayBuffer()
+        const result = await openSpreadsheetPreview(arrayBuffer, extension)
+        workbookRef.current = result.workbook
+        setPreview({
+          kind: "table",
+          headers: result.headers,
+          rows: result.rows,
+          sheetNames: result.sheetNames,
+          activeSheet: result.activeSheet,
+        })
+        return
+      }
+
+      if (!["txt", "md", "json", "log"].includes(extension)) {
         setPreview({ kind: "unsupported", message: "当前附件暂不支持在线预览，可直接下载查看。" })
         return
       }
@@ -414,11 +541,6 @@ export function DownloadLink({ href, label, agentId, fileId }: DownloadLinkProps
       const arrayBuffer = await loadPreviewArrayBuffer()
       const text = new TextDecoder("utf-8").decode(arrayBuffer)
 
-       if (extension === "csv" || extension === "tsv") {
-         const { headers, rows } = parseDelimitedText(text, extension === "tsv" ? "\t" : ",")
-         setPreview({ kind: "table", headers, rows })
-         return
-       }
        setPreview({
          kind: "text",
          content: text,
@@ -478,6 +600,7 @@ export function DownloadLink({ href, label, agentId, fileId }: DownloadLinkProps
       setPreview({ kind: "idle" })
       clearPreviewAssetUrl()
       workbookRef.current = null
+      destroyPptxViewer()
     }, 220) // 与 CSS 动画时间一致
   }
 
@@ -486,23 +609,27 @@ export function DownloadLink({ href, label, agentId, fileId }: DownloadLinkProps
       <button
         type="button"
         onClick={handlePreviewOpen}
-        className="attachment-link-card"
+        className={className || "attachment-link-card"}
         title={`预览 ${fileName}`}
       >
-        <span
-          className="attachment-link-icon"
-          style={{ background: "color-mix(in srgb, var(--accent) 12%, var(--card) 88%)", color: "var(--accent)" }}
-        >
-          <svg width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
-            <polyline points="14 2 14 8 20 8" />
-          </svg>
-        </span>
-        <span className="attachment-link-main">
-          <span className="attachment-link-name">{fileName}</span>
-          <span className="attachment-link-desc">{fileMeta.desc}</span>
-        </span>
-        <span className="attachment-link-tag">{fileMeta.tag}</span>
+        {children ?? (
+          <>
+            <span
+              className="attachment-link-icon"
+              style={{ background: "color-mix(in srgb, var(--accent) 12%, var(--card) 88%)", color: "var(--accent)" }}
+            >
+              <svg width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                <polyline points="14 2 14 8 20 8" />
+              </svg>
+            </span>
+            <span className="attachment-link-main">
+              <span className="attachment-link-name">{fileName}</span>
+              <span className="attachment-link-desc">{fileMeta.desc}</span>
+            </span>
+            <span className="attachment-link-tag">{fileMeta.tag}</span>
+          </>
+        )}
       </button>
 
       {previewOpen && (
@@ -580,6 +707,18 @@ export function DownloadLink({ href, label, agentId, fileId }: DownloadLinkProps
                     className="attachment-preview-docx-body"
                     dangerouslySetInnerHTML={{ __html: preview.content }}
                   />
+                </div>
+              )}
+
+              {preview.kind === "pptx" && (
+                <div className="attachment-preview-pptx-wrap">
+                  {pptxBooting ? (
+                    <div className="attachment-preview-pptx-loading">
+                      <span className="spinner" />
+                      <span>正在渲染幻灯片...</span>
+                    </div>
+                  ) : null}
+                  <div ref={pptxContainerRef} className="attachment-preview-pptx" />
                 </div>
               )}
 

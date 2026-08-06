@@ -7,6 +7,7 @@ import { MessageActions } from "./message-actions"
 import { ThinkingBlock } from "./thinking-block"
 import { CanvasDragonAvatar } from "./canvas-dragon-avatar"
 import { WorkflowProgressComponent } from "./workflow-progress"
+import { DownloadLink } from "./download-link"
 
 interface ChatAreaProps {
   messages: Message[]
@@ -16,6 +17,8 @@ interface ChatAreaProps {
   agentDesc?: string
   quickQuestions?: string[]
   currentAgentId?: string
+  /** 当前智能体 thinkShow："1" 时展示工作流进度 */
+  thinkShow?: string | number
   userId?: number
   onRetryWorkflow?: () => void
   onRetryMessage?: (messageIndex: number) => void
@@ -26,7 +29,7 @@ interface ChatAreaProps {
 }
 
 export const ChatArea = forwardRef<HTMLDivElement, ChatAreaProps>(
-  function ChatArea({ messages, onUseSuggestion, isStreaming, agentLabel = "深海智航", agentDesc, quickQuestions, currentAgentId, userId, onRetryWorkflow, onRetryMessage, onStopWorkflow, onOpenResources, emptyExtra }, ref) {
+  function ChatArea({ messages, onUseSuggestion, isStreaming, agentLabel = "深海智航", agentDesc, quickQuestions, currentAgentId, thinkShow, userId, onRetryWorkflow, onRetryMessage, onStopWorkflow, onOpenResources, emptyExtra }, ref) {
     const [showScrollButton, setShowScrollButton] = useState(false)
     /** data:/blob: URL 用 window.open 常被浏览器拦截，改用页内预览 */
     const [previewImage, setPreviewImage] = useState<{ src: string; name: string } | null>(null)
@@ -185,17 +188,19 @@ export const ChatArea = forwardRef<HTMLDivElement, ChatAreaProps>(
                     </div>
                   </>
                 )
-                if (file.original_url) {
+                const href = file.original_url || (file.file_id ? `/files/${file.file_id}` : "")
+                if (href) {
                   return (
-                    <a
+                    <DownloadLink
                       key={`file-${idx}`}
+                      href={href}
+                      label={file.name}
+                      agentId={currentAgentId}
+                      fileId={file.file_id}
                       className="chat-user-file-card"
-                      href={file.original_url}
-                      target="_blank"
-                      rel="noopener noreferrer"
                     >
                       {meta}
-                    </a>
+                    </DownloadLink>
                   )
                 }
                 return (
@@ -277,10 +282,14 @@ export const ChatArea = forwardRef<HTMLDivElement, ChatAreaProps>(
         <div className="flex flex-col gap-5 p-4 sm:p-6 pb-2 max-w-[960px] mx-auto w-full">
         {messages.map((msg, idx) => {
           const isLatestMessage = idx === messages.length - 1
-          const visibleWorkflowProgress = undefined
-            // msg.workflowProgress && msg.workflowProgress.status !== "idle"
-            //   ? msg.workflowProgress
-            //   : undefined
+          // thinkShow === "1" 时才展示工作流进度
+          const canShowThink = String(thinkShow ?? "") === "1"
+          console.log("canShowThink", canShowThink, thinkShow)
+          const visibleWorkflowProgress = 
+            canShowThink && msg.workflowProgress && msg.workflowProgress.status !== "idle"
+              ? msg.workflowProgress
+              : undefined
+          console.log("visibleWorkflowProgress", visibleWorkflowProgress, msg.workflowProgress, canShowThink)
 
           // 首 token 等待阶段：脉冲骨架屏
           if (msg.waiting) {

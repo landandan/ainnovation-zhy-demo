@@ -86,12 +86,18 @@ export async function request<T>(
   clearTimeout(timeoutId)
 
   if (!res.ok) {
-    const errData = await res.json().catch(() => ({ error: res.statusText }))
+    const errData = await res.json().catch(() => ({ error: res.statusText })) as Record<string, unknown>
     if (res.status === 401 || res.status === 403) {
-      handleAuthExpired()
+      handleAuthExpired(typeof errData.msg === "string" ? errData.msg : undefined)
     }
     if (!options.suppressErrors) {
-      throw new ApiError(errData.error || "请求失败", res.status, errData)
+      const serverMsg = [errData.msg, errData.message, errData.localMessage, errData.error]
+        .find((v) => typeof v === "string" && String(v).trim())
+      throw new ApiError(
+        typeof serverMsg === "string" ? String(serverMsg).trim() : "请求失败",
+        res.status,
+        errData,
+      )
     }
     return null as T
   }

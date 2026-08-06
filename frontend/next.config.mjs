@@ -4,6 +4,7 @@ const nextConfig = {
   typescript: {
     ignoreBuildErrors: true,
   },
+  transpilePackages: ['@file-viewer/pptx', '@file-viewer/doc'],
   allowedDevOrigins: ['192.168.*.*', 'localhost'],
   images: {
     unoptimized: true,
