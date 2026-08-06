@@ -126,9 +126,9 @@ jobs:
           log_info "Found ${old_count} old release(s) to clean up:"
 
           echo "$old_ids" | while read -r rid; do
-            echo "$all_releases" | jq -r --argjson id "$rid" \
-              '.[] | select(.id == $id) | "  - id=\($.id)  tag=\($.tag_name // "N/A")  created=\($.created_at)"'
-          done
+            echo "$all_releases" | jq -r --argjson id "$rid" --arg na "N/A" \
+              '.[] | select(.id == $id) | "  - id=\(.id)  tag=\(.tag_name // $na)  created=\(.created_at)"' || true
+          done || true
 
           # ---------- Process each old release ----------
           for release_id in $old_ids; do
@@ -160,7 +160,7 @@ jobs:
 
             if [ "$asset_count" -gt 0 ]; then
               # Delete each asset
-              echo "$asset_body" | jq -r '.[] | "\(.id) \(.name)"' | while read -r asset_id asset_name; do
+              echo "$asset_body" | jq -r '.[] | "\(.id) \(.name)"' 2>/dev/null | while read -r asset_id asset_name; do
                 if [ "$DRY" = "true" ]; then
                   log_info "[DRY-RUN] Would delete asset: id=${asset_id} name=${asset_name}"
                   continue
@@ -179,7 +179,7 @@ jobs:
                 else
                   log_error "  FAILED (HTTP ${del_http})"
                 fi
-              done
+              done || true
             fi
 
             # Optionally delete the release itself
