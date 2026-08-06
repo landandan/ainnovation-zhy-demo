@@ -44,7 +44,8 @@ import {
   handleWorkflowStopped,
 } from '@/lib/workflow-progress'
 import { getUserSettings, updateUserSettings } from "@/lib/api-client"
-import { isAuthenticated } from "@/lib/auth"
+import { isAuthenticated, isGuestUser } from "@/lib/auth"
+import LoginModal, { LoginModalRef } from "@/components/login-modal"
 import { handleAuthExpired } from "@/lib/http/client"
 
 /** 从地址栏读取对话路由参数（刷新恢复用） */
@@ -643,6 +644,9 @@ export default function Page() {
     inputFiles?: Array<{ ossId: string | number }>
   } | null>(null)
 
+  /* ───── 登录弹窗 ───── */
+  const loginModalRef = useRef<LoginModalRef>(null)
+
   /* ───── Toast hook ───── */
   const { toasts, dismissToast, success, error, warning, info } = useToast()
 
@@ -879,6 +883,11 @@ export default function Page() {
 
   /* ───── 智能体切换 ───── */
   const handleSelectAgent = (agentId: string) => {
+    const agent = agentDefs.find((a) => a.id === agentId)
+    if (agent?.visible === '1' && isGuestUser()) {
+      loginModalRef.current?.open()
+      return
+    }
     refreshConversations()
     if (isStreaming) {
       handleStopStreaming()
@@ -2313,6 +2322,7 @@ export default function Page() {
       </main>
 
       <Toast toasts={toasts} onDismiss={dismissToast} />
+      <LoginModal ref={loginModalRef} />
     </div>
   )
 }
