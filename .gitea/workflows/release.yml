@@ -4,6 +4,10 @@ on:
   push:
     branches:
       - release
+    paths-ignore:
+      - 'README.md'
+      - '.gitea/**'
+      - '*.md'
 
 permissions:
   contents: write
