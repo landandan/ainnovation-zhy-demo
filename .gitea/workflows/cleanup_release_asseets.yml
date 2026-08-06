@@ -1,0 +1,61 @@
+name: Cleanup Release Assets
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - "v*"
+
+jobs:
+  cleanup:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Cleanup old release assets
+        env:
+          GITEA_URL: ${{ gitea.server_url }}
+          GITEA_TOKEN: ${{ secrets.PAT_TOKEN }}
+          REPO: ${{ gitea.repository }}
+          KEEP_RELEASES: 6
+        run: |
+          set -e
+
+          echo "Get releases..."
+
+          releases=$(curl -sf \
+            -H "Authorization: token ${GITEA_TOKEN}" \
+            "${GITEA_URL}/api/v1/repos/${REPO}/releases?limit=100")
+
+          echo "$releases" | jq .
+
+          old_release_ids=$(echo "$releases" \
+            | jq -r ".[$KEEP_RELEASES:] | .[].id")
+
+          if [ -z "$old_release_ids" ]; then
+            echo "No old releases"
+            exit 0
+          fi
+
+
+          for release_id in $old_release_ids
+          do
+            echo "Cleaning release ${release_id}"
+
+            assets=$(curl -sf \
+              -H "Authorization: token ${GITEA_TOKEN}" \
+              "${GITEA_URL}/api/v1/repos/${REPO}/releases/${release_id}/assets")
+
+            echo "$assets" | jq .
+
+            echo "$assets" \
+            | jq -r '.[].id' \
+            | while read asset_id
+            do
+              echo "Delete asset ${asset_id}"
+
+              curl -sf -X DELETE \
+                -H "Authorization: token ${GITEA_TOKEN}" \
+                "${GITEA_URL}/api/v1/repos/${REPO}/releases/assets/${asset_id}"
+            done
+
+          done
