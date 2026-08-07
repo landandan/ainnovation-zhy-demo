@@ -3,6 +3,7 @@ version: '3.8'
 services:
   frontend:
     image: zhy-ai-chat:latest
+    container_name: zhy-ai-chat
     build:
       context: ./frontend
     environment:
