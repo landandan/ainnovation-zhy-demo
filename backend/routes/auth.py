@@ -8,7 +8,7 @@ from utils.auth import hash_password, verify_password, create_token, login_requi
 auth_bp = Blueprint("auth", __name__)
 
 
-@auth_bp.route("/auth/login", methods=["POST"])
+@auth_bp.route("/h5/auth/login", methods=["POST"])
 def login():
     """
     用户登录

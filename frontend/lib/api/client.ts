@@ -36,6 +36,7 @@ import {getToken, getClientId, setToken, setCachedUser, setClientId} from "../au
 import { API_BASE_URL } from "../http/routes"
 import getDeviceId from "@/app/utils/fingerprintjs";
 import {isLoginSuccess} from "@/lib/auth";
+import { deobfuscateSm2PublicKey, encryptPasswordBySm2 } from "../auth/sm2"
 
 export { ApiError } from "../http/client"
 
@@ -116,14 +117,54 @@ export async function guestLoginFunc(): Promise<UserInfo> {
   throw new Error((res as { msg?: string })?.msg || "游客登录失败！！！")
 }
 
+/**
+ * 获取并解混淆 SM2 公钥。
+ * 接口约定：code=200 时混淆公钥在 msg（也兼容 data / data.publicKey）
+ */
+export async function getSm2PublicKey(): Promise<string> {
+  const res = await request<{
+    code?: number | string
+    msg?: string
+    data?: string | { publicKey?: string }
+  }>("GET", "/auth/getSm2PublicKey")
+
+  if (!isLoginSuccess(res?.code)) {
+    throw new Error(
+      typeof res?.msg === "string" && res.msg.trim() && res.msg.length < 80
+        ? res.msg
+        : "获取 SM2 公钥失败",
+    )
+  }
+
+  let obfuscated = ""
+  if (typeof res?.data === "string" && res.data.trim()) {
+    obfuscated = res.data.trim()
+  } else if (res?.data && typeof res.data === "object" && typeof res.data.publicKey === "string") {
+    obfuscated = res.data.publicKey.trim()
+  } else if (typeof res?.msg === "string" && res.msg.trim()) {
+    obfuscated = res.msg.trim()
+  }
+
+  if (!obfuscated) {
+    throw new Error("SM2 公钥为空")
+  }
+
+  return deobfuscateSm2PublicKey(obfuscated)
+}
+
 export async function login(data: LoginRequest): Promise<LoginResponse> {
   if (isMockMode()) {
     await mockDelay()
     const result = mockLogin(data.username, data.password)
     return result
   }
-  return request<LoginResponse>("POST", "/auth/login", {
+
+  const publicKey = await getSm2PublicKey()
+  const encryptedPassword = encryptPasswordBySm2(data.password, publicKey)
+
+  return request<LoginResponse>("POST", "/h5/auth/login", {
     ...data,
+    password: encryptedPassword,
     "clientId": "0d4c873ff6146ecd7f38e2e45526ab1b",
     "grantType": "password",
     "tenantId": "000000",
