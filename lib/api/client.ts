@@ -1,7 +1,7 @@
 /**
- * 统一 API 客户端 —— 与 Flask 后端通信
+ * 统一 API 客户端 —— 与后端通信
  *
- * 所有 API 调用通过 nginx 代理到 Flask 后端 (/api/...)
+ * 所有 API 调用通过 nginx 代理到后端 (/api/...)
  * JWT 令牌存储在 localStorage，自动附加到请求头
  *
  * Mock 模式下所有请求走 localStorage，不依赖后端。
@@ -20,13 +20,8 @@ import {
   createMockDifyConfig,
   updateMockDifyConfig,
   deleteMockDifyConfig,
-  // getMockConversations,
-  // createMockConversation,
-  // updateMockConversation,
-  // deleteMockConversation,
   deleteMockConversationBySessionId,
   getMockMessages,
-  // addMockMessage,
   getMockUserSettings,
   updateMockUserSettings,
   mockDelay,
@@ -84,7 +79,6 @@ export interface LogoutResponse {
 }
 
 export async function guestLoginApi(data?: LoginRequest): Promise<LoginResponse> {
-    console.log("🚀 ~ guestLoginApi ~ data: ", data);
   if (isMockMode()) {
     await mockDelay()
     const result = mockLogin(data.username, data.password)
@@ -101,7 +95,6 @@ export async function guestLoginFunc(): Promise<UserInfo> {
     token: getToken(),
     guestId: await getDeviceId(),
   })
-  console.log("🚀 ~  ~ res: ", res);
 
   const accessToken = res?.data?.access_token || res?.data?.token
   const nextUser = res?.data?.user
@@ -172,11 +165,6 @@ export async function login(data: LoginRequest): Promise<LoginResponse> {
   })
 }
 export async function logout(): Promise<LogoutResponse> {
-  // if (isMockMode()) {
-  //   await mockDelay()
-  //   // Mock 模式下注册直接返回 admin 用户
-  //   return { token: "mock-jwt-token-admin-1234567890", user: getMockUser() }
-  // }
   return request<LogoutResponse>("POST", "/h5/auth/logout", {})
 }
 
@@ -246,28 +234,12 @@ export interface AgentsListResponse {
 }
 
 export async function getAgents(): Promise<AgentsListResponse> {
-  // if (isMockMode()) {
-  //   await mockDelay()
-  //   return getMockAgentsWithConfigs()
-  // }
   return request<AgentsListResponse>("POST", "/manage/difyApp/app/list?pageNum=1&pageSize=20")
 }
 
 /* ───── Conversations API ───── */
 
 export interface ConversationApi {
-  // id: number
-  // user_id: number
-  // agent_id: number
-  // agent_id_str: string
-  // title: string
-  // dify_conversation_id: string
-  // is_pinned: boolean
-  // is_archived: boolean
-  // last_message_at: string
-  // created_at: string
-  // message_count: number
-  // messages?: MessageApi[]
   id: number
   messageId: string
   appId: string
@@ -283,20 +255,6 @@ export interface ConversationApi {
   totalTokens: number
   createTime: number
 }
-// {
-//     "messageId": "123456",
-//     "appId": "6c744963-3485-409c-971c-29ea1efe842e",
-//     "sessionId": "123456789",
-//     "title": "test",
-//     "query": "测试问题",
-//     "type": "分类",
-//     "messageType": "text",
-//     "answer": "测试回答返回内容",
-//     "agentName": "会议助手-会话记忆",
-//     "status": "1",
-//     "totalTokens": 1200,
-//     "createTime": 1783481971000
-// }
 
 export interface ConversationsListResponse {
   data?: {
@@ -349,10 +307,6 @@ export async function getConversations(params?: {
   page?: number
   per_page?: number
 }): Promise<ConversationsListResponse> {
-  // if (isMockMode()) {
-  //   await mockDelay()
-  //   return getMockConversations(params)
-  // }
   const pageNum = params?.pageNum ?? params?.page ?? 1
   const pageSize = params?.pageSize ?? params?.per_page ?? 10
   return request<ConversationsListResponse>(
@@ -361,41 +315,6 @@ export async function getConversations(params?: {
   )
 }
 
-// 已废弃：旧 /conversations 接口不再使用（会话由 /h5/chat/* 管理）
-// export async function createConversation(data: {
-//   agent_id: number
-//   title?: string
-// }): Promise<{ conversation: ConversationApi }> {
-//   if (isMockMode()) {
-//     await mockDelay()
-//     return createMockConversation(data)
-//   }
-//   return request<{ conversation: ConversationApi }>("POST", "/conversations", data)
-// }
-
-// export async function getConversation(
-//   convId: number,
-// ): Promise<{ conversation: ConversationApi }> {
-//   if (isMockMode()) {
-//     await mockDelay()
-//     const res = getMockConversations()
-//     const conv = res.conversations.find((c) => c.id === convId)
-//     if (!conv) throw new ApiError("Mock: 对话不存在", 404)
-//     return { conversation: conv }
-//   }
-//   return request<{ conversation: ConversationApi }>("GET", `/conversations/${convId}`)
-// }
-
-// export async function updateConversation(
-//   convId: number,
-//   data: { title?: string; is_pinned?: boolean; is_archived?: boolean },
-// ): Promise<{ conversation: ConversationApi }> {
-//   if (isMockMode()) {
-//     await mockDelay()
-//     return updateMockConversation(convId, data)
-//   }
-//   return request<{ conversation: ConversationApi }>("PUT", `/conversations/${convId}`, data)
-// }
 
 export async function deleteConversationApi(localSessionId: string): Promise<{ message: string }> {
   if (isMockMode()) {
@@ -557,39 +476,12 @@ export async function submitMessageFeedback(data: {
 export async function getMessages(
   localSessionId: string,
 ): Promise<MessagesListResponse> {
-  // if (isMockMode()) {
-  //   await mockDelay()
-  //   return getMockMessages(localSessionId)
-  // }
-  // const qs = new URLSearchParams()
-  // if (params?.page) qs.set("page", String(params.page))
-  // if (params?.per_page) qs.set("per_page", String(params.per_page))
-  // if (params?.before_id) qs.set("before_id", String(params.before_id))
-  // const query = qs.toString()
   return request<MessagesListResponse>(
     "POST",
     `/h5/chat/messages?localSessionId=${encodeURIComponent(localSessionId)}`,
   )
 }
 
-// 已废弃：旧 /conversations/:id/messages 接口不再使用
-// export async function addMessage(
-//   convId: number,
-//   data: {
-//     role: string
-//     content: string
-//     attachments?: string
-//     metadata?: string
-//     dify_message_id?: string
-//     is_error?: boolean
-//   },
-// ): Promise<{ message: MessageApi }> {
-//   if (isMockMode()) {
-//     await mockDelay()
-//     return addMockMessage(convId, data)
-//   }
-//   return request<{ message: MessageApi }>("POST", `/conversations/${convId}/messages`, data)
-// }
 
 /* ───── Settings API ───── */
 

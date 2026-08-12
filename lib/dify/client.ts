@@ -1,7 +1,7 @@
 /**
  * Dify API 类型定义 & 后端代理调用
  *
- * ⚠️ 非 Mock 模式下所有 Dify 调用由 Flask 后端代理，API Key 不暴露到浏览器。
+ * ⚠️ 非 Mock 模式下所有 Dify 调用由 后端代理，API Key 不暴露到浏览器。
  * Mock 模式下直连 Dify 标准 API（不依赖后端），API Key 从 localStorage 读取。
  */
 
@@ -121,85 +121,23 @@ export async function callDifyChatStream(params: {
     inputFiles,
   } = params
 
-  // --- Help 智能体：直接返回 Mock 数据，完全绕过 Dify ---
-  // if (agentId === "help") {
-  //   console.log("[DEBUG] Help 智能体被调用，查询:", query)
-  //   const { mockText, retriever_resources } = getMockResponse(agentId, query)
-  //   console.log("[DEBUG] getMockResponse 返回:", mockText.slice(0, 200), "...")
-  //   return new Response(generateMockStream(mockText, retriever_resources, signal), {
-  //     headers: {
-  //       "Content-Type": "text/event-stream",
-  //       "Cache-Control": "no-cache",
-  //       "Connection": "keep-alive",
-  //     }
-  //   })
-  // }
 
   if (!agentId) {
     throw new Error("agent_id 未指定")
   }
 
-  // Mock 模式：直连 Dify chat-messages SSE 接口（不走后端代理）
-  // if (!isMockMode()) {
-  //   const { dify_base_url, dify_api_key } = getMockDifyApiConfigForAgent(agentId)
-
-  //   const difyBody: Record<string, unknown> = {
-  //     inputs: inputs || {},
-  //     query,
-  //     response_mode: "streaming",
-  //     user,
-  //   }
-
-  //   // if (conversationId) {
-  //   //   difyBody.conversation_id = conversationId
-  //   // }
-
-  //   if (files && files.length > 0) {
-  //     difyBody.files = files
-  //   }
-
-  //   const response = await fetch(`${dify_base_url}/chat-messages`, {
-  //     method: "POST",
-  //     headers: {
-  //       "Content-Type": "application/json",
-  //       Authorization: `Bearer ${dify_api_key}`,
-  //     },
-  //     body: JSON.stringify(difyBody),
-  //     signal,
-  //   })
-
-  //   if (!response.ok) {
-  //     const errorText = await response.text()
-  //     throw new Error(`Dify API 错误 (${response.status}): ${errorText}`)
-  //   }
-
-  //   return response
-  // }
 
   // 非 Mock 模式：走后端代理
   const body: DifyChatProxyRequest = {
     userId: userId || '192.168.11.30',
-    agentId: agentId,//'2075139237434441730',//'2075139237434441729',//'1',
-    sessionId: sessionId || conversationId || '',//`${new Date().getTime()}`,
-    // conversation_id: "1783586820396-b8sit26yn",
+    agentId: agentId,
+    sessionId: sessionId || conversationId || '',
     query,
     inputs: inputs || {},
   }
   if (localSessionId) {
     body.localSessionId = localSessionId
   }
-    //   "query": "什么是oa",
-    // "user": "192.168.11.30",
-    // "response_mode": "streaming",
-    // "conversation_id": "1783586820396-b8sit26yn",
-    //  "userId": "192.168.11.30",
-    //   "appId": "1",
-    // "inputs": {
-    // }
-
-  // if (conversationId) {
-  //   body.conversation_id = conversationId
-  // }
 
   if (inputFiles && inputFiles.length > 0) {
     body.inputFiles = inputFiles
@@ -221,39 +159,15 @@ export async function callDifyChatStream(params: {
   if (clientid) {
     headers.clientid = clientid
   }
-  console.log("chat/stream headers:", headers)
 
   // /manage/dify/chat/streaming    /h5/chat/stream
   const response = await fetch(`${API_BASE_URL}/h5/chat/stream`, {
     method: "POST",
     headers,
     body: JSON.stringify(body),
-    // cache: 'no-store', // 注意：禁止 Next.js 缓存该请求
     signal,
   })
-//   {
-//     "query": "什么是oa",
-//     "user": "192.168.11.30",
-//     "response_mode": "streaming",
-//     "conversation_id": "1783586820396-b8sit26yn",
-//      "userId": "192.168.11.30",
-//       "appId": "1",
-//     "inputs": {
-//     }
-// }
-  // const response = await fetch(`${API_BASE_URL}/dify/chat-messages`, {
-  //   method: "POST",
-  //   headers: {
-  //     "Content-Type": "application/json",
-  //     Authorization: `Bearer ${token}`,
-  //     "Cache-Control": "no-cache",
-  //     "Connection": "keep-alive",
-  //   },
-  //   body: JSON.stringify(body),
-  //   signal,
-  // })
 
-  console.log('response123:', response)
   if (!response.ok) {
     if (response.status === 401 || response.status === 403) {
       handleAuthExpired()

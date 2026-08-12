@@ -284,12 +284,10 @@ export const ChatArea = forwardRef<HTMLDivElement, ChatAreaProps>(
           const isLatestMessage = idx === messages.length - 1
           // thinkShow === "1" 时才展示工作流进度
           const canShowThink = String(thinkShow ?? "") === "1"
-          console.log("canShowThink", canShowThink, thinkShow)
           const visibleWorkflowProgress = 
             canShowThink && msg.workflowProgress && msg.workflowProgress.status !== "idle"
               ? msg.workflowProgress
               : undefined
-          console.log("visibleWorkflowProgress", visibleWorkflowProgress, msg.workflowProgress, canShowThink)
 
           // 首 token 等待阶段：脉冲骨架屏
           if (msg.waiting) {

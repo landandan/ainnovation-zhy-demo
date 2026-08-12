@@ -8,7 +8,6 @@ async function getDeviceId() {
     const fp = await FingerprintJS.load();
     const result = await fp.get();
     // result.visitorId 即为设备唯一标识
-    console.log("🚀 ~ getDeviceId ~ result.visitorId: ", result.visitorId);
     return result.visitorId;
 }
 

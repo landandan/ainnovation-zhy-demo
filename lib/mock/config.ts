@@ -279,97 +279,6 @@ function writeConversations(conversations: ConversationApi[]): void {
   localStorage.setItem(LS_CONVERSATIONS, JSON.stringify(conversations))
 }
 
-export function getMockConversations(params?: {
-  agent_id?: number
-  page?: number
-  per_page?: number
-}): {
-  conversations: ConversationApi[]
-  total: number
-  page: number
-  per_page: number
-  pages: number
-} {
-  let conversations = readConversations()
-  if (params?.agent_id) {
-    conversations = conversations.filter((c) => c.agent_id === params.agent_id)
-  }
-  // 按 last_message_at 倒序
-  conversations.sort(
-    (a, b) => new Date(b.last_message_at).getTime() - new Date(a.last_message_at).getTime(),
-  )
-
-  return {
-    conversations,
-    total: conversations.length,
-    page: 1,
-    per_page: 100,
-    pages: 1,
-  }
-}
-
-export function createMockConversation(data: {
-  agent_id: number
-  title?: string
-}): { conversation: ConversationApi } {
-  const conversations = readConversations()
-  const now = new Date().toISOString()
-  const newId = conversations.length > 0 ? Math.max(...conversations.map((c) => c.id)) + 1 : 1
-
-  // 查找 agent_id_str
-  const agents = readAgents()
-  const agent = agents.find((a) => a.id === data.agent_id)
-  const agentIdStr = agent?.agent_id || `agent-${data.agent_id}`
-
-  const newConv: ConversationApi = {
-    id: newId,
-    user_id: 0,
-    agent_id: data.agent_id,
-    agent_id_str: agentIdStr,
-    title: data.title || "新对话",
-    dify_conversation_id: `mock-dify-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-    is_pinned: false,
-    is_archived: false,
-    last_message_at: now,
-    created_at: now,
-    message_count: 0,
-    sessionId: '',
-  }
-
-  conversations.push(newConv)
-  writeConversations(conversations)
-  return { conversation: newConv }
-}
-
-export function updateMockConversation(
-  convId: number,
-  data: { title?: string; is_pinned?: boolean; is_archived?: boolean },
-): { conversation: ConversationApi } {
-  const conversations = readConversations()
-  const idx = conversations.findIndex((c) => c.id === convId)
-  if (idx === -1) throw new Error("Mock: 对话不存在")
-
-  conversations[idx] = {
-    ...conversations[idx],
-    title: data.title ?? conversations[idx].title,
-    is_pinned: data.is_pinned ?? conversations[idx].is_pinned,
-    is_archived: data.is_archived ?? conversations[idx].is_archived,
-  }
-  writeConversations(conversations)
-  return { conversation: conversations[idx] }
-}
-
-export function deleteMockConversation(convId: number): { message: string } {
-  const conversations = readConversations().filter((c) => c.id !== convId)
-  writeConversations(conversations)
-
-  // 同步删除消息
-  if (typeof window !== "undefined") {
-    localStorage.removeItem(LS_MESSAGES_PREFIX + convId)
-  }
-  return { message: "已删除" }
-}
-
 export function deleteMockConversationBySessionId(sessionId: string): { message: string } {
   const conversations = readConversations()
   const removed = conversations.filter((c) => c.sessionId === sessionId)
@@ -415,50 +324,6 @@ export function getMockMessages(convId: number): {
     page: 1,
     has_more: false,
   }
-}
-
-export function addMockMessage(
-  convId: number,
-  data: {
-    role: string
-    content: string
-    attachments?: string
-    metadata?: string
-    dify_message_id?: string
-    is_error?: boolean
-  },
-): { message: MessageApi } {
-  const messages = readMessages(convId)
-  const newId = messages.length > 0 ? Math.max(...messages.map((m) => m.id)) + 1 : 1
-
-  const newMsg: MessageApi = {
-    id: newId,
-    conversation_id: convId,
-    role: data.role as "user" | "assistant" | "system",
-    content: data.content,
-    attachments: data.attachments ? JSON.parse(data.attachments) : [],
-    metadata: data.metadata ? JSON.parse(data.metadata) : {},
-    dify_message_id: data.dify_message_id || `mock-dify-msg-${Date.now()}`,
-    is_error: data.is_error ?? false,
-    created_at: new Date().toISOString(),
-  }
-
-  messages.push(newMsg)
-  writeMessages(convId, messages)
-
-  // 更新对话的 last_message_at 和 message_count
-  const conversations = readConversations()
-  const convIdx = conversations.findIndex((c) => c.id === convId)
-  if (convIdx !== -1) {
-    conversations[convIdx] = {
-      ...conversations[convIdx],
-      last_message_at: newMsg.created_at,
-      message_count: messages.length,
-    }
-    writeConversations(conversations)
-  }
-
-  return { message: newMsg }
 }
 
 /* ───── Mock Settings ───── */
@@ -555,7 +420,6 @@ export function getMockDifyApiConfigForAgent(agentIdStr: string): {
  * 生成 Mock 的 SSE 响应流，模拟打字效果
  */
 export function generateMockStream(text: string, retriever_resources: any, signal?: AbortSignal): ReadableStream<Uint8Array> {
-  console.log("[DEBUG] generateMockStream 被调用，输入 text:", text.slice(0, 200), "...")
   return new ReadableStream({
     async start(controller) {
       const encoder = new TextEncoder()
@@ -565,7 +429,6 @@ export function generateMockStream(text: string, retriever_resources: any, signa
       const thinkMatch = text.match(/<think>([\s\S]*?)<\/think>/)
       const thinkContent = thinkMatch ? thinkMatch[1] : null
       const mainText = text.replace(/<think>[\s\S]*?<\/think>/, '').trim()
-      console.log("[DEBUG] 解析结果: thinkContent=", !!thinkContent, thinkContent?.slice(0, 100), "mainText=", mainText.slice(0, 100))
 
       // 如果有思考内容，先发送 agent_thought
       if (thinkContent) {

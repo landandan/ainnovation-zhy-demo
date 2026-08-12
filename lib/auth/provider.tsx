@@ -54,23 +54,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setUser(cached)
     }
 
-    // getMe()
-    //   .then((res) => {
-    //     setUser(res.user)
-    //     setCachedUser(res.user)
-    //   })
-    //   .catch((err) => {
-    //     // 仅 token 明确失效时清登录态；网络/接口不存在时保留本地会话
-    //     const status = err instanceof ApiError ? err.status : 0
-    //     if (status === 401 || status === 403) {
-    //       removeToken()
-    //       setUser(null)
-    //     } else if (!cached) {
-    //       removeToken()
-    //       setUser(null)
-    //     }
-    //   })
-    //   .finally(() => setInitialized(true))
     setInitialized(true)
   }, [])
 
@@ -88,7 +71,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setLoading(true)
     try {
       const res = await apiLogin(data)
-      console.log("res123:", res)
 
       const accessToken = res?.data?.access_token || res?.data?.token
       const nextUser = res?.data?.user
@@ -133,7 +115,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     // 先调退出接口（此时 header 仍带 Authorization + clientid），再清本地登录态
     try {
       const res = await apiLogout()
-      console.log("logout123:", res)
     } catch (err) {
       console.warn("退出登录接口失败:", err)
     }
@@ -142,8 +123,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (wasMockMode) {
       disableMockMode()
     }
-    // const target = wasMockMode ? "/login?mock=true" : "/login"
-    // window.location.href =
     await guestLogin()
   }, [])
 

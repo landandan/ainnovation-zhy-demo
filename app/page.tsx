@@ -43,7 +43,7 @@ import {
   handleWorkflowError,
   handleWorkflowStopped,
 } from '@/lib/workflow-progress'
-import { getUserSettings, updateUserSettings } from "@/lib/api-client"
+import { getUserSettings } from "@/lib/api-client"
 import { isAuthenticated, isGuestUser } from "@/lib/auth"
 import LoginModal, { LoginModalRef } from "@/components/login-modal"
 import { handleAuthExpired } from "@/lib/http/client"
@@ -423,7 +423,6 @@ function extractContextFromNodeFinished(event: any): string {
 }
 
 function normalizeResources(rawResources: string): ResourceItem[] {
-  console.log('rawResources123:', rawResources)
   if (!rawResources) return []
 
   // 兼容：直接是 context 原文
@@ -456,7 +455,6 @@ function normalizeFeedback(rating?: string | null): "like" | "dislike" | null {
 }
 
 function mapMessage(m: MessageApi): Message[] {
-  console.log('mapMessage123:', m)
   const result: Message[] = []
   const baseTime = new Date(m.createTime).toLocaleTimeString("zh-CN", { hour: "2-digit", minute: "2-digit" })
   const resourcesList = normalizeResources(m.retrieverResources)
@@ -654,8 +652,6 @@ export default function Page() {
     () => agentDefs.filter((agent) => agent.isActive),
     [agentDefs],
   )
-  console.log("🚀 ~  ~ agentDefs: ", agentDefs);
-  console.log("🚀 ~ Page ~ activeAgentDefs: ", activeAgentDefs);
 
   const currentAgent =
     activeAgentDefs.find((d) => d.id === currentAgentId) ?? {}
@@ -681,8 +677,6 @@ export default function Page() {
           getAgents(),
           getConversations({ pageNum: 1, pageSize: CONVERSATIONS_PAGE_SIZE }),
         ])
-        console.log("🚀 ~ loadData ~ agentsRes: ", agentsRes);
-        console.log("🚀 ~ loadData ~ convsRes: ", convsRes);
         //const convsRes = cRes.data
         let resolvedAgentId = ""
         let activeMapped: AgentDef[] = []
@@ -828,30 +822,6 @@ export default function Page() {
     setChatHistory(buildChatHistory())
   }, [buildChatHistory])
 
-  /* ───── 保存消息到后端（已废弃：旧 /conversations/:id/messages） ───── */
-  // const persistMessage = useCallback(
-  //   async (
-  //     convId: number,
-  //     role: string,
-  //     content: string,
-  //     options?: {
-  //       attachments?: MessageFileAttachment[]
-  //       difyMessageId?: string
-  //     },
-  //   ) => {
-  //     try {
-  //       await addMessage(convId, {
-  //         role,
-  //         content,
-  //         attachments: options?.attachments?.length ? JSON.stringify(options.attachments) : undefined,
-  //         dify_message_id: options?.difyMessageId,
-  //       })
-  //     } catch (err) {
-  //       console.error("保存消息失败:", err)
-  //     }
-  //   },
-  //   [],
-  // )
 
   /* ───── 主题切换 ───── */
   useEffect(() => {
@@ -867,9 +837,6 @@ export default function Page() {
   const handleThemeChange = useCallback(
     (newTheme: ThemeId) => {
       saveTheme(newTheme)
-      if (isAuthenticated()) {
-        // updateUserSettings({ theme: newTheme }).catch(() => {})
-      }
       if (document.startViewTransition) {
         document.startViewTransition(() => {
           setTheme(newTheme)
@@ -900,7 +867,6 @@ export default function Page() {
   const refreshConversations = useCallback(async () => {
     try {
       const convsRes = await getConversations({ pageNum: 1, pageSize: CONVERSATIONS_PAGE_SIZE })
-      console.log('🔍 ~ Page ~ frontend/app/page.tsx:707 ~ convsRes:', convsRes);
       const rows = convsRes?.data?.rows ?? []
       setConversations(rows)
       setConversationsPage(1)
@@ -910,7 +876,6 @@ export default function Page() {
           ? rows.length < total
           : rows.length >= CONVERSATIONS_PAGE_SIZE,
       )
-      console.log('convsRes123:', convsRes)
       return rows
     } catch (err) {
       console.error("刷新会话列表失败:", err)
@@ -995,9 +960,6 @@ export default function Page() {
     try {
       refreshConversations()
       const id = item.id
-      console.log('id123:', id)
-      console.log('sessionId123:', item.sessionId)
-      console.log('item:', item)
       // 拉消息用 localSessionId
       const localSid = String(item.localSessionId ?? "").trim()
       if (!localSid) {
@@ -1005,14 +967,12 @@ export default function Page() {
         return
       }
       const msgsRes = await getMessages(localSid)
-      console.log('msgsRes123:', msgsRes)
       
       // 确保消息按正序排列（旧的在前，新的在后）
       const sortedMsgs = [...(msgsRes?.data?.messageList ?? [])].sort(
         (a, b) => new Date(a.createTime).getTime() - new Date(b.createTime).getTime(),
       )
 
-      console.log('sortedMsgs123:', sortedMsgs)
       const mappedMsgs = sortedMsgs.flatMap(mapMessage)
       setResourceSidebarOpen(false)
       setMessages(mappedMsgs)
@@ -1377,8 +1337,6 @@ export default function Page() {
             // 优先 sessionId，没有则用 localSessionId；历史高亮两边都能匹配
             applySessionId(outerSessionKey, currentAgentId, { prefer: true })
           }
-          // if (!trimmed.startsWith("data:{code=200, message=data: ")) continue
-          // console.log('trimmed123:', line)
 
           const message = outJson.message
           if (!message || !message.startsWith("data: ")) continue
@@ -1387,7 +1345,6 @@ export default function Page() {
 
           try {
             const event = JSON.parse(jsonStr)
-            console.log('event123:', event)
             if (typeof event.message_id === "string" && event.message_id.trim()) {
               assistantDifyMessageId = event.message_id.trim()
             }
@@ -1561,37 +1518,6 @@ export default function Page() {
       }
 
       // 已废弃：旧 /conversations 创建与消息落库（会话由 /h5/chat/* 管理）
-      // if (newDifyConversationId && !activeConversationId) {
-      //   try {
-      //     const dbAgentId = agentIdToDbId.current.get(currentAgentId)
-      //     if (dbAgentId) {
-      //       const convRes = await createConversation({
-      //         agent_id: dbAgentId,
-      //         title: userText.slice(0, 20) || "新对话",
-      //       })
-      //       const newConv = convRes.conversation
-      //       setActiveConversationId(newConv.id)
-      //       setConversations((prev) => [newConv, ...prev])
-      //       await persistMessage(newConv.id, "user", userText, {
-      //         attachments: userAttachments,
-      //       })
-      //       await persistMessage(newConv.id, "assistant", rawAssistantContent || fullAnswer, {
-      //         attachments: assistantAttachments,
-      //         difyMessageId: assistantDifyMessageId,
-      //       })
-      //     }
-      //   } catch (err) {
-      //     console.error("创建后端对话失败:", err)
-      //   }
-      // } else if (activeConversationId) {
-      //   await persistMessage(activeConversationId, "user", userText, {
-      //     attachments: userAttachments,
-      //   })
-      //   await persistMessage(activeConversationId, "assistant", rawAssistantContent || fullAnswer, {
-      //     attachments: assistantAttachments,
-      //     difyMessageId: assistantDifyMessageId,
-      //   })
-      // }
     } catch (err: unknown) {
       // 如果是用户主动取消（AbortError），静默处理，不显示错误
       if (err instanceof DOMException && err.name === "AbortError") {

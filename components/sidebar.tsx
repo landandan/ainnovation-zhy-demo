@@ -167,7 +167,6 @@ export function Sidebar({
   }
 
   const onSelectAgentHandle = (agent: any) => {
-      console.log("🚀 ~ onSelectAgentHandle ~ agent: ", agent);
     if (agent.visible === '1' && isGuestUser()) {
       loginModalRef.current?.open()
       return
