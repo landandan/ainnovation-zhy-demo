@@ -1,0 +1,210 @@
+name: Cleanup Release Assets
+
+on:
+  workflow_dispatch:
+    inputs:
+      keep_count:
+        description: 'Number of releases to keep (newest first)'
+        required: false
+        default: '6'
+      delete_release:
+        description: 'Also delete the old release itself (not just assets)'
+        required: false
+        default: 'false'
+      dry_run:
+        description: 'Dry run mode - only show what would be deleted'
+        required: false
+        default: 'false'
+  push:
+    tags:
+      - "v*"
+
+concurrency:
+  group: cleanup-release-assets
+  cancel-in-progress: false
+
+jobs:
+  cleanup:
+    runs-on: ubuntu-latest
+
+    env:
+      KEEP_COUNT: ${{ inputs.keep_count }}
+      DELETE_RELEASE: ${{ inputs.delete_release }}
+      DRY_RUN: ${{ inputs.dry_run }}
+
+    steps:
+      - name: Cleanup old release assets
+        env:
+          GITEA_URL: ${{ gitea.server_url }}
+          REPO: ${{ gitea.repository }}
+          GITEA_TOKEN: ${{ secrets.PAT_TOKEN }}
+        shell: bash
+        run: |
+          set -uo pipefail
+
+          log_info()  { echo "[INFO]  $(date '+%Y-%m-%d %H:%M:%S') $*"; }
+          log_warn()  { echo "[WARN]  $(date '+%Y-%m-%d %H:%M:%S') $*"; }
+          log_error() { echo "[ERROR] $(date '+%Y-%m-%d %H:%M:%S') $*"; }
+
+          http_fetch() {
+            curl -s --connect-timeout 10 --max-time 30 -w "\nHTTP:%{http_code}" "$@" || echo -e "\nHTTP:000"
+          }
+
+          KEEP="${KEEP_COUNT:-6}"
+          DEL_REL="${DELETE_RELEASE:-false}"
+          DRY="${DRY_RUN:-false}"
+
+          if [ "$DRY" = "true" ]; then
+            log_info "========== DRY RUN MODE =========="
+            log_info "No actual deletions will be performed."
+          fi
+
+          log_info "Configuration:"
+          log_info "  Keep releases:     ${KEEP}"
+          log_info "  Delete releases:   ${DEL_REL}"
+          log_info "  Dry run:           ${DRY}"
+
+          # ---------- Fetch all releases with pagination ----------
+          log_info "Fetching releases from ${GITEA_URL}/api/v1/repos/${REPO}/releases"
+
+          all_releases="[]"
+          page=1
+          per_page=50
+
+          while true; do
+            response=$(http_fetch \
+              -H "Authorization: token ${GITEA_TOKEN}" \
+              "${GITEA_URL}/api/v1/repos/${REPO}/releases?limit=${per_page}&page=${page}")
+
+            http_code=$(echo "$response" | tail -1 | sed 's/HTTP://')
+            body=$(echo "$response" | sed '$d')
+
+            if [ "$http_code" = "000" ]; then
+              log_error "Network error fetching releases page ${page}"
+              exit 1
+            fi
+
+            if [ "$http_code" != "200" ]; then
+              log_error "Failed to fetch releases page ${page} (HTTP ${http_code})"
+              exit 1
+            fi
+
+            count=$(echo "$body" | jq 'length' 2>/dev/null || echo "0")
+            if [ "$count" -eq 0 ]; then
+              break
+            fi
+
+            all_releases=$(echo "$all_releases" | jq -c --argjson new "$body" '. + $new')
+            log_info "  Page ${page}: fetched ${count} releases"
+
+            if [ "$count" -lt "$per_page" ]; then
+              break
+            fi
+            page=$((page + 1))
+          done
+
+          total=$(echo "$all_releases" | jq 'length' 2>/dev/null || echo "0")
+          log_info "Total releases found: ${total}"
+
+          if [ "$total" -le "$KEEP" ]; then
+            log_info "Nothing to clean up (${total} <= keep ${KEEP})"
+            exit 0
+          fi
+
+          # ---------- Identify old releases ----------
+          # Gitea API returns releases sorted by created_at descending by default,
+          # but we sort explicitly for robustness across pagination
+          old_ids=$(echo "$all_releases" \
+            | jq -r "sort_by(.created_at) | reverse | .[${KEEP}:][] | .id")
+
+          if [ -z "$old_ids" ]; then
+            log_info "No old releases to clean up"
+            exit 0
+          fi
+
+          old_count=$(echo "$old_ids" | wc -l)
+          log_info "Found ${old_count} old release(s) to clean up:"
+
+          echo "$old_ids" | while read -r rid; do
+            echo "$all_releases" | jq -r --argjson id "$rid" --arg na "N/A" \
+              '.[] | select(.id == $id) | "  - id=\(.id)  tag=\(.tag_name // $na)  created=\(.created_at)"' || true
+          done || true
+
+          # ---------- Process each old release ----------
+          for release_id in $old_ids; do
+            log_info ""
+            log_info "=============================================="
+            log_info "Processing release ID: ${release_id}"
+            log_info "=============================================="
+
+            # Fetch assets
+            asset_resp=$(http_fetch \
+              -H "Authorization: token ${GITEA_TOKEN}" \
+              "${GITEA_URL}/api/v1/repos/${REPO}/releases/${release_id}/assets")
+
+            asset_http=$(echo "$asset_resp" | tail -1 | sed 's/HTTP://')
+            asset_body=$(echo "$asset_resp" | sed '$d')
+
+            if [ "$asset_http" = "000" ]; then
+              log_warn "Network error fetching assets, skipping release ${release_id}"
+              continue
+            fi
+
+            if [ "$asset_http" != "200" ]; then
+              log_warn "Failed to fetch assets (HTTP ${asset_http}), skipping release ${release_id}"
+              continue
+            fi
+
+            asset_count=$(echo "$asset_body" | jq 'length' 2>/dev/null || echo "0")
+            log_info "Assets found: ${asset_count}"
+
+            if [ "$asset_count" -gt 0 ]; then
+              # Delete each asset
+              echo "$asset_body" | jq -r '.[] | "\(.id) \(.name)"' 2>/dev/null | while read -r asset_id asset_name; do
+                if [ "$DRY" = "true" ]; then
+                  log_info "[DRY-RUN] Would delete asset: id=${asset_id} name=${asset_name}"
+                  continue
+                fi
+
+                log_info "Deleting asset: id=${asset_id} name=${asset_name}"
+
+                del_result=$(http_fetch -X DELETE \
+                  -H "Authorization: token ${GITEA_TOKEN}" \
+                  "${GITEA_URL}/api/v1/repos/${REPO}/releases/${release_id}/assets/${asset_id}")
+
+                del_http=$(echo "$del_result" | tail -1 | sed 's/HTTP://')
+
+                if [ "$del_http" = "204" ] || [ "$del_http" = "200" ]; then
+                  log_info "  SUCCESS"
+                else
+                  log_error "  FAILED (HTTP ${del_http})"
+                fi
+              done || true
+            fi
+
+            # Optionally delete the release itself
+            if [ "$DEL_REL" = "true" ]; then
+              if [ "$DRY" = "true" ]; then
+                log_info "[DRY-RUN] Would delete release: id=${release_id}"
+              else
+                log_info "Deleting release ${release_id}..."
+
+                rel_result=$(http_fetch -X DELETE \
+                  -H "Authorization: token ${GITEA_TOKEN}" \
+                  "${GITEA_URL}/api/v1/repos/${REPO}/releases/${release_id}")
+
+                rel_http=$(echo "$rel_result" | tail -1 | sed 's/HTTP://')
+
+                if [ "$rel_http" = "204" ] || [ "$rel_http" = "200" ]; then
+                  log_info "  SUCCESS: Release ${release_id} deleted"
+                else
+                  log_error "  FAILED: Delete release ${release_id} (HTTP ${rel_http})"
+                fi
+              fi
+            fi
+          done
+
+          log_info ""
+          log_info "=============================================="
+          log_info "Cleanup completed successfully!"
+          log_info "=============================================="

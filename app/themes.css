@@ -1,0 +1,677 @@
+/*
+ * ═══════════════════════════════════════════════════════════════
+ *  深海智航 — 3套专业配色方案 (Kimi 风格)
+ *  
+ *  主题列表:
+ *    • 默认主题 (:root) - Kimi 浅色风格（白底蓝字）
+ *    • deep-ocean - 深海蓝（暗色）
+ *    • aurora-blue - 极光蓝（浅色冷调）
+ * ═══════════════════════════════════════════════════════════════
+ */
+
+@theme inline {
+  --font-heading: var(--font-sans);
+  --font-sans: 'Noto Sans SC', 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+  --font-mono: 'Geist Mono', 'Geist Mono Fallback';
+  --color-sidebar-ring: var(--sidebar-ring);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar: var(--sidebar);
+  --color-chart-5: var(--chart-5);
+  --color-chart-4: var(--chart-4);
+  --color-chart-3: var(--chart-3);
+  --color-chart-2: var(--chart-2);
+  --color-chart-1: var(--chart-1);
+  --color-ring: var(--ring);
+  --color-input: var(--input);
+  --color-border: var(--border);
+  --color-destructive: var(--destructive);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-accent: var(--accent);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-muted: var(--muted);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-secondary: var(--secondary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-primary: var(--primary);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-popover: var(--popover);
+  --color-card-foreground: var(--card-foreground);
+  --color-card: var(--card);
+  --color-foreground: var(--foreground);
+  --color-background: var(--background);
+  --radius-sm: calc(var(--radius) * 0.6);
+  --radius-md: calc(var(--radius) * 0.8);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) * 1.4);
+  --radius-2xl: calc(var(--radius) * 1.8);
+  --radius-3xl: calc(var(--radius) * 2.2);
+  --radius-4xl: calc(var(--radius) * 2.6);
+
+  /* Kimi 风格变量 */
+  --kimi-bg: #FFFFFF;
+  --kimi-sidebar-bg: #FAFAFA;
+  --kimi-text: #1F2329;
+  --kimi-text-secondary: #4E5969;
+  --kimi-text-tertiary: #86909C;
+  --kimi-text-quaternary: #C9CDD4;
+  --kimi-border: #F2F3F5;
+  --kimi-hover: #F7F8FA;
+  --kimi-input-bg: #FFFFFF;
+  --kimi-accent: #1A85FF;
+  --kimi-accent-light: #E8F3FF;
+  --kimi-shadow: 0 4px 20px rgba(0, 0, 0, 0.04);
+  --kimi-shadow-input: 0 0 0 1px rgba(31,35,41,0.15);
+  --kimi-shadow-input-hover: 0 0 0 1px var(--kimi-accent);
+  --kimi-bubble-user: #1A85FF;
+  --kimi-bubble-ai: #F7F8FA;
+}
+
+* {
+  transition: color 0.25s ease, background-color 0.25s ease, border-color 0.25s ease, fill 0.25s ease, stroke 0.25s ease;
+}
+
+html, body {
+  transition: background-color 0.3s ease, color 0.3s ease;
+}
+
+/* ─── :root / 默认主题 — 干净层次风格 ─── */
+:root {
+  /* 基础色彩 - 主区白底，与 Kimi 侧栏形成对比 */
+  --background: #FFFFFF;
+  --foreground: #000000e6;
+  --card: #FFFFFF;
+  --card-foreground: #1A1D23;
+  --popover: #FFFFFF;
+  --popover-foreground: #1A1D23;
+
+  /* 主色调 */
+  --primary: #FFFFFF;
+  --primary-hover: #EEF0F3;
+  --primary-foreground: #1A1D23;
+
+  /* 次要色 - 稍深的灰增加可读性 */
+  --secondary: #ECEEF2;
+  --secondary-foreground: #3D4450;
+
+  /* 弱化色 */
+  --muted: #ECEEF2;
+  --muted-foreground: #6B7280;
+
+  /* 强调色 - 沉稳蓝 */
+  --accent: #2563EB;
+  --accent-foreground: #FFFFFF;
+
+  /* 状态色 */
+  --destructive: #EF4444;
+  --border: #E2E4E9;
+  --input: #FFFFFF;
+  --ring: #2563EB;
+
+  /* 表面与交互 */
+  --surface: #FFFFFF;
+  --hover: #ECEEF2;
+
+  /* 文本色阶 - 加深对比度 */
+  --foreground-strong: #0A0D10;
+  --text-secondary: #666666;
+  --text-muted: #888888;
+
+  /* 语义状态色 */
+  --success: #16A34A;
+  --warning: #D97706;
+  --danger: #EF4444;
+  --info: #2563EB;
+  --highlight: #EF4444;
+  --link: #2563EB;
+  --link-hover: #1D4ED8;
+
+  /* 选区 */
+  --selection-bg: rgba(37, 99, 235, 0.12);
+  --selection-fg: #1A1D23;
+
+  /* 代码块 */
+  --code-bg: #F1F3F6;
+  --code-fg: #1A1D23;
+  --code-accent: #2563EB;
+  --inline-code-bg: rgba(37, 99, 235, 0.07);
+  --inline-code-color: #2563EB;
+  --code-block-bg: #F1F3F6;
+  --code-header-bg: #ECEEF2;
+
+  /* 表格 & 引用 */
+  --table-header-bg: #ECEEF2;
+  --table-row-striped-bg: #F9F9FA;
+  --blockquote-bg: #F1F3F6;
+  --think-block-bg: #F8F9FB;
+  --think-block-border: #E2E4E9;
+  --think-content-border-left: #D0D3D9;
+
+  /* 徽章 */
+  --badge-bg: rgba(37, 99, 235, 0.08);
+  --badge-fg: #2563EB;
+
+  /* 渐变 */
+  --gradient-1: linear-gradient(135deg, #2563EB 0%, #1D4ED8 50%, #1E40AF 100%);
+  --gradient-2: linear-gradient(135deg, #16A34A 0%, #15803D 50%, #166534 100%);
+  --gradient-3: linear-gradient(135deg, #D97706 0%, #B45309 50%, #92400E 100%);
+  --gradient-4: linear-gradient(135deg, #7C3AED 0%, #6D28D9 50%, #5B21B6 100%);
+  --gradient-accent: linear-gradient(135deg, #2563EB 0%, #3B82F6 50%, #60A5FA 100%);
+  --gradient-bg: #FFFFFF;
+
+  /* 光效 */
+  --glow: rgba(37, 99, 235, 0.12);
+  --glow-strong: rgba(37, 99, 235, 0.25);
+
+  /* 阴影 - 更清晰有层次 */
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.04), 0 1px 1px rgba(0, 0, 0, 0.02);
+  --shadow-md: 0 2px 6px rgba(0, 0, 0, 0.06), 0 1px 2px rgba(0, 0, 0, 0.03);
+  --shadow-lg: 0 4px 12px rgba(0, 0, 0, 0.08), 0 2px 4px rgba(0, 0, 0, 0.04);
+  --shadow-xl: 0 8px 24px rgba(0, 0, 0, 0.11), 0 4px 8px rgba(0, 0, 0, 0.05);
+
+  /* 圆角 */
+  --radius: 0.75rem;
+
+  /* 侧边栏 — Kimi 中性浅灰（非偏蓝） */
+  --sidebar: #fbfaf9;
+  --sidebar-foreground: #333333;
+  --sidebar-primary: #2563EB;
+  --sidebar-primary-foreground: #FFFFFF;
+  --sidebar-accent: #EBEBEB;
+  --sidebar-accent-foreground: #333333;
+  --sidebar-border: #E8E8E8;
+  --sidebar-ring: #2563EB;
+
+  /* 侧边栏 — 历史选中：白底卡片浮于灰底上 */
+  --sidebar-history-active-bg: #FFFFFF;
+  --sidebar-history-active-border-color: transparent;
+  --sidebar-history-active-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
+  --sidebar-history-hover-bg: #EBEBEB;
+  --sidebar-history-menu-bg: #FFFFFF;
+  --sidebar-history-menu-border: #E5E5E5;
+  --sidebar-history-menu-shadow: 0 4px 16px rgba(0, 0, 0, 0.1);
+  --sidebar-history-menu-hover-bg: #F5F5F5;
+  --sidebar-history-menu-danger-hover-bg: #FEF2F2;
+
+  /* 确认弹窗 — Kimi 白底实心卡片 */
+  --confirm-dialog-bg: #FFFFFF;
+  --confirm-dialog-border: #E5E5E5;
+  --confirm-dialog-shadow: 0 8px 32px rgba(0, 0, 0, 0.12);
+  --confirm-dialog-overlay: rgba(0, 0, 0, 0.45);
+
+  /* 侧边栏 — 新建会话按钮（白底 + 细边框 + 轻阴影） */
+  --sidebar-new-chat-bg: #FFFFFF;
+  --sidebar-new-chat-border: #E5E5E5;
+  --sidebar-new-chat-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+  --sidebar-new-chat-hover-shadow: 0 2px 6px rgba(0, 0, 0, 0.08);
+
+  /* 侧边栏 — 字体（仅默认主题，其他主题走 fallback） */
+  --sidebar-font-brand-size: 14px;
+  --sidebar-font-brand-weight: 600;
+  --sidebar-font-section-size: 12px;
+  --sidebar-font-section-weight: 400;
+  --sidebar-font-section-transform: none;
+  --sidebar-font-section-tracking: 0;
+  --sidebar-font-item-size: 13px;
+  --sidebar-font-item-weight: 400;
+  --sidebar-font-new-chat-size: 14px;
+  --sidebar-font-new-chat-weight: 500;
+  --sidebar-font-meta-size: 11px;
+  --sidebar-font-meta-weight: 400;
+
+  /* 主聊天区排版 — Kimi 风格（仅默认主题，其他主题走 fallback） */
+  --chat-font-family: "PingFang SC", "SF Pro SC", "Noto Sans SC", sans-serif;
+  --chat-font-size: 15px;
+  --chat-line-height: 1.8;
+  --chat-font-weight: 400;
+  --chat-color: #333333;
+  --chat-paragraph-gap: 0.8em;
+  --chat-list-item-gap: 0.4em;
+  --chat-heading-weight: 600;
+  --chat-heading-color: #1A1A1A;
+  --chat-h1-size: 1.375rem;
+  --chat-h2-size: 1.25rem;
+  --chat-h3-size: 1.125rem;
+  --chat-empty-title-size: 28px;
+  --chat-empty-title-weight: 600;
+  --chat-empty-title-line-height: 1.35;
+  --chat-empty-title-color: #1A1A1A;
+  --chat-empty-subtitle-size: 14px;
+  --chat-empty-subtitle-weight: 400;
+  --chat-empty-subtitle-line-height: 1.7;
+  --chat-empty-subtitle-color: #666666;
+  /* 用户问题气泡 */
+  --chat-user-bg: #1A85FF;
+  --chat-user-color: #FFFFFF;
+  --chat-user-font-size: 15px;
+  --chat-user-line-height: 1.8;
+  --chat-user-font-weight: 400;
+  --chat-user-shadow: none;
+  --chat-user-file-bg: #F5F5F5;
+  --chat-user-file-color: #1A1A1A;
+  --chat-user-file-icon-bg: #FFFFFF;
+  --chat-user-file-icon-color: #8C8C8C;
+  --chat-user-attach-bg: #F5F5F5;
+  --chat-user-attach-border: #E5E5E5;
+
+  /* 提问区 — Kimi 风格（仅默认主题，其他主题走 fallback） */
+  --input-area-max-width: 960px;
+  --input-area-padding-x: 24px;
+  --input-area-padding-bottom: 24px;
+  --input-box-bg: #FFFFFF;
+  --input-box-border: #E5E5E5;
+  --input-box-border-focus: #E0E0E0;
+  --input-box-radius: 24px;
+  --input-box-shadow: 0 4px 20px rgba(0, 0, 0, 0.05);
+  --input-box-shadow-focus: 0 4px 24px rgba(0, 0, 0, 0.08);
+  --input-box-padding-x: 20px;
+  --input-box-padding-y: 16px;
+  --input-box-min-height: 120px;
+  --input-box-drag-border: #1A85FF;
+  --input-box-drag-bg: #F5F9FF;
+  --input-box-drag-shadow: 0 0 0 2px rgba(26, 133, 255, 0.15);
+  --input-box-drag-hint-color: #1A85FF;
+  --upload-preview-file-bg: #F5F5F5;
+  --upload-preview-file-icon-color: #8C8C8C;
+
+  /* 欢迎页智能助手 — Kimi 胶囊标签（默认） */
+  --welcome-agent-section-bg: transparent;
+  --welcome-agent-heading-color: #1A1A1A;
+  --welcome-agent-card-bg: #FAFAFA;
+  --welcome-agent-card-border: #E8E8E8;
+  --welcome-agent-card-hover-bg: #F0F0F0;
+  --welcome-agent-card-hover-border: #D4D4D4;
+  --welcome-agent-card-hover-label-color: #1F2937;
+  --welcome-agent-card-active-bg: #EBEBEB;
+  --welcome-agent-card-active-border: #D4D4D4;
+  --welcome-agent-card-active-label-color: #1F2937;
+  --welcome-agent-card-label-color: #4B5563;
+  --upload-preview-file-name-color: #333333;
+  --upload-preview-file-sub-color: #8C8C8C;
+  --upload-preview-image-border: #E5E5E5;
+  --upload-preview-image-bg: #F5F5F5;
+  --input-textarea-min-height: 48px;
+  --input-textarea-font-size: 15px;
+  --input-textarea-line-height: 1.6;
+  --input-placeholder-color: #A8A8A8;
+  --input-send-size: 36px;
+  --input-send-disabled-bg: #E0E0E0;
+  --input-send-disabled-color: #FFFFFF;
+  --input-send-disabled-opacity: 1;
+  --input-send-active-bg: #333333;
+
+  /* 消息操作栏 — Kimi 风格（仅默认主题） */
+  --message-action-color: #888888;
+  --message-action-color-hover: #333333;
+  --message-action-hover-bg: #F2F2F2;
+  --message-action-active-color: #1A85FF;
+
+  --message-feedback-overlay: rgba(0, 0, 0, 0.45);
+  --message-feedback-bg: #FFFFFF;
+  --message-feedback-shadow: 0 8px 32px rgba(0, 0, 0, 0.12);
+  --message-feedback-border: transparent;
+  --message-feedback-tag-bg: #F5F5F5;
+  --message-feedback-tag-hover-bg: #EBEBEB;
+  --message-feedback-tag-selected-bg: #E8F3FF;
+  --message-feedback-tag-selected-color: #1A85FF;
+  --message-feedback-input-bg: #F5F5F5;
+  --message-feedback-cancel-bg: #F5F5F5;
+  --message-feedback-cancel-hover-bg: #EBEBEB;
+  --message-feedback-submit-bg: #1A85FF;
+  --message-feedback-submit-color: #FFFFFF;
+
+  /* 图表色 */
+  --chart-1: #2563EB;
+  --chart-2: #16A34A;
+  --chart-3: #D97706;
+  --chart-4: #7C3AED;
+  --chart-5: #EF4444;
+
+  /* Kimi 变量 */
+  --kimi-bg: #FFFFFF;
+  --kimi-sidebar-bg: #fbfaf9;
+  --kimi-text: #1A1D23;
+  --kimi-text-secondary: #3D4450;
+  --kimi-text-tertiary: #6B7280;
+  --kimi-text-quaternary: #9CA3AF;
+  --kimi-border: #E2E4E9;
+  --kimi-hover: #ECEEF2;
+  --kimi-input-bg: #FFFFFF;
+  --kimi-accent: #2563EB;
+  --kimi-accent-light: #DBEAFE;
+  --kimi-shadow: 0 4px 20px rgba(0, 0, 0, 0.06);
+  --kimi-shadow-input: 0 4px 20px rgba(0, 0, 0, 0.05);
+  --kimi-shadow-input-hover: 0 4px 24px rgba(0, 0, 0, 0.08);
+  --kimi-bubble-user: #1A85FF;
+  --kimi-bubble-ai: #FFFFFF;
+}
+
+/* ═════════════════════════════════════════════════════════════════
+   暗色主题 — 深海蓝
+   ════════════════════════════════════════════════════════════════ */
+
+[data-theme="deep-ocean"] {
+  /* 基础色彩 */
+  --background: #0D1B2A;
+  --foreground: #E8EEF2;
+  --card: #132238;
+  --card-foreground: #E8EEF2;
+  --popover: #132238;
+  --popover-foreground: #E8EEF2;
+
+  /* 主色调 */
+  --primary: #132238;
+  --primary-hover: #1A3050;
+  --primary-foreground: #E8EEF2;
+
+  /* 次要色 */
+  --secondary: #1A334D;
+  --secondary-foreground: #94A3B8;
+
+  /* 弱化色 */
+  --muted: #1E3D5F;
+  --muted-foreground: #64748B;
+
+  /* 强调色 */
+  --accent: #38BDF8;
+  --accent-foreground: #0D1B2A;
+
+  /* 状态色 */
+  --destructive: #F87171;
+  --border: #1E2D3F;
+  --input: #142838;
+  --ring: #38BDF8;
+
+  /* 表面与交互 */
+  --surface: #132238;
+  --hover: #142838;
+
+  /* 文本色阶 */
+  --foreground-strong: #F0F4F7;
+  --text-secondary: #94A3B8;
+  --text-muted: #64748B;
+
+  /* 语义状态色 */
+  --success: #34D399;
+  --warning: #FBBF24;
+  --danger: #F87171;
+  --info: #38BDF8;
+  --highlight: #FB7185;
+  --link: #38BDF8;
+  --link-hover: #7DD3FC;
+
+  /* 选区 */
+  --selection-bg: rgba(56, 189, 248, 0.20);
+  --selection-fg: #0D1B2A;
+
+  /* 代码块 */
+  --code-bg: #142838;
+  --code-fg: #E0F2FE;
+  --code-accent: #38BDF8;
+  --inline-code-bg: rgba(56, 189, 248, 0.12);
+  --inline-code-color: #38BDF8;
+  --code-block-bg: #142838;
+  --code-header-bg: #1A334D;
+
+  /* 表格 & 引用 */
+  --table-header-bg: color-mix(in srgb, var(--card) 85%, var(--muted) 15%);
+  --table-row-striped-bg: color-mix(in srgb, var(--card) 95%, var(--muted) 5%);
+  --blockquote-bg: color-mix(in srgb, var(--accent) 6%, var(--card) 80%);
+  --think-block-bg: color-mix(in srgb, var(--background) 80%, var(--card) 20%);
+  --think-block-border: var(--border);
+  --think-content-border-left: var(--text-muted);
+
+  /* 徽章 */
+  --badge-bg: rgba(56, 189, 248, 0.12);
+  --badge-fg: #38BDF8;
+
+  /* 渐变 */
+  --gradient-1: linear-gradient(135deg, #38BDF8 0%, #0EA5E9 50%, #0284C7 100%);
+  --gradient-2: linear-gradient(135deg, #34D399 0%, #10B981 50%, #059669 100%);
+  --gradient-3: linear-gradient(135deg, #FBBF24 0%, #F59E0B 50%, #D4950B 100%);
+  --gradient-4: linear-gradient(135deg, #C084FC 0%, #9333EA 50%, #6D28D9 100%);
+  --gradient-accent: linear-gradient(135deg, #38BDF8 0%, #7DD3FC 50%, #0EA5E9 100%);
+  --gradient-bg: linear-gradient(180deg, #0D1B2A 0%, #132238 50%, #162D4A 100%);
+
+  /* 光效 */
+  --glow: rgba(56, 189, 248, 0.20);
+  --glow-strong: rgba(56, 189, 248, 0.40);
+
+  /* 阴影 */
+  --shadow-sm: 0 2px 8px rgba(0, 0, 0, 0.25);
+  --shadow-md: 0 4px 16px rgba(0, 0, 0, 0.35);
+  --shadow-lg: 0 8px 32px rgba(0, 0, 0, 0.45);
+  --shadow-xl: 0 16px 48px rgba(0, 0, 0, 0.55);
+
+  /* 侧边栏 */
+  --sidebar: #0A1520;
+  --sidebar-foreground: #E8EEF2;
+  --sidebar-primary: #38BDF8;
+  --sidebar-primary-foreground: #0D1B2A;
+  --sidebar-accent: #1A334D;
+  --sidebar-accent-foreground: #E8EEF2;
+  --sidebar-border: #1E2D3F;
+  --sidebar-ring: #38BDF8;
+
+  /* 新建会话 / 提问框（仅深海） */
+  --sidebar-new-chat-bg: #43454a;
+  --sidebar-new-chat-border: transparent;
+  --input-box-bg: #2c2c2e;
+  --input-box-border: transparent;
+  --input-box-border-focus: transparent;
+
+  /* 历史会话选中高亮（强调色浅底，更易辨认） */
+  --sidebar-history-active-bg: rgba(56, 189, 248, 0.18);
+  --sidebar-history-active-border-color: rgba(56, 189, 248, 0.55);
+  --sidebar-history-active-shadow: 0 0 0 1px rgba(56, 189, 248, 0.12);
+  --sidebar-history-hover-bg: rgba(56, 189, 248, 0.08);
+
+  /* 用户气泡 / 附件卡片（对齐 Kimi 深色） */
+  --chat-user-bg: #2c2c2e;
+  --chat-user-color: #F5F5F5;
+  --chat-user-shadow: none;
+  --chat-user-file-bg: #2c2c2e;
+  --chat-user-file-color: #F5F5F5;
+  --chat-user-file-icon-bg: rgba(255, 255, 255, 0.08);
+  --chat-user-attach-bg: #1c1c1e;
+  --chat-user-attach-border: transparent;
+
+  /* 空会话引导文案（仅深海，避免继承默认深色字） */
+  --chat-empty-title-color: #F0F4F7;
+  --chat-empty-subtitle-color: #94A3B8;
+
+  /* 消息操作栏 / 反馈弹窗（深海） */
+  --message-action-color: #94A3B8;
+  --message-action-color-hover: #E8EEF2;
+  --message-action-hover-bg: rgba(255, 255, 255, 0.08);
+  --message-action-active-color: #38BDF8;
+
+  --message-feedback-overlay: rgba(0, 0, 0, 0.62);
+  --message-feedback-bg: #132238;
+  --message-feedback-shadow: 0 12px 40px rgba(0, 0, 0, 0.45);
+  --message-feedback-border: #1E2D3F;
+  --message-feedback-tag-bg: #1A3050;
+  --message-feedback-tag-hover-bg: #243B57;
+  --message-feedback-tag-selected-bg: rgba(56, 189, 248, 0.16);
+  --message-feedback-tag-selected-color: #38BDF8;
+  --message-feedback-input-bg: #0F1C2B;
+  --message-feedback-cancel-bg: #1A3050;
+  --message-feedback-cancel-hover-bg: #243B57;
+  --message-feedback-submit-bg: #38BDF8;
+  --message-feedback-submit-color: #0D1B2A;
+
+  /* 欢迎页智能助手 — Kimi 胶囊标签（深海） */
+  --welcome-agent-section-bg: transparent;
+  --welcome-agent-heading-color: #F0F4F7;
+  --welcome-agent-card-bg: rgba(255, 255, 255, 0.04);
+  --welcome-agent-card-border: rgba(255, 255, 255, 0.12);
+  --welcome-agent-card-hover-bg: rgba(255, 255, 255, 0.08);
+  --welcome-agent-card-hover-border: rgba(255, 255, 255, 0.18);
+  --welcome-agent-card-hover-label-color: #F0F4F7;
+  --welcome-agent-card-active-bg: rgba(255, 255, 255, 0.12);
+  --welcome-agent-card-active-border: rgba(255, 255, 255, 0.2);
+  --welcome-agent-card-active-label-color: #F0F4F7;
+  --welcome-agent-card-label-color: #94A3B8;
+
+  /* 图表色 */
+  --chart-1: #38BDF8;
+  --chart-2: #34D399;
+  --chart-3: #FBBF24;
+  --chart-4: #C084FC;
+  --chart-5: #F87171;
+
+  /* Kimi 变量 */
+  --kimi-bg: #0D1B2A;
+  --kimi-sidebar-bg: #0A1520;
+  --kimi-text: #E8EEF2;
+  --kimi-text-secondary: #94A3B8;
+  --kimi-text-tertiary: #64748B;
+  --kimi-text-quaternary: #475569;
+  --kimi-border: #1E2D3F;
+  --kimi-hover: #142838;
+  --kimi-input-bg: #142838;
+  --kimi-accent: #38BDF8;
+  --kimi-accent-light: rgba(56, 189, 248, 0.15);
+  --kimi-shadow: 0 4px 20px rgba(0, 0, 0, 0.20);
+  --kimi-shadow-input: 0 0 0 1px rgba(232,238,242,0.15);
+  --kimi-shadow-input-hover: 0 0 0 1px var(--kimi-accent);
+  --kimi-bubble-user: #0284C7;
+  --kimi-bubble-ai: #142838;
+}
+
+/* ═════════════════════════════════════════════════════════════════
+   浅色主题 — 极光蓝 (冷调)
+   ════════════════════════════════════════════════════════════════ */
+
+[data-theme="aurora-blue"] {
+  /* 基础色彩 */
+  --background: #F0F4F8;
+  --foreground: #1A365D;
+  --card: #FFFFFF;
+  --card-foreground: #1A365D;
+  --popover: #FFFFFF;
+  --popover-foreground: #1A365D;
+
+  /* 主色调 */
+  --primary: #FFFFFF;
+  --primary-hover: #F0F4F8;
+  --primary-foreground: #1A365D;
+
+  /* 次要色 */
+  --secondary: #E6F0F8;
+  --secondary-foreground: #2D4A6F;
+
+  /* 弱化色 */
+  --muted: #E0EBF5;
+  --muted-foreground: #5A7A9A;
+
+  /* 强调色 */
+  --accent: #0066CC;
+  --accent-foreground: #FFFFFF;
+
+  /* 状态色 */
+  --destructive: #DC3545;
+  --border: #D0DFEE;
+  --input: #FFFFFF;
+  --ring: #0066CC;
+
+  /* 表面与交互 */
+  --surface: #FFFFFF;
+  --hover: #E0EBF5;
+
+  /* 文本色阶 */
+  --foreground-strong: #102B4C;
+  --text-secondary: #2D4A6F;
+  --text-muted: #5A7A9A;
+
+  /* 语义状态色 */
+  --success: #198754;
+  --warning: #FD7E14;
+  --danger: #DC3545;
+  --info: #0066CC;
+  --highlight: #E74C3C;
+  --link: #0066CC;
+  --link-hover: #0052A3;
+
+  /* 选区 */
+  --selection-bg: rgba(0, 102, 204, 0.12);
+  --selection-fg: #1A365D;
+
+  /* 代码块 */
+  --code-bg: #E6F2FF;
+  --code-fg: #1A365D;
+  --code-accent: #0066CC;
+  --inline-code-bg: rgba(0, 102, 204, 0.08);
+  --inline-code-color: #0066CC;
+  --code-block-bg: #E6F2FF;
+  --code-header-bg: #E0EBF5;
+
+  /* 表格 & 引用 */
+  --table-header-bg: #E6F0F8;
+  --table-row-striped-bg: #F8FCFF;
+  --blockquote-bg: #E6F2FF;
+  --think-block-bg: #F0F6FC;
+  --think-block-border: #D0DFEE;
+  --think-content-border-left: #A0BBDD;
+
+  /* 徽章 */
+  --badge-bg: rgba(0, 102, 204, 0.08);
+  --badge-fg: #0066CC;
+
+  /* 渐变 */
+  --gradient-1: linear-gradient(135deg, #0066CC 0%, #0052A3 50%, #004494 100%);
+  --gradient-2: linear-gradient(135deg, #198754 0%, #157347 50%, #125F3B 100%);
+  --gradient-3: linear-gradient(135deg, #FD7E14 0%, #E96B0B 50%, #D95A02 100%);
+  --gradient-4: linear-gradient(135deg, #6F42C1 0%, #5C369E 50%, #4A2B7E 100%);
+  --gradient-accent: linear-gradient(135deg, #0066CC 0%, #339AFF 50%, #66B1FF 100%);
+  --gradient-bg: linear-gradient(180deg, #F0F4F8 0%, #E6F0F8 50%, #E0EBF5 100%);
+
+  /* 光效 */
+  --glow: rgba(0, 102, 204, 0.15);
+  --glow-strong: rgba(0, 102, 204, 0.30);
+
+  /* 阴影 */
+  --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.05), 0 1px 2px rgba(0, 0, 0, 0.03);
+  --shadow-md: 0 2px 8px rgba(0, 0, 0, 0.07), 0 1px 3px rgba(0, 0, 0, 0.04);
+  --shadow-lg: 0 4px 16px rgba(0, 0, 0, 0.09), 0 2px 6px rgba(0, 0, 0, 0.05);
+  --shadow-xl: 0 8px 28px rgba(0, 0, 0, 0.13), 0 4px 12px rgba(0, 0, 0, 0.07);
+
+  /* 侧边栏 */
+  --sidebar: #E6F0F8;
+  --sidebar-foreground: #1A365D;
+  --sidebar-primary: #0066CC;
+  --sidebar-primary-foreground: #FFFFFF;
+  --sidebar-accent: #D0DFEE;
+  --sidebar-accent-foreground: #2D4A6F;
+  --sidebar-border: #D0DFEE;
+  --sidebar-ring: #0066CC;
+
+  /* 图表色 */
+  --chart-1: #0066CC;
+  --chart-2: #198754;
+  --chart-3: #FD7E14;
+  --chart-4: #6F42C1;
+  --chart-5: #DC3545;
+
+  /* Kimi 变量 */
+  --kimi-bg: #F0F4F8;
+  --kimi-sidebar-bg: #E6F0F8;
+  --kimi-text: #1A365D;
+  --kimi-text-secondary: #2D4A6F;
+  --kimi-text-tertiary: #5A7A9A;
+  --kimi-text-quaternary: #94B4D4;
+  --kimi-border: #D0DFEE;
+  --kimi-hover: #E0EBF5;
+  --kimi-input-bg: #FFFFFF;
+  --kimi-accent: #0066CC;
+  --kimi-accent-light: #E6F2FF;
+  --kimi-shadow: 0 4px 20px rgba(0, 0, 0, 0.05);
+  --kimi-shadow-input: 0 0 0 1px rgba(26,54,93,0.15);
+  --kimi-shadow-input-hover: 0 0 0 1px var(--kimi-accent);
+  --kimi-bubble-user: #0066CC;
+  --kimi-bubble-ai: #E6F2FF;
+}

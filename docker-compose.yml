@@ -2,9 +2,12 @@ version: '3.8'
 
 services:
   frontend:
-    image: zhy-demo:latest
+    image: zhy-ai-chat:latest
+    container_name: zhy-ai-chat
     build:
-      context: ./frontend
+      context: .
+    environment:
+      TZ: Asia/Shanghai
     ports:
       - "9527:80"
     extra_hosts:
@@ -12,20 +15,9 @@ services:
 #    depends_on:
 #      - backend
     restart: unless-stopped
+    networks:
+      - frp_net
 
-#  backend:
-#    build:
-#      context: ./backend
-#    ports:
-#      - "5000:5000"
-#    env_file:
-#      - ./backend/.env
-#    environment:
-#      - DATABASE_URL=sqlite:///data/cnooc.db
-#      - AUTH_PROVIDER=local
-#    volumes:
-#      - ./data:/app/data
-#      - ./backend/.env:/app/.env:ro
-#    extra_hosts:
-#      - "host.docker.internal:host-gateway"
-#    restart: unless-stopped
+networks:
+  frp_net:
+    external: true
