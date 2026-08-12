@@ -62,6 +62,32 @@ function readChatUrlParams() {
   }
 }
 
+/** 游客点击需登录智能体后，登录成功再切过去 */
+const PENDING_AGENT_KEY = "cnooc-pending-agent-id"
+
+function readPendingAgentId(): string {
+  if (typeof window === "undefined") return ""
+  try {
+    return sessionStorage.getItem(PENDING_AGENT_KEY)?.trim() || ""
+  } catch {
+    return ""
+  }
+}
+
+function writePendingAgentId(agentId: string): void {
+  if (typeof window === "undefined") return
+  try {
+    if (agentId) sessionStorage.setItem(PENDING_AGENT_KEY, agentId)
+    else sessionStorage.removeItem(PENDING_AGENT_KEY)
+  } catch {
+    /* ignore */
+  }
+}
+
+function clearPendingAgentId(): void {
+  writePendingAgentId("")
+}
+
 /** 生成客户端唯一 id（兼容非 HTTPS / 旧浏览器，避免 crypto.randomUUID 不可用） */
 function createClientId() {
   const c = typeof globalThis !== "undefined" ? globalThis.crypto : undefined
@@ -701,7 +727,16 @@ export default function Page() {
           agentIdToDbId.current = idMap
           activeMapped = mapped.filter((a) => a.isActive)
 
-          if (urlAgent) {
+          // 游客点需登录应用后留下的 pending，优先于 URL / 默认应用
+          const pendingAgentId = !isGuestUser() ? readPendingAgentId() : ""
+          const pendingMatched = pendingAgentId
+            ? activeMapped.find((a) => a.id === pendingAgentId)
+            : undefined
+
+          if (pendingMatched) {
+            resolvedAgentId = pendingMatched.id
+            clearPendingAgentId()
+          } else if (urlAgent) {
             const byId = activeMapped.find((a) => a.id === urlAgent)
             const byAgentId = activeMapped.find((a) => a.agent_id === urlAgent)
             resolvedAgentId = byId?.id || byAgentId?.id || urlAgent
@@ -884,10 +919,21 @@ export default function Page() {
   /* ───── 智能体切换 ───── */
   const handleSelectAgent = (agentId: string) => {
     const agent = agentDefs.find((a) => a.id === agentId)
-    if (agent?.visible === '1' && isGuestUser()) {
-      loginModalRef.current?.open()
+    if (agent?.visible === "1" && isGuestUser()) {
+      writePendingAgentId(agentId)
+      // 先把目标写进 URL，避免登录后 loadData 仍按旧 agent 恢复
+      syncChatUrl(agentId, null)
+      loginModalRef.current?.open({
+        onSuccess: () => {
+          // pending 留给 loadData（user 变化会重跑）消费；这里先切 UI
+          setCurrentAgentId(agentId)
+          handleNewChat(agentId)
+          maybeCloseSidebar()
+        },
+      })
       return
     }
+    clearPendingAgentId()
     refreshConversations()
     if (isStreaming) {
       handleStopStreaming()
@@ -896,7 +942,6 @@ export default function Page() {
     handleNewChat(agentId)
     maybeCloseSidebar()
   }
-
   const refreshConversations = useCallback(async () => {
     try {
       const convsRes = await getConversations({ pageNum: 1, pageSize: CONVERSATIONS_PAGE_SIZE })
