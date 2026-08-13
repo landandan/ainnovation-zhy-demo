@@ -1,18 +1,19 @@
 "use client"
 
-import { forwardRef, useImperativeHandle, useState, useEffect } from "react"
-import { useRouter, useSearchParams } from "next/navigation"
+import { forwardRef, useImperativeHandle, useState, useEffect, useRef } from "react"
+import { useRouter, usePathname, useSearchParams } from "next/navigation"
 import { useAuth } from "@/lib/auth-store"
 import Modal from "@/components/ui/Modal"
 import { AUTH_REQUIRED_EVENT, resetAuthRequiredGate } from "@/lib/http/client"
 
 export interface LoginModalRef {
-    open: (title?: string) => void;
+    open: (options?: { onSuccess?: () => void }) => void;
     close: () => void;
 }
 
 export default forwardRef<LoginModalRef>((_, ref) => {
     const router = useRouter()
+    const pathname = usePathname()
     const searchParams = useSearchParams()
     const { login, register, loading, user } = useAuth()
 
@@ -22,18 +23,24 @@ export default forwardRef<LoginModalRef>((_, ref) => {
     const [displayName, setDisplayName] = useState("")
     const [error, setError] = useState("")
     const [modalOpen, setModalOpen] = useState(false)
+    const onSuccessRef = useRef<(() => void) | undefined>(undefined)
 
     useImperativeHandle(ref, () => ({
-        open() {
+        open(options) {
+            onSuccessRef.current = options?.onSuccess
             setModalOpen(true)
         },
         close() {
+            onSuccessRef.current = undefined
             setModalOpen(false)
         },
     }))
 
     useEffect(() => {
-        const onAuthRequired = () => setModalOpen(true)
+        const onAuthRequired = () => {
+            onSuccessRef.current = undefined
+            setModalOpen(true)
+        }
         window.addEventListener(AUTH_REQUIRED_EVENT, onAuthRequired)
         return () => window.removeEventListener(AUTH_REQUIRED_EVENT, onAuthRequired)
     }, [])
@@ -54,8 +61,14 @@ export default forwardRef<LoginModalRef>((_, ref) => {
                 await login({ username: username.trim(), password })
             }
             resetAuthRequiredGate()
-            router.replace("/")
+            const onSuccess = onSuccessRef.current
+            onSuccessRef.current = undefined
             setModalOpen(false)
+            onSuccess?.()
+            // 已在首页时不要 replace("/")，否则会清掉 ?agent= 等参数，导致登录后智能体被重置
+            if (pathname === "/login") {
+                router.replace("/")
+            }
         } catch (err: unknown) {
             const msg = err instanceof Error ? err.message : "操作失败"
             setError(msg)

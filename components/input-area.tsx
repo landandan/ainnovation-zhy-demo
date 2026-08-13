@@ -227,10 +227,7 @@ export function InputArea({
   const handlePickAgent = (next: { id: string; label: string; visible?: string }) => {
     setAgentMenuOpen(false)
     if (next.id === currentAgentId) return
-    if (next.visible === "1" && isGuestUser()) {
-      loginModalRef.current?.open()
-      return
-    }
+    // 游客 + 需登录应用：交给父级 handleSelectAgent 统一弹窗并在登录后切应用
     onSelectAgent?.(next.id)
   }
 

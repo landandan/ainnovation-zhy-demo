@@ -166,12 +166,9 @@ export function Sidebar({
     }
   }
 
-  const onSelectAgentHandle = (agent: any) => {
-    if (agent.visible === '1' && isGuestUser()) {
-      loginModalRef.current?.open()
-      return
-    }
-    onSelectAgent(agent.id)
+  const onSelectAgentHandle = (agent: AgentDef) => {
+    // 需登录校验与登录后切应用统一由父级 onSelectAgent 处理
+    onSelectAgent?.(agent.id)
   }
 
   const handleConfirmDelete = async () => {
