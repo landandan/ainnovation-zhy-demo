@@ -1,7 +1,5 @@
-version: '3.8'
-
 services:
-  frontend:
+  zhy-ai-chat:
     image: zhy-ai-chat:latest
     container_name: zhy-ai-chat
     build:
@@ -12,8 +10,6 @@ services:
       - "9527:80"
     extra_hosts:
       - "host.docker.internal:host-gateway"
-#    depends_on:
-#      - backend
     restart: unless-stopped
     networks:
       - frp_net
