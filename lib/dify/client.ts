@@ -6,6 +6,7 @@
  */
 
 import { getToken, getClientId } from "../auth/token"
+import { DIFY_DEFAULT_USER_ID, DEFAULT_CLIENT_ID } from "../config"
 import { handleAuthExpired } from "../http/client"
 import {
   API_BASE_URL,
@@ -129,7 +130,7 @@ export async function callDifyChatStream(params: {
 
   // 非 Mock 模式：走后端代理
   const body: DifyChatProxyRequest = {
-    userId: userId || '192.168.11.30',
+    userId: userId || DIFY_DEFAULT_USER_ID,
     agentId: agentId,
     sessionId: sessionId || conversationId || '',
     query,
@@ -234,7 +235,7 @@ export async function stopDifyTask(params: {
     const token = getToken()
     if (!token) return
 
-    const clientid = getClientId() || "0d4c873ff6146ecd7f38e2e45526ab1b"
+    const clientid = getClientId() || DEFAULT_CLIENT_ID
     await fetch(`${API_BASE_URL}/h5/chat/stop`, {
       method: "POST",
       headers: {

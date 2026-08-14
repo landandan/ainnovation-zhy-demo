@@ -21,6 +21,7 @@ import {
   type CreateDifyConfigRequest,
   type UpdateDifyConfigRequest,
 } from "@/lib/api-client"
+import { DEFAULT_DIFY_BASE_URL } from "@/lib/config"
 
 /* ───── 工具函数 ───── */
 
@@ -305,7 +306,7 @@ const AgentFormDialog = memo(function AgentFormDialog({
             <div className="flex flex-col gap-1">
               <label className="text-[11px] font-semibold" style={{ color: "var(--text-muted)" }}>Dify Base URL</label>
               <input type="text" value={difyBaseUrl} onChange={(e) => { setDifyBaseUrl(e.target.value); setTestResult(null) }}
-                placeholder="https://api.dify.ai/v1"
+                placeholder={DEFAULT_DIFY_BASE_URL}
                 className="w-full rounded-lg border px-3 py-2 text-[13px] outline-none transition-all focus:border-[var(--accent)]"
                 style={{ background: "var(--secondary)", color: "var(--foreground)", borderColor: "var(--border)" }} />
             </div>
@@ -488,7 +489,7 @@ const DifyConfigDialog = memo(function DifyConfigDialog({
           <div className="flex flex-col gap-1">
             <label className="text-[11px] font-semibold" style={{ color: "var(--text-muted)" }}>Dify Base URL</label>
             <input type="text" value={baseUrl} onChange={(e) => { setBaseUrl(e.target.value); setTestResult(null) }}
-              placeholder="https://api.dify.ai/v1"
+              placeholder={DEFAULT_DIFY_BASE_URL}
               className="w-full rounded-lg border px-3 py-2 text-[13px] outline-none transition-all focus:border-[var(--accent)]"
               style={{ background: "var(--secondary)", color: "var(--foreground)", borderColor: "var(--border)" }} />
           </div>
@@ -975,7 +976,7 @@ export default function SettingsPage() {
                                               <div className="flex-1 min-w-0">
                                                 <div className="text-[11px] font-semibold" style={{ color: "var(--foreground)" }}>{cfg.env_label || "默认"}</div>
                                                 <div className="text-[10px] truncate" style={{ color: "var(--text-muted)" }}>
-                                                  {cfg.dify_base_url || "https://api.dify.ai/v1"} · {cfg.dify_api_key.slice(0, 8)}...
+                                                  {cfg.dify_base_url || DEFAULT_DIFY_BASE_URL} · {cfg.dify_api_key.slice(0, 8)}...
                                                 </div>
                                               </div>
                                               {cfg.is_default && <span className="text-[9px] rounded px-1.5 py-0.5 flex-shrink-0" style={{ background: "var(--accent)", color: "var(--accent-foreground)" }}>默认</span>}
