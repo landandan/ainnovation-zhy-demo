@@ -299,7 +299,7 @@ export const ChatArea = forwardRef<HTMLDivElement, ChatAreaProps>(
               >
                 <div className="flex items-start gap-3 max-w-[90%]">
                   <div className="flex h-[36px] w-[36px] flex-shrink-0 items-center justify-center">
-                    <CanvasDragonAvatar size={36} />
+                    <CanvasDragonAvatar size={36} animated />
                   </div>
                   <div className="flex flex-col gap-2 min-w-0">
                     {visibleWorkflowProgress && (
@@ -349,7 +349,7 @@ export const ChatArea = forwardRef<HTMLDivElement, ChatAreaProps>(
               >
                 <div className="flex items-start gap-3 max-w-[90%]">
                   <div className="flex h-[36px] w-[36px] flex-shrink-0 items-center justify-center">
-                    <CanvasDragonAvatar size={36} />
+                    <CanvasDragonAvatar size={36} animated />
                   </div>
                   <div className="flex flex-col gap-2 min-w-0">
                     {/* {!visibleWorkflowProgress && msg.thinking && (
@@ -403,7 +403,7 @@ export const ChatArea = forwardRef<HTMLDivElement, ChatAreaProps>(
               >
                 <div className="flex items-start gap-3 max-w-[90%]">
                   <div className="flex h-[36px] w-[36px] flex-shrink-0 items-center justify-center">
-                    <CanvasDragonAvatar size={36} />
+                    <CanvasDragonAvatar size={36} animated />
                   </div>
                   <div
                     className="rounded-2xl px-5 py-4"
@@ -442,10 +442,13 @@ export const ChatArea = forwardRef<HTMLDivElement, ChatAreaProps>(
               <div
                 className={`flex items-start gap-3 max-w-[90%] ${isUser ? "flex-row-reverse" : "flex-row"}`}
               >
-                {/* Avatar - 只显示AI的头像 */}
+                {/* Avatar - 只显示AI的头像；回答中跳动，完成后/历史静止正视 */}
                 {!isUser && (
                   <div className="flex h-[36px] w-[36px] flex-shrink-0 items-center justify-center">
-                    <CanvasDragonAvatar size={36} />
+                    <CanvasDragonAvatar
+                      size={36}
+                      animated={Boolean(isStreaming && isLatestMessage)}
+                    />
                   </div>
                 )}
 

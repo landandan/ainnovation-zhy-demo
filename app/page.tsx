@@ -88,6 +88,30 @@ function clearPendingAgentId(): void {
   writePendingAgentId("")
 }
 
+/** 游客登录成功后强制开新会话，避免 loadData 按旧 URL 把游客问答恢复回来 */
+const PENDING_NEW_CHAT_AFTER_LOGIN_KEY = "cnooc-new-chat-after-login"
+
+function writePendingNewChatAfterLogin(): void {
+  if (typeof window === "undefined") return
+  try {
+    sessionStorage.setItem(PENDING_NEW_CHAT_AFTER_LOGIN_KEY, "1")
+  } catch {
+    /* ignore */
+  }
+}
+
+function consumePendingNewChatAfterLogin(): boolean {
+  if (typeof window === "undefined") return false
+  try {
+    const v = sessionStorage.getItem(PENDING_NEW_CHAT_AFTER_LOGIN_KEY)
+    if (!v) return false
+    sessionStorage.removeItem(PENDING_NEW_CHAT_AFTER_LOGIN_KEY)
+    return true
+  } catch {
+    return false
+  }
+}
+
 /** 生成客户端唯一 id（兼容非 HTTPS / 旧浏览器，避免 crypto.randomUUID 不可用） */
 function createClientId() {
   const c = typeof globalThis !== "undefined" ? globalThis.crypto : undefined
@@ -754,8 +778,18 @@ export default function Page() {
             : rows.length >= CONVERSATIONS_PAGE_SIZE,
         )
 
-        // 刷新恢复：有 localSessionId 则拉历史消息；否则只同步 agent 到 URL
-        if (urlLocalSessionId) {
+        // 游客登录成功：强制新会话，不恢复登录前 URL 里的问答
+        const forceNewChatAfterLogin = consumePendingNewChatAfterLogin()
+        if (forceNewChatAfterLogin) {
+          setMessages([])
+          setActiveConversationId(null)
+          sessionIdRef.current = ""
+          setSessionId("")
+          applyLocalSessionId("")
+          difyConversationIdRef.current = null
+          if (resolvedAgentId) syncChatUrl(resolvedAgentId, null)
+        } else if (urlLocalSessionId) {
+          // 刷新恢复：有 localSessionId 则拉历史消息；否则只同步 agent 到 URL
           try {
             const conv =
               rows.find((c) => String(c.localSessionId ?? "").trim() === urlLocalSessionId) ||
@@ -893,6 +927,7 @@ export default function Page() {
       loginModalRef.current?.open({
         onSuccess: () => {
           // pending 留给 loadData（user 变化会重跑）消费；这里先切 UI
+          writePendingNewChatAfterLogin()
           setCurrentAgentId(agentId)
           handleNewChat(agentId)
           maybeCloseSidebar()
@@ -999,6 +1034,12 @@ export default function Page() {
         ? agentIdOverride.trim()
         : currentAgentId
     syncChatUrl(nextAgentId, null)
+  }
+
+  /** 游客从侧栏登录成功：保持当前智能体，清空问答并开新会话 */
+  const handleGuestLoginSuccess = () => {
+    writePendingNewChatAfterLogin()
+    handleNewChat()
   }
 
   const handleSelectHistory = async (item: ChatHistoryItem) => {
@@ -2198,6 +2239,7 @@ export default function Page() {
           open={sidebarOpen}
           onClose={() => setSidebarOpen(false)}
           onNewChat={handleNewChat}
+          onGuestLoginSuccess={handleGuestLoginSuccess}
           chatHistory={chatHistory}
           agentNames={agentNames}
           onSelectHistory={handleSelectHistory}

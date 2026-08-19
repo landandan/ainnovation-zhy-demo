@@ -41,6 +41,8 @@ interface SidebarProps {
   open: boolean
   onClose: () => void
   onNewChat: () => void
+  /** 游客登录成功后回调（新建会话） */
+  onGuestLoginSuccess?: () => void
   chatHistory: ChatHistoryItem[]
   agentNames: Record<string, string>
   onSelectHistory: (item: any) => void
@@ -70,6 +72,7 @@ export function Sidebar({
   open,
   onClose,
   onNewChat,
+  onGuestLoginSuccess,
   chatHistory,
   agentNames,
   onSelectHistory,
@@ -117,7 +120,15 @@ export function Sidebar({
     })
   }, [agentNames, chatHistory, normalizedSearch])
 
-  const loginModalRef = useRef<LoginModalRef>(null);
+  const loginModalRef = useRef<LoginModalRef>(null)
+
+  const openGuestLogin = () => {
+    loginModalRef.current?.open({
+      onSuccess: () => {
+        onGuestLoginSuccess?.()
+      },
+    })
+  }
   const router = useRouter();
   const pathname = usePathname();
 
@@ -672,7 +683,9 @@ export function Sidebar({
               </div>
               <div
                 className="min-w-0 flex-1 cursor-pointer"
-                onClick={() => loginModalRef.current?.open()}
+                onClick={() => {
+                  if (isGuestUser()) openGuestLogin()
+                }}
               >
                 <div className="text-[13px] font-semibold truncate" style={{ color: "var(--foreground)" }} >
                   {displayName}
@@ -697,7 +710,7 @@ export function Sidebar({
                 {
                   isGuestUser() &&
                     <button
-                        onClick={() => loginModalRef.current?.open()}
+                        onClick={openGuestLogin}
                         className="flex h-[36px] w-[36px] items-center justify-center rounded-xl transition-all flex-shrink-0 cursor-pointer"
                         style={{ color: "var(--text-muted)" }}
                         aria-label="登录"

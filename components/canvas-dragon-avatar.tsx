@@ -6,10 +6,20 @@ interface CanvasDragonAvatarProps {
   className?: string;
   style?: React.CSSProperties;
   size?: number;
+  /** 回答进行中时上下跳动并眨眼；完成后静止、不眨眼，眼珠保持原状 */
+  animated?: boolean;
 }
 
-export function CanvasDragonAvatar({ className = '', style, size = 36 }: CanvasDragonAvatarProps) {
+export function CanvasDragonAvatar({
+  className = '',
+  style,
+  size = 36,
+  animated = false,
+}: CanvasDragonAvatarProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const animatedRef = useRef(animated);
+  animatedRef.current = animated;
+
   const topPadding = 15; // 给顶部留空间
   const totalCanvasSize = size + topPadding; // 画布总大小
 
@@ -56,110 +66,129 @@ export function CanvasDragonAvatar({ className = '', style, size = 36 }: CanvasD
     const draw = () => {
       const now = Date.now();
       const elapsed = now - startTime;
+      const isAnimated = animatedRef.current;
 
       // 清空画布
       ctx.clearRect(0, 0, totalCanvasSize, totalCanvasSize);
 
-      // --- 1. 跳跃逻辑 (状态机 + 随机性) ---
-      const stateElapsed = now - stateStartTime;
+      let tiltAngle = 0;
 
-      if (jumpState === 'IDLE') {
-        jumpY = 0;
-        
-        // 落地后的轻微呼吸/压扁恢复
-        if (stateElapsed < 300) {
-          // 刚落地，有一个阻尼震荡的恢复过程
-          const progress = stateElapsed / 300;
-          const squash = Math.sin(progress * Math.PI * 2) * Math.exp(-progress * 5) * 0.2;
-          scaleY = 1 - squash;
-          scaleX = 1 + squash;
-        } else {
-          // 平静状态下的极轻微呼吸
-          const breath = Math.sin(elapsed * 0.003) * 0.02;
-          scaleY = 1 + breath;
-          scaleX = 1 - breath;
-        }
+      // --- 1. 跳跃逻辑 (仅回答中启用) ---
+      if (isAnimated) {
+        const stateElapsed = now - stateStartTime;
 
-        // 检查是否该起跳了
-        if (stateElapsed > currentIdleDuration) {
-          jumpState = 'JUMPING';
-          stateStartTime = now;
-          // 随机生成下一次跳跃的参数
-          currentJumpDuration = 600 + Math.random() * 400; // 600ms - 1000ms
-          currentJumpHeight = 10 + Math.random() * 15;     // 10 - 25 的高度
-        }
-      } else if (jumpState === 'JUMPING') {
-        const progress = stateElapsed / currentJumpDuration; // 0 到 1
-
-        if (progress >= 1) {
-          // 落地，切换回 IDLE
-          jumpState = 'IDLE';
-          stateStartTime = now;
-          // 随机生成下一次在地面停留的时间
-          currentIdleDuration = 500 + Math.random() * 2500; // 0.5s - 3s
+        if (jumpState === 'IDLE') {
           jumpY = 0;
-          scaleX = 1;
-          scaleY = 1;
-        } else {
-          // 跳跃中
-          // 抛物线轨迹: 4 * x * (1 - x)
-          const heightFactor = 4 * progress * (1 - progress);
-          jumpY = -heightFactor * currentJumpHeight;
-
-          // 压扁与拉伸 (Squash & Stretch)
-          if (progress < 0.2) {
-            // 起跳瞬间：拉伸
-            const stretch = progress / 0.2; // 0 -> 1
-            scaleY = 1 + stretch * 0.3;
-            scaleX = 1 / scaleY;
-          } else if (progress > 0.8) {
-            // 落地瞬间：拉伸准备迎接冲击
-            const stretch = (1 - progress) / 0.2; // 1 -> 0
-            scaleY = 1 + stretch * 0.3;
-            scaleX = 1 / scaleY;
+          
+          // 落地后的轻微呼吸/压扁恢复
+          if (stateElapsed < 300) {
+            // 刚落地，有一个阻尼震荡的恢复过程
+            const progress = stateElapsed / 300;
+            const squash = Math.sin(progress * Math.PI * 2) * Math.exp(-progress * 5) * 0.2;
+            scaleY = 1 - squash;
+            scaleX = 1 + squash;
           } else {
-            // 滞空：逐渐恢复圆形
-            scaleY = 1 + (heightFactor * 0.1); // 在最高点稍微拉长一点点
-            scaleX = 1 / scaleY;
+            // 平静状态下的极轻微呼吸
+            const breath = Math.sin(elapsed * 0.003) * 0.02;
+            scaleY = 1 + breath;
+            scaleX = 1 - breath;
+          }
+
+          // 检查是否该起跳了
+          if (stateElapsed > currentIdleDuration) {
+            jumpState = 'JUMPING';
+            stateStartTime = now;
+            // 随机生成下一次跳跃的参数
+            currentJumpDuration = 600 + Math.random() * 400; // 600ms - 1000ms
+            currentJumpHeight = 10 + Math.random() * 15;     // 10 - 25 的高度
+          }
+        } else if (jumpState === 'JUMPING') {
+          const progress = stateElapsed / currentJumpDuration; // 0 到 1
+
+          if (progress >= 1) {
+            // 落地，切换回 IDLE
+            jumpState = 'IDLE';
+            stateStartTime = now;
+            // 随机生成下一次在地面停留的时间
+            currentIdleDuration = 500 + Math.random() * 2500; // 0.5s - 3s
+            jumpY = 0;
+            scaleX = 1;
+            scaleY = 1;
+          } else {
+            // 跳跃中
+            // 抛物线轨迹: 4 * x * (1 - x)
+            const heightFactor = 4 * progress * (1 - progress);
+            jumpY = -heightFactor * currentJumpHeight;
+
+            // 压扁与拉伸 (Squash & Stretch)
+            if (progress < 0.2) {
+              // 起跳瞬间：拉伸
+              const stretch = progress / 0.2; // 0 -> 1
+              scaleY = 1 + stretch * 0.3;
+              scaleX = 1 / scaleY;
+            } else if (progress > 0.8) {
+              // 落地瞬间：拉伸准备迎接冲击
+              const stretch = (1 - progress) / 0.2; // 1 -> 0
+              scaleY = 1 + stretch * 0.3;
+              scaleX = 1 / scaleY;
+            } else {
+              // 滞空：逐渐恢复圆形
+              scaleY = 1 + (heightFactor * 0.1); // 在最高点稍微拉长一点点
+              scaleX = 1 / scaleY;
+            }
           }
         }
+
+        // 轻微左右晃动 (仅在跳跃时明显)
+        const jumpProgress = jumpState === 'JUMPING' ? (now - stateStartTime) / currentJumpDuration : 0;
+        tiltAngle = jumpState === 'JUMPING' ? Math.sin(jumpProgress * Math.PI) * 0.08 : Math.sin(elapsed * 0.002) * 0.02;
+      } else {
+        // 回答完成 / 历史消息：完全静止
+        jumpState = 'IDLE';
+        jumpY = 0;
+        scaleX = 1;
+        scaleY = 1;
+        tiltAngle = 0;
       }
 
-      // 轻微左右晃动 (仅在跳跃时明显)
-      const jumpProgress = jumpState === 'JUMPING' ? stateElapsed / currentJumpDuration : 0;
-      const tiltAngle = jumpState === 'JUMPING' ? Math.sin(jumpProgress * Math.PI) * 0.08 : Math.sin(elapsed * 0.002) * 0.02;
-
-      // --- 2. 智能眨眼 (增加连眨概率) ---
-      if (!isBlinking && now > nextBlinkTime) {
-        isBlinking = true;
-        blinkStartTime = now;
-        blinkDuration = 100 + Math.random() * 80; // 眨眼速度稍微随机 100-180ms
-        
-        if (isDoubleBlink) {
-          // 如果这是连眨的第二次，下一次眨眼要等很久
-          nextBlinkTime = now + 2000 + Math.random() * 4000;
-          isDoubleBlink = false;
-        } else {
-          // 30% 的概率触发连眨
-          if (Math.random() < 0.3) {
-            nextBlinkTime = now + blinkDuration + 50; // 极短的间隔后再次眨眼
-            isDoubleBlink = true;
-          } else {
-            nextBlinkTime = now + 2000 + Math.random() * 4000;
-          }
-        }
-      }
-
+      // --- 2. 智能眨眼：仅回答中；静止时完全不眨 ---
       let eyeScaleY = 1;
-      if (isBlinking) {
-        const blinkProgress = (now - blinkStartTime) / blinkDuration;
-        if (blinkProgress >= 1) {
-          isBlinking = false;
-        } else {
-          // 快速闭眼再睁开
-          eyeScaleY = Math.abs(Math.cos(blinkProgress * Math.PI));
+      if (isAnimated) {
+        if (!isBlinking && now > nextBlinkTime) {
+          isBlinking = true;
+          blinkStartTime = now;
+          blinkDuration = 100 + Math.random() * 80; // 眨眼速度稍微随机 100-180ms
+          
+          if (isDoubleBlink) {
+            // 如果这是连眨的第二次，下一次眨眼要等很久
+            nextBlinkTime = now + 2000 + Math.random() * 4000;
+            isDoubleBlink = false;
+          } else {
+            // 30% 的概率触发连眨
+            if (Math.random() < 0.3) {
+              nextBlinkTime = now + blinkDuration + 50; // 极短的间隔后再次眨眼
+              isDoubleBlink = true;
+            } else {
+              nextBlinkTime = now + 2000 + Math.random() * 4000;
+            }
+          }
         }
+
+        if (isBlinking) {
+          const blinkProgress = (now - blinkStartTime) / blinkDuration;
+          if (blinkProgress >= 1) {
+            isBlinking = false;
+          } else {
+            // 快速闭眼再睁开
+            eyeScaleY = Math.abs(Math.cos(blinkProgress * Math.PI));
+          }
+        }
+      } else {
+        isBlinking = false;
       }
+
+      // 静止时不眨眼；眼珠保持原来的白色胶囊，不加黑色瞳孔
+      // （正视前方即保持原状居中白眼）
 
       // --- 开始绘制 ---
       ctx.save();
@@ -209,7 +238,7 @@ export function CanvasDragonAvatar({ className = '', style, size = 36 }: CanvasD
       ctx.fillStyle = 'rgba(255, 255, 255, 0.6)';
       ctx.fill();
 
-      // 3. 绘制五官 (极简白色胶囊眼)
+      // 3. 绘制五官 (极简白色胶囊眼，不加黑色瞳孔)
       ctx.fillStyle = '#FFFFFF';
       
       // 左眼
@@ -250,7 +279,7 @@ export function CanvasDragonAvatar({ className = '', style, size = 36 }: CanvasD
     return () => {
       cancelAnimationFrame(animationFrameId);
     };
-  }, [size]);
+  }, [size, totalCanvasSize]);
 
   return (
     <div style={{ 
