@@ -289,7 +289,7 @@ export const ChatArea = forwardRef<HTMLDivElement, ChatAreaProps>(
               ? msg.workflowProgress
               : undefined
 
-          // 首 token 等待阶段：脉冲骨架屏
+          // 首 token 等待阶段：脉冲骨架屏（无正文前一直展示，不因 thinking 中间态隐藏）
           if (msg.waiting) {
             return (
               <div
@@ -312,27 +312,25 @@ export const ChatArea = forwardRef<HTMLDivElement, ChatAreaProps>(
                     {/* {!visibleWorkflowProgress && msg.thinking && (
                       <ThinkingBlock text={msg.thinking} isComplete={false} />
                     )} */}
-                    {!visibleWorkflowProgress && !msg.thinking && (
-                      <div
-                        className="rounded-2xl px-5 py-4 waiting-skeleton"
-                        style={{
-                          background: "var(--card)",
-                          border: "1px solid var(--border)",
-                          borderBottomLeftRadius: "8px",
-                          boxShadow: "var(--shadow-sm)",
-                        }}
-                      >
-                        <div className="flex items-center gap-2 mb-3">
-                          <span className="spinner" style={{ width: 14, height: 14, borderWidth: 2 }} />
-                          <span className="text-[11px]" style={{ color: "var(--text-muted)" }}>
-                            正在思考...
-                          </span>
-                        </div>
-                        <div className="skeleton-line skeleton-line-1" />
-                        <div className="skeleton-line skeleton-line-2" />
-                        <div className="skeleton-line skeleton-line-3" />
+                    <div
+                      className="rounded-2xl px-5 py-4 waiting-skeleton"
+                      style={{
+                        background: "var(--card)",
+                        border: "1px solid var(--border)",
+                        borderBottomLeftRadius: "8px",
+                        boxShadow: "var(--shadow-sm)",
+                      }}
+                    >
+                      <div className="flex items-center gap-2 mb-3">
+                        <span className="spinner" style={{ width: 14, height: 14, borderWidth: 2 }} />
+                        <span className="text-[11px]" style={{ color: "var(--text-muted)" }}>
+                          正在思考...
+                        </span>
                       </div>
-                    )}
+                      <div className="skeleton-line skeleton-line-1" />
+                      <div className="skeleton-line skeleton-line-2" />
+                      <div className="skeleton-line skeleton-line-3" />
+                    </div>
                   </div>
                 </div>
               </div>
@@ -360,33 +358,32 @@ export const ChatArea = forwardRef<HTMLDivElement, ChatAreaProps>(
                         autoCollapse={true}
                       />
                     )} */}
-                    {visibleWorkflowProgress ? (
+                    {visibleWorkflowProgress && (
                       <WorkflowProgressComponent
                         progress={visibleWorkflowProgress}
                         onRetry={onRetryWorkflow}
                         onStop={isLatestMessage ? onStopWorkflow : undefined}
                       />
-                    ) : !msg.thinking ? (
-                      <div
-                        className="rounded-2xl px-5 py-4 waiting-skeleton"
-                        style={{
-                          background: "var(--card)",
-                          border: "1px solid var(--border)",
-                          borderBottomLeftRadius: "8px",
-                          boxShadow: "var(--shadow-sm)",
-                        }}
-                      >
-                        <div className="flex items-center gap-2 mb-3">
-                          <span className="spinner" style={{ width: 14, height: 14, borderWidth: 2 }} />
-                          <span className="text-[11px]" style={{ color: "var(--text-muted)" }}>
-                            正在思考...
-                          </span>
-                        </div>
-                        <div className="skeleton-line skeleton-line-1" />
-                        <div className="skeleton-line skeleton-line-2" />
-                        <div className="skeleton-line skeleton-line-3" />
+                    )}
+                    <div
+                      className="rounded-2xl px-5 py-4 waiting-skeleton"
+                      style={{
+                        background: "var(--card)",
+                        border: "1px solid var(--border)",
+                        borderBottomLeftRadius: "8px",
+                        boxShadow: "var(--shadow-sm)",
+                      }}
+                    >
+                      <div className="flex items-center gap-2 mb-3">
+                        <span className="spinner" style={{ width: 14, height: 14, borderWidth: 2 }} />
+                        <span className="text-[11px]" style={{ color: "var(--text-muted)" }}>
+                          正在思考...
+                        </span>
                       </div>
-                    ) : null}
+                      <div className="skeleton-line skeleton-line-1" />
+                      <div className="skeleton-line skeleton-line-2" />
+                      <div className="skeleton-line skeleton-line-3" />
+                    </div>
                   </div>
                 </div>
               </div>
