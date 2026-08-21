@@ -1578,6 +1578,7 @@ export default function Page() {
           setMessages((prev) => {
             const updated = [...prev]
             if (messageIndex >= 0 && updated[messageIndex]) {
+              const hasAnswerText = Boolean(String(fullAnswer || "").trim())
               updated[messageIndex] = {
                 ...updated[messageIndex],
                 text: fullAnswer,
@@ -1592,7 +1593,8 @@ export default function Page() {
                 thinking: fullThinking,
                 thinkingComplete: thinkingComplete,
                 resourcesList: resourcesList,
-                waiting: false,
+                // 尚无正文时保持 waiting，骨架屏继续展示
+                waiting: !hasAnswerText,
                 loading: false,
                 time: aiTime,
                 ...(assistantDifyMessageId ? { messageId: assistantDifyMessageId } : {}),
