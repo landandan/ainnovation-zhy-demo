@@ -2311,7 +2311,7 @@ button.chat-user-file-card:hover {
 
 .input-box-suggestions-line {
   margin: 8px 0 0;
-  padding: 0;
+  padding: 0 0 2px;
   font-size: 12px;
   line-height: 1.6;
   color: var(--text-secondary, var(--foreground));
@@ -2319,17 +2319,14 @@ button.chat-user-file-card:hover {
   overflow-x: auto;
   overflow-y: hidden;
   -webkit-overflow-scrolling: touch;
-  scrollbar-width: thin;
-  scrollbar-color: var(--border) transparent;
+  /* 系统滚动条在 macOS 上偏粗，改为隐藏，仍可用触控板/Shift+滚轮横向滑动 */
+  scrollbar-width: none;
 }
 
 .input-box-suggestions-line::-webkit-scrollbar {
-  height: 3px;
-}
-
-.input-box-suggestions-line::-webkit-scrollbar-thumb {
-  background: var(--border);
-  border-radius: 999px;
+  width: 0;
+  height: 0;
+  display: none;
 }
 
 .input-box-suggestions-label {
