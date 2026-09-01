@@ -214,6 +214,15 @@ export const THEMES = [
 
 export type ThemeId = (typeof THEMES)[number]["id"]
 
+/** 智能仓储默认快捷问题（接口未配置 quick_questions 时使用） */
+const WAREHOUSE_QUICK_QUESTIONS = [
+  "哪些出库单延迟了?",
+  "哪些入库单延迟了？",
+  "补货缺口最大的10个商品是什么?",
+  "上海仓有哪些货快不够用了？",
+  "未来30天有哪些临期商品？",
+]
+
 /** 将后端 AgentDefApi 转为前端 AgentDef */
 function mapAgentDef(a: AgentDefApi): AgentDef {
   const status = a.status
@@ -222,16 +231,24 @@ function mapAgentDef(a: AgentDefApi): AgentDef {
       ? a.is_active
       : status === true || status === 1 || status === "1" || status === "0" // 接口 status=0 表示可用
 
+  const label = a.appName || a.label || ""
+  const quickQuestions =
+    a.quick_questions && a.quick_questions.length > 0
+      ? a.quick_questions
+      : label === "智能仓储"
+        ? WAREHOUSE_QUICK_QUESTIONS
+        : []
+
   return {
     ...a,
     id: String(a.id),
-    label: a.appName || a.label || "",
+    label,
     icon: a.icon || "🤖",
     desc: a.appDesc || a.desc || "",
     gradient: a.appType || a.gradient || "var(--gradient-1)",
     sortOrder: a.sort_order ?? 0,
     isActive,
-    quickQuestions: a.quick_questions || [],
+    quickQuestions,
     thinkShow: a.thinkShow,
     visible: a.visible,
   }
@@ -2204,6 +2221,8 @@ export default function Page() {
       agent={currentAgent}
       agentDefs={activeAgentDefs}
       currentAgentId={currentAgentId}
+      quickQuestions={currentAgentQuickQuestions}
+      showQuickQuestions={!isConversationStarted}
       onSelectAgent={handleSelectAgent}
       onOpenSettings={handleOpenSettings}
     />

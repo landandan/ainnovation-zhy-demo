@@ -120,8 +120,6 @@ export const ChatArea = forwardRef<HTMLDivElement, ChatAreaProps>(
       })
     }, [messages, isStreaming])
 
-    const suggestions = quickQuestions?.map((text) => ({ text, label: "" })) || []
-
     const formatFileSize = (bytes?: number) => {
       if (bytes == null || Number.isNaN(bytes)) return ""
       if (bytes < 1024) return `${bytes} B`
@@ -232,36 +230,8 @@ export const ChatArea = forwardRef<HTMLDivElement, ChatAreaProps>(
           <p className="chat-empty-subtitle mb-3 max-w-[760px]">
             {agentDesc && agentDesc.trim()
               ? `${agentLabel}已就绪，${agentDesc}`
-              : `${agentLabel}已就绪，你可以直接发起问答、上传资料，或从下面的高频任务开始。`}
+              : `${agentLabel}已就绪，你可以直接发起问答、上传资料。`}
           </p>
-
-          {/* Quick question tags */}
-          <div className="flex flex-wrap justify-center gap-3 max-w-[700px]">
-            {suggestions.map((s, idx) => (
-              <button
-                key={idx}
-                onClick={() => onUseSuggestion(s.text)}
-                className="rounded-full border px-5 py-2.5 text-[13px] transition-all duration-200 hover:-translate-y-0.5"
-                style={{
-                  background: "var(--card)",
-                  borderColor: "var(--border)",
-                  color: "var(--foreground)",
-                }}
-                onMouseEnter={(e) => {
-                  e.currentTarget.style.borderColor = "var(--accent)"
-                  e.currentTarget.style.color = "var(--accent)"
-                  e.currentTarget.style.boxShadow = "var(--shadow-md)"
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.borderColor = "var(--border)"
-                  e.currentTarget.style.color = "var(--foreground)"
-                  e.currentTarget.style.boxShadow = ""
-                }}
-              >
-                {s.text}
-              </button>
-            ))}
-          </div>
 
           {emptyExtra ? (
             <div className="welcome-empty-extra w-full text-left">
