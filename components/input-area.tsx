@@ -28,6 +28,10 @@ interface InputAreaProps {
   agent?: AgentDef & { visible?: string }
   agentDefs?: Array<{ id: string; label: string; visible?: string }>
   currentAgentId?: string
+  /** 输入框下方快捷问题气泡 */
+  quickQuestions?: string[]
+  /** 是否展示快捷问题（会话开始后通常隐藏） */
+  showQuickQuestions?: boolean
   /** 切换智能体（会新开对话） */
   onSelectAgent?: (agentId: string) => void
   onOpenSettings?: () => void
@@ -138,6 +142,8 @@ export function InputArea({
   agent = {},
   agentDefs = [],
   currentAgentId = "",
+  quickQuestions = [],
+  showQuickQuestions = true,
   onSelectAgent,
   onOpenSettings,
 }: InputAreaProps) {
@@ -227,10 +233,7 @@ export function InputArea({
   const handlePickAgent = (next: { id: string; label: string; visible?: string }) => {
     setAgentMenuOpen(false)
     if (next.id === currentAgentId) return
-    if (next.visible === "1" && isGuestUser()) {
-      loginModalRef.current?.open()
-      return
-    }
+    // 游客 + 需登录应用：交给父级 handleSelectAgent 统一弹窗并在登录后切应用
     onSelectAgent?.(next.id)
   }
 
@@ -758,6 +761,13 @@ export function InputArea({
             onKeyDown={handleKeydown}
             onPaste={handlePaste}
           />
+
+          {showQuickQuestions && quickQuestions.length > 0 && (
+            <p className="input-box-suggestions-line" aria-label="示例问题">
+              <span className="input-box-suggestions-label">示例问题:</span>
+              {quickQuestions.join("、")}
+            </p>
+          )}
 
           <div className="input-box-toolbar">
             <div className="flex items-center gap-3">

@@ -2309,6 +2309,31 @@ button.chat-user-file-card:hover {
   color: var(--input-placeholder-color, var(--text-muted));
 }
 
+.input-box-suggestions-line {
+  margin: 8px 0 0;
+  padding: 0 0 2px;
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--text-secondary, var(--foreground));
+  white-space: nowrap;
+  overflow-x: auto;
+  overflow-y: hidden;
+  -webkit-overflow-scrolling: touch;
+  /* 系统滚动条在 macOS 上偏粗，改为隐藏，仍可用触控板/Shift+滚轮横向滑动 */
+  scrollbar-width: none;
+}
+
+.input-box-suggestions-line::-webkit-scrollbar {
+  width: 0;
+  height: 0;
+  display: none;
+}
+
+.input-box-suggestions-label {
+  color: var(--text-muted);
+  margin-right: 4px;
+}
+
 .input-box-toolbar {
   display: flex;
   align-items: center;
@@ -3156,7 +3181,7 @@ button.chat-user-file-card:hover {
 /* 欢迎页智能助手 — Kimi 胶囊标签风格 */
 .welcome-empty-extra {
   max-width: var(--input-area-max-width, 960px);
-  margin: 0 auto;
+  margin: 24px auto 0;
 }
 
 .welcome-agent-section {

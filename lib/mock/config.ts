@@ -20,6 +20,8 @@ import type {
   UpdateAgentRequest,
 } from "../api/client"
 
+import { DEFAULT_DIFY_BASE_URL } from "../config"
+
 /* ───── 开关控制（基于 sessionStorage） ───── */
 
 const MOCK_FLAG_KEY = "cnooc-mock-mode"
@@ -217,7 +219,7 @@ export function createMockDifyConfig(
     agent_id: agentId,
     env_label: data.env_label || "默认",
     dify_api_key: data.dify_api_key,
-    dify_base_url: data.dify_base_url || "https://api.dify.ai/v1",
+    dify_base_url: data.dify_base_url || DEFAULT_DIFY_BASE_URL,
     is_default: data.is_default ?? true,
   }
 
@@ -409,7 +411,7 @@ export function getMockDifyApiConfigForAgent(agentIdStr: string): {
   }
 
   return {
-    dify_base_url: defaultConfig.dify_base_url || "https://api.dify.ai/v1",
+    dify_base_url: defaultConfig.dify_base_url || DEFAULT_DIFY_BASE_URL,
     dify_api_key: defaultConfig.dify_api_key,
   }
 }

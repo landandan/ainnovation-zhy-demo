@@ -29,6 +29,7 @@ import {
 import { ApiError, request } from "../http/client"
 import {getToken, getClientId, setToken, setCachedUser, setClientId} from "../auth/token"
 import { API_BASE_URL } from "../http/routes"
+import { DEFAULT_CLIENT_ID, DEFAULT_DIFY_BASE_URL } from "../config"
 import getDeviceId from "@/app/utils/fingerprintjs";
 import {isLoginSuccess} from "@/lib/auth";
 import { deobfuscateSm2PublicKey, encryptPasswordBySm2 } from "../auth/sm2"
@@ -86,7 +87,7 @@ export async function guestLoginApi(data?: LoginRequest): Promise<LoginResponse>
   }
   return request<LoginResponse>("POST", "/h5/auth/autoLogin", {
     ...data,
-    "clientId": "0d4c873ff6146ecd7f38e2e45526ab1b",
+    "clientId": DEFAULT_CLIENT_ID,
   })
 }
 
@@ -158,7 +159,7 @@ export async function login(data: LoginRequest): Promise<LoginResponse> {
   return request<LoginResponse>("POST", "/h5/auth/login", {
     ...data,
     password: encryptedPassword,
-    "clientId": "0d4c873ff6146ecd7f38e2e45526ab1b",
+    "clientId": DEFAULT_CLIENT_ID,
     "grantType": "password",
     "tenantId": "000000",
     "uuid": `${new Date().getTime()}`,
@@ -391,7 +392,7 @@ export async function uploadFileSingle(
   const formData = new FormData()
   formData.append("file", file)
 
-  const clientid = getClientId() || "0d4c873ff6146ecd7f38e2e45526ab1b"
+  const clientid = getClientId() || DEFAULT_CLIENT_ID
 
   return new Promise((resolve, reject) => {
     const xhr = new XMLHttpRequest()
@@ -625,7 +626,7 @@ export interface TestConnectionResult {
 /** 规范化 Dify Base URL，自动补全 /v1 */
 function normalizeDifyBaseUrl(baseUrl?: string): string {
   let url = (baseUrl || "").trim()
-  if (!url) return "https://api.dify.ai/v1"
+  if (!url) return DEFAULT_DIFY_BASE_URL
   url = url.replace(/\/+$/, "")
   if (!url.endsWith("/v1")) {
     if (url.includes("/v1")) {

@@ -1,8 +1,8 @@
 import { getToken, getClientId, removeToken, isGuestUser } from "@/lib/auth/token"
 import { API_BASE_URL } from "./routes"
+import { DEFAULT_CLIENT_ID } from "../config"
 import notification from "@/components/ui/Notification"
 
-const DEFAULT_CLIENT_ID = "0d4c873ff6146ecd7f38e2e45526ab1b"
 
 /** 非游客登录过期时打开登录弹窗 */
 export const AUTH_REQUIRED_EVENT = "app-auth-required"

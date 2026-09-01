@@ -62,6 +62,56 @@ function readChatUrlParams() {
   }
 }
 
+/** 游客点击需登录智能体后，登录成功再切过去 */
+const PENDING_AGENT_KEY = "cnooc-pending-agent-id"
+
+function readPendingAgentId(): string {
+  if (typeof window === "undefined") return ""
+  try {
+    return sessionStorage.getItem(PENDING_AGENT_KEY)?.trim() || ""
+  } catch {
+    return ""
+  }
+}
+
+function writePendingAgentId(agentId: string): void {
+  if (typeof window === "undefined") return
+  try {
+    if (agentId) sessionStorage.setItem(PENDING_AGENT_KEY, agentId)
+    else sessionStorage.removeItem(PENDING_AGENT_KEY)
+  } catch {
+    /* ignore */
+  }
+}
+
+function clearPendingAgentId(): void {
+  writePendingAgentId("")
+}
+
+/** 游客登录成功后强制开新会话，避免 loadData 按旧 URL 把游客问答恢复回来 */
+const PENDING_NEW_CHAT_AFTER_LOGIN_KEY = "cnooc-new-chat-after-login"
+
+function writePendingNewChatAfterLogin(): void {
+  if (typeof window === "undefined") return
+  try {
+    sessionStorage.setItem(PENDING_NEW_CHAT_AFTER_LOGIN_KEY, "1")
+  } catch {
+    /* ignore */
+  }
+}
+
+function consumePendingNewChatAfterLogin(): boolean {
+  if (typeof window === "undefined") return false
+  try {
+    const v = sessionStorage.getItem(PENDING_NEW_CHAT_AFTER_LOGIN_KEY)
+    if (!v) return false
+    sessionStorage.removeItem(PENDING_NEW_CHAT_AFTER_LOGIN_KEY)
+    return true
+  } catch {
+    return false
+  }
+}
+
 /** 生成客户端唯一 id（兼容非 HTTPS / 旧浏览器，避免 crypto.randomUUID 不可用） */
 function createClientId() {
   const c = typeof globalThis !== "undefined" ? globalThis.crypto : undefined
@@ -164,6 +214,15 @@ export const THEMES = [
 
 export type ThemeId = (typeof THEMES)[number]["id"]
 
+/** 智能仓储默认快捷问题（接口未配置 quick_questions 时使用） */
+const WAREHOUSE_QUICK_QUESTIONS = [
+  "上海仓电子电器类中，库存最少的是哪些商品，按补货缺口降序",
+  "未来7天临期且库存量超过100的批次有哪些？按库存成本排序",
+  "补货缺口最大的10个商品是什么",
+  "最近30天各供应商入库量和延迟订单数分别是多少，按延迟率排序",
+  "未来30天有哪些临期商品",
+]
+
 /** 将后端 AgentDefApi 转为前端 AgentDef */
 function mapAgentDef(a: AgentDefApi): AgentDef {
   const status = a.status
@@ -172,16 +231,24 @@ function mapAgentDef(a: AgentDefApi): AgentDef {
       ? a.is_active
       : status === true || status === 1 || status === "1" || status === "0" // 接口 status=0 表示可用
 
+  const label = a.appName || a.label || ""
+  const quickQuestions =
+    a.quick_questions && a.quick_questions.length > 0
+      ? a.quick_questions
+      : label === "智能仓储"
+        ? WAREHOUSE_QUICK_QUESTIONS
+        : []
+
   return {
     ...a,
     id: String(a.id),
-    label: a.appName || a.label || "",
+    label,
     icon: a.icon || "🤖",
     desc: a.appDesc || a.desc || "",
     gradient: a.appType || a.gradient || "var(--gradient-1)",
     sortOrder: a.sort_order ?? 0,
     isActive,
-    quickQuestions: a.quick_questions || [],
+    quickQuestions,
     thinkShow: a.thinkShow,
     visible: a.visible,
   }
@@ -695,7 +762,16 @@ export default function Page() {
           agentIdToDbId.current = idMap
           activeMapped = mapped.filter((a) => a.isActive)
 
-          if (urlAgent) {
+          // 游客点需登录应用后留下的 pending，优先于 URL / 默认应用
+          const pendingAgentId = !isGuestUser() ? readPendingAgentId() : ""
+          const pendingMatched = pendingAgentId
+            ? activeMapped.find((a) => a.id === pendingAgentId)
+            : undefined
+
+          if (pendingMatched) {
+            resolvedAgentId = pendingMatched.id
+            clearPendingAgentId()
+          } else if (urlAgent) {
             const byId = activeMapped.find((a) => a.id === urlAgent)
             const byAgentId = activeMapped.find((a) => a.agent_id === urlAgent)
             resolvedAgentId = byId?.id || byAgentId?.id || urlAgent
@@ -719,8 +795,18 @@ export default function Page() {
             : rows.length >= CONVERSATIONS_PAGE_SIZE,
         )
 
-        // 刷新恢复：有 localSessionId 则拉历史消息；否则只同步 agent 到 URL
-        if (urlLocalSessionId) {
+        // 游客登录成功：强制新会话，不恢复登录前 URL 里的问答
+        const forceNewChatAfterLogin = consumePendingNewChatAfterLogin()
+        if (forceNewChatAfterLogin) {
+          setMessages([])
+          setActiveConversationId(null)
+          sessionIdRef.current = ""
+          setSessionId("")
+          applyLocalSessionId("")
+          difyConversationIdRef.current = null
+          if (resolvedAgentId) syncChatUrl(resolvedAgentId, null)
+        } else if (urlLocalSessionId) {
+          // 刷新恢复：有 localSessionId 则拉历史消息；否则只同步 agent 到 URL
           try {
             const conv =
               rows.find((c) => String(c.localSessionId ?? "").trim() === urlLocalSessionId) ||
@@ -851,10 +937,22 @@ export default function Page() {
   /* ───── 智能体切换 ───── */
   const handleSelectAgent = (agentId: string) => {
     const agent = agentDefs.find((a) => a.id === agentId)
-    if (agent?.visible === '1' && isGuestUser()) {
-      loginModalRef.current?.open()
+    if (agent?.visible === "1" && isGuestUser()) {
+      writePendingAgentId(agentId)
+      // 先把目标写进 URL，避免登录后 loadData 仍按旧 agent 恢复
+      syncChatUrl(agentId, null)
+      loginModalRef.current?.open({
+        onSuccess: () => {
+          // pending 留给 loadData（user 变化会重跑）消费；这里先切 UI
+          writePendingNewChatAfterLogin()
+          setCurrentAgentId(agentId)
+          handleNewChat(agentId)
+          maybeCloseSidebar()
+        },
+      })
       return
     }
+    clearPendingAgentId()
     refreshConversations()
     if (isStreaming) {
       handleStopStreaming()
@@ -863,7 +961,6 @@ export default function Page() {
     handleNewChat(agentId)
     maybeCloseSidebar()
   }
-
   const refreshConversations = useCallback(async () => {
     try {
       const convsRes = await getConversations({ pageNum: 1, pageSize: CONVERSATIONS_PAGE_SIZE })
@@ -954,6 +1051,12 @@ export default function Page() {
         ? agentIdOverride.trim()
         : currentAgentId
     syncChatUrl(nextAgentId, null)
+  }
+
+  /** 游客从侧栏登录成功：保持当前智能体，清空问答并开新会话 */
+  const handleGuestLoginSuccess = () => {
+    writePendingNewChatAfterLogin()
+    handleNewChat()
   }
 
   const handleSelectHistory = async (item: ChatHistoryItem) => {
@@ -1492,6 +1595,7 @@ export default function Page() {
           setMessages((prev) => {
             const updated = [...prev]
             if (messageIndex >= 0 && updated[messageIndex]) {
+              const hasAnswerText = Boolean(String(fullAnswer || "").trim())
               updated[messageIndex] = {
                 ...updated[messageIndex],
                 text: fullAnswer,
@@ -1506,7 +1610,8 @@ export default function Page() {
                 thinking: fullThinking,
                 thinkingComplete: thinkingComplete,
                 resourcesList: resourcesList,
-                waiting: false,
+                // 尚无正文时保持 waiting，骨架屏继续展示
+                waiting: !hasAnswerText,
                 loading: false,
                 time: aiTime,
                 ...(assistantDifyMessageId ? { messageId: assistantDifyMessageId } : {}),
@@ -2116,6 +2221,8 @@ export default function Page() {
       agent={currentAgent}
       agentDefs={activeAgentDefs}
       currentAgentId={currentAgentId}
+      quickQuestions={currentAgentQuickQuestions}
+      showQuickQuestions={!isConversationStarted}
       onSelectAgent={handleSelectAgent}
       onOpenSettings={handleOpenSettings}
     />
@@ -2153,6 +2260,7 @@ export default function Page() {
           open={sidebarOpen}
           onClose={() => setSidebarOpen(false)}
           onNewChat={handleNewChat}
+          onGuestLoginSuccess={handleGuestLoginSuccess}
           chatHistory={chatHistory}
           agentNames={agentNames}
           onSelectHistory={handleSelectHistory}

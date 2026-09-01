@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState, type ReactNode } from "react"
 import mammoth from "mammoth"
 import type { WorkBook } from "xlsx"
 
+import { DIFY_FILE_UPLOAD_BASE_URL } from "@/lib/http/routes"
 import { isMockMode } from "@/lib/mock-config"
  import {getToken} from "@/lib/auth";
 
@@ -34,7 +35,7 @@ type PptxViewerInstance = {
   destroy: () => void
 }
 
-const API_BASE_URL = process.env.NODE_ENV === "development" ? "http://localhost:5000/api" : "/api"
+// 文件请求基址统一由 lib/config 经 @/lib/http/routes 提供（DIFY_FILE_UPLOAD_BASE_URL）
 
  function getFileNameFrom(href: string, label?: string) {
    try {
@@ -215,7 +216,7 @@ function buildFileAccessUrl(fileId?: string, agentId?: string, download = false)
   if (download) {
     params.set("download", "1")
   }
-  return `${API_BASE_URL}/dify/files/${encodeURIComponent(fileId)}/content?${params.toString()}`
+  return `${DIFY_FILE_UPLOAD_BASE_URL}/dify/files/${encodeURIComponent(fileId)}/content?${params.toString()}`
 }
 
 function buildFetchProxyUrl(rawUrl?: string, agentId?: string) {
@@ -226,7 +227,7 @@ function buildFetchProxyUrl(rawUrl?: string, agentId?: string) {
     agent_id: agentId,
     url: rawUrl,
   })
-  return `${API_BASE_URL}/dify/files/fetch?${params.toString()}`
+  return `${DIFY_FILE_UPLOAD_BASE_URL}/dify/files/fetch?${params.toString()}`
 }
 
 async function readErrorMessage(res: Response, fallback: string) {

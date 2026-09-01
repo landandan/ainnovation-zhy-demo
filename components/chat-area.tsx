@@ -120,8 +120,6 @@ export const ChatArea = forwardRef<HTMLDivElement, ChatAreaProps>(
       })
     }, [messages, isStreaming])
 
-    const suggestions = quickQuestions?.map((text) => ({ text, label: "" })) || []
-
     const formatFileSize = (bytes?: number) => {
       if (bytes == null || Number.isNaN(bytes)) return ""
       if (bytes < 1024) return `${bytes} B`
@@ -232,36 +230,8 @@ export const ChatArea = forwardRef<HTMLDivElement, ChatAreaProps>(
           <p className="chat-empty-subtitle mb-3 max-w-[760px]">
             {agentDesc && agentDesc.trim()
               ? `${agentLabel}已就绪，${agentDesc}`
-              : `${agentLabel}已就绪，你可以直接发起问答、上传资料，或从下面的高频任务开始。`}
+              : `${agentLabel}已就绪，你可以直接发起问答、上传资料。`}
           </p>
-
-          {/* Quick question tags */}
-          <div className="flex flex-wrap justify-center gap-3 max-w-[700px]">
-            {suggestions.map((s, idx) => (
-              <button
-                key={idx}
-                onClick={() => onUseSuggestion(s.text)}
-                className="rounded-full border px-5 py-2.5 text-[13px] transition-all duration-200 hover:-translate-y-0.5"
-                style={{
-                  background: "var(--card)",
-                  borderColor: "var(--border)",
-                  color: "var(--foreground)",
-                }}
-                onMouseEnter={(e) => {
-                  e.currentTarget.style.borderColor = "var(--accent)"
-                  e.currentTarget.style.color = "var(--accent)"
-                  e.currentTarget.style.boxShadow = "var(--shadow-md)"
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.borderColor = "var(--border)"
-                  e.currentTarget.style.color = "var(--foreground)"
-                  e.currentTarget.style.boxShadow = ""
-                }}
-              >
-                {s.text}
-              </button>
-            ))}
-          </div>
 
           {emptyExtra ? (
             <div className="welcome-empty-extra w-full text-left">
@@ -289,7 +259,7 @@ export const ChatArea = forwardRef<HTMLDivElement, ChatAreaProps>(
               ? msg.workflowProgress
               : undefined
 
-          // 首 token 等待阶段：脉冲骨架屏
+          // 首 token 等待阶段：脉冲骨架屏（无正文前一直展示，不因 thinking 中间态隐藏）
           if (msg.waiting) {
             return (
               <div
@@ -299,7 +269,7 @@ export const ChatArea = forwardRef<HTMLDivElement, ChatAreaProps>(
               >
                 <div className="flex items-start gap-3 max-w-[90%]">
                   <div className="flex h-[36px] w-[36px] flex-shrink-0 items-center justify-center">
-                    <CanvasDragonAvatar size={36} />
+                    <CanvasDragonAvatar size={36} animated />
                   </div>
                   <div className="flex flex-col gap-2 min-w-0">
                     {visibleWorkflowProgress && (
@@ -312,27 +282,25 @@ export const ChatArea = forwardRef<HTMLDivElement, ChatAreaProps>(
                     {/* {!visibleWorkflowProgress && msg.thinking && (
                       <ThinkingBlock text={msg.thinking} isComplete={false} />
                     )} */}
-                    {!visibleWorkflowProgress && !msg.thinking && (
-                      <div
-                        className="rounded-2xl px-5 py-4 waiting-skeleton"
-                        style={{
-                          background: "var(--card)",
-                          border: "1px solid var(--border)",
-                          borderBottomLeftRadius: "8px",
-                          boxShadow: "var(--shadow-sm)",
-                        }}
-                      >
-                        <div className="flex items-center gap-2 mb-3">
-                          <span className="spinner" style={{ width: 14, height: 14, borderWidth: 2 }} />
-                          <span className="text-[11px]" style={{ color: "var(--text-muted)" }}>
-                            正在思考...
-                          </span>
-                        </div>
-                        <div className="skeleton-line skeleton-line-1" />
-                        <div className="skeleton-line skeleton-line-2" />
-                        <div className="skeleton-line skeleton-line-3" />
+                    <div
+                      className="rounded-2xl px-5 py-4 waiting-skeleton"
+                      style={{
+                        background: "var(--card)",
+                        border: "1px solid var(--border)",
+                        borderBottomLeftRadius: "8px",
+                        boxShadow: "var(--shadow-sm)",
+                      }}
+                    >
+                      <div className="flex items-center gap-2 mb-3">
+                        <span className="spinner" style={{ width: 14, height: 14, borderWidth: 2 }} />
+                        <span className="text-[11px]" style={{ color: "var(--text-muted)" }}>
+                          正在思考...
+                        </span>
                       </div>
-                    )}
+                      <div className="skeleton-line skeleton-line-1" />
+                      <div className="skeleton-line skeleton-line-2" />
+                      <div className="skeleton-line skeleton-line-3" />
+                    </div>
                   </div>
                 </div>
               </div>
@@ -349,7 +317,7 @@ export const ChatArea = forwardRef<HTMLDivElement, ChatAreaProps>(
               >
                 <div className="flex items-start gap-3 max-w-[90%]">
                   <div className="flex h-[36px] w-[36px] flex-shrink-0 items-center justify-center">
-                    <CanvasDragonAvatar size={36} />
+                    <CanvasDragonAvatar size={36} animated />
                   </div>
                   <div className="flex flex-col gap-2 min-w-0">
                     {/* {!visibleWorkflowProgress && msg.thinking && (
@@ -360,33 +328,32 @@ export const ChatArea = forwardRef<HTMLDivElement, ChatAreaProps>(
                         autoCollapse={true}
                       />
                     )} */}
-                    {visibleWorkflowProgress ? (
+                    {visibleWorkflowProgress && (
                       <WorkflowProgressComponent
                         progress={visibleWorkflowProgress}
                         onRetry={onRetryWorkflow}
                         onStop={isLatestMessage ? onStopWorkflow : undefined}
                       />
-                    ) : !msg.thinking ? (
-                      <div
-                        className="rounded-2xl px-5 py-4 waiting-skeleton"
-                        style={{
-                          background: "var(--card)",
-                          border: "1px solid var(--border)",
-                          borderBottomLeftRadius: "8px",
-                          boxShadow: "var(--shadow-sm)",
-                        }}
-                      >
-                        <div className="flex items-center gap-2 mb-3">
-                          <span className="spinner" style={{ width: 14, height: 14, borderWidth: 2 }} />
-                          <span className="text-[11px]" style={{ color: "var(--text-muted)" }}>
-                            正在思考...
-                          </span>
-                        </div>
-                        <div className="skeleton-line skeleton-line-1" />
-                        <div className="skeleton-line skeleton-line-2" />
-                        <div className="skeleton-line skeleton-line-3" />
+                    )}
+                    <div
+                      className="rounded-2xl px-5 py-4 waiting-skeleton"
+                      style={{
+                        background: "var(--card)",
+                        border: "1px solid var(--border)",
+                        borderBottomLeftRadius: "8px",
+                        boxShadow: "var(--shadow-sm)",
+                      }}
+                    >
+                      <div className="flex items-center gap-2 mb-3">
+                        <span className="spinner" style={{ width: 14, height: 14, borderWidth: 2 }} />
+                        <span className="text-[11px]" style={{ color: "var(--text-muted)" }}>
+                          正在思考...
+                        </span>
                       </div>
-                    ) : null}
+                      <div className="skeleton-line skeleton-line-1" />
+                      <div className="skeleton-line skeleton-line-2" />
+                      <div className="skeleton-line skeleton-line-3" />
+                    </div>
                   </div>
                 </div>
               </div>
@@ -403,7 +370,7 @@ export const ChatArea = forwardRef<HTMLDivElement, ChatAreaProps>(
               >
                 <div className="flex items-start gap-3 max-w-[90%]">
                   <div className="flex h-[36px] w-[36px] flex-shrink-0 items-center justify-center">
-                    <CanvasDragonAvatar size={36} />
+                    <CanvasDragonAvatar size={36} animated />
                   </div>
                   <div
                     className="rounded-2xl px-5 py-4"
@@ -442,10 +409,13 @@ export const ChatArea = forwardRef<HTMLDivElement, ChatAreaProps>(
               <div
                 className={`flex items-start gap-3 max-w-[90%] ${isUser ? "flex-row-reverse" : "flex-row"}`}
               >
-                {/* Avatar - 只显示AI的头像 */}
+                {/* Avatar - 只显示AI的头像；回答中跳动，完成后/历史静止正视 */}
                 {!isUser && (
                   <div className="flex h-[36px] w-[36px] flex-shrink-0 items-center justify-center">
-                    <CanvasDragonAvatar size={36} />
+                    <CanvasDragonAvatar
+                      size={36}
+                      animated={Boolean(isStreaming && isLatestMessage)}
+                    />
                   </div>
                 )}
 
